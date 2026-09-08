@@ -735,7 +735,7 @@ tr:hover { background: rgba(255,255,255,0.02); }
       <div class="stat-filter-group">
         <div class="filter-chip active" id="chip-all" onclick="filterResults('all')">All (<span id="count-all">0</span>)</div>
         <div class="filter-chip live-chip" id="chip-live" onclick="filterResults('live')">Live (<span id="count-live">0</span>)</div>
-        <div class="filter-chip live-chip" id="chip-4k" onclick="filterResults('4k')">4K UHD</div>
+        <div class="filter-chip live-chip" id="chip-4k" onclick="filterResults('4k')">4K UHD (<span id="count-4k">0</span>)</div>
         <div class="filter-chip dead-chip" id="chip-dead" onclick="filterResults('dead')">Dead (<span id="count-dead">0</span>)</div>
       </div>
       <div class="topbar-exports">
@@ -821,6 +821,58 @@ tr:hover { background: rgba(255,255,255,0.02); }
 <div id="toast">Disalin ke clipboard</div>
 
 <script>
+function splitIntoAccountPayloads(text) {
+  if (!text) return [];
+  text = text.trim();
+
+  // If entire input is JSON array of cookies for multiple accounts or single
+  if (text.startsWith('[') && text.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // If it's array of objects, is it 1 account's cookie array or array of accounts?
+        const isCookieObj = parsed[0] && (parsed[0].name || parsed[0].domain);
+        if (isCookieObj) {
+          // Check if multiple NetflixId exist in this array (combos merged)
+          const nidCount = parsed.filter(c => c && c.name === 'NetflixId').length;
+          if (nidCount <= 1) {
+            return [text];
+          }
+        }
+      }
+    } catch(e) {}
+  }
+
+  // Split by Netscape multi-account separator or double newlines / dividers
+  const rawSections = text.split(/(?:\r?\n){2,}|-{10,}|={10,}/);
+  const payloads = [];
+
+  for (const sec of rawSections) {
+    const s = sec.trim();
+    if (!s) continue;
+
+    // Check if section has NetflixId or .netflix.com
+    if (s.includes('NetflixId') || s.includes('.netflix.com')) {
+      payloads.push(s);
+    } else {
+      // Fallback line by line if lines contain cookies
+      const lines = s.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+      for (const line of lines) {
+        if (line.includes('NetflixId') || line.includes('SecureNetflixId') || line.includes('.netflix.com')) {
+          payloads.push(line);
+        }
+      }
+    }
+  }
+
+  // Fallback: if no multi-delimiter matched, split line by line
+  if (payloads.length === 0) {
+    return text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  }
+
+  return payloads;
+}
+
 function getLaunchLinks(tokenOrUrl) {
   if (!tokenOrUrl) return { browser: '', android: '', tv: '', token: '' };
   let tok = tokenOrUrl.trim();
@@ -1032,7 +1084,7 @@ async function handleBulkOrCheck() {
   const text = document.getElementById('cookie-input').value.trim();
   if (!text) { showToast('Masukkan baris cookie terlebih dahulu'); return; }
 
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  const lines = splitIntoAccountPayloads(text);
   if (lines.length === 0) return;
 
   const use_proxy = document.getElementById('chk-proxy').checked;
@@ -1050,6 +1102,7 @@ async function handleBulkOrCheck() {
   btnStop.style.display = 'inline-flex';
   progressWrap.style.display = 'block';
 
+  accountsData = [];
   let completed = 0;
   let currentIndex = 0;
 
@@ -1140,6 +1193,7 @@ async function handleBulkOrCheck() {
         });
       }
 
+      // Update counts & progress
       completed++;
       updateProgress();
       renderCards();
@@ -1268,9 +1322,11 @@ function copyFullInfo(jsonStr) {
 function updateCounts() {
   const all = accountsData.length;
   const live = accountsData.filter(a => a.live).length;
+  const live4k = accountsData.filter(a => a.live && a.plan && a.plan.includes('ULTRA HD')).length;
   const dead = all - live;
   document.getElementById('count-all').innerText = all;
   document.getElementById('count-live').innerText = live;
+  document.getElementById('count-4k').innerText = live4k;
   document.getElementById('count-dead').innerText = dead;
 }
 
