@@ -1,0 +1,10 @@
+services:
+  nf-sawava:
+    build: .
+    container_name: nf-sawava
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./netflix_proxies.txt:/app/netflix_proxies.txt
+      - ./netflix_suite.db:/app/netflix_suite.db

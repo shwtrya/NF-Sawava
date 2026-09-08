@@ -82,6 +82,8 @@ COUNTRY_CODE_NAMES = {
 }
 
 db_lock = threading.Lock()
+healthy_proxies = []
+proxy_lock = threading.Lock()
 
 def init_db():
     with db_lock:
@@ -168,18 +170,47 @@ def load_proxies():
             parts = p.split(":")
             if len(parts) == 4:
                 ip, port, user, pwd = parts
-                res.append({"raw": f"{ip}:{port}", "proxy": f"http://{user}:{pwd}@{ip}:{port}"})
+                res.append({"raw": f"{ip}:{port}", "proxy": f"http://{user}:{pwd}@{ip}:{port}", "latency": 0})
             elif len(parts) == 2:
                 ip, port = parts
-                res.append({"raw": f"{ip}:{port}", "proxy": f"http://{ip}:{port}"})
+                res.append({"raw": f"{ip}:{port}", "proxy": f"http://{ip}:{port}", "latency": 0})
     return res
 
+def check_proxy_health(p):
+    t0 = time.time()
+    try:
+        proxies = {"http": p["proxy"], "https": p["proxy"]}
+        r = requests.get("https://www.netflix.com/favicon.ico", proxies=proxies, timeout=6, verify=False)
+        if r.status_code in (200, 301, 302, 404):
+            latency = int((time.time() - t0) * 1000)
+            return True, latency
+    except Exception:
+        pass
+    return False, 0
+
+def proxy_health_worker():
+    global healthy_proxies
+    while True:
+        all_p = load_proxies()
+        good = []
+        for p in all_p:
+            ok, lat = check_proxy_health(p)
+            if ok:
+                p["latency"] = lat
+                good.append(p)
+        with proxy_lock:
+            healthy_proxies = good if good else all_p
+        time.sleep(300)
+
 def get_random_proxy():
-    pool = load_proxies()
+    global healthy_proxies
+    with proxy_lock:
+        pool = list(healthy_proxies) if healthy_proxies else load_proxies()
     if not pool:
         return None, None
     choice = random.choice(pool)
-    return {"http": choice["proxy"], "https": choice["proxy"]}, choice["raw"]
+    lat_info = f" ({choice.get('latency', 0)}ms)" if choice.get("latency") else ""
+    return {"http": choice["proxy"], "https": choice["proxy"]}, f"{choice['raw']}{lat_info}"
 
 def extract_cookie_values(text):
     cookie_dict = {}
@@ -345,7 +376,7 @@ HTML = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Netflix Suite Pro — NFToken, Bulk Checker & History</title>
+<title>Netflix Suite Pro — NFToken, Bulk Concurrent & Monitor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -376,7 +407,7 @@ body {
 }
 .container {
   width: 100%;
-  max-width: 860px;
+  max-width: 880px;
   background-color: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -439,6 +470,8 @@ body {
   border-radius: 8px;
   margin-bottom: 20px;
   font-size: 13px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 .toggle-wrap { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
 .toggle-wrap input { accent-color: var(--primary); cursor: pointer; }
@@ -526,7 +559,7 @@ textarea:focus { outline: none; border-color: var(--primary); }
 .progress-wrap { margin-top: 16px; display: none; }
 .progress-bar-bg { width: 100%; height: 8px; background: #232733; border-radius: 4px; overflow: hidden; margin-top: 6px; }
 .progress-bar-fill { height: 100%; width: 0%; background: var(--primary); transition: width 0.2s; }
-.bulk-stats { display: flex; gap: 14px; font-size: 13px; margin: 12px 0; font-weight: 600; }
+.bulk-stats { display: flex; gap: 14px; font-size: 13px; margin: 12px 0; font-weight: 600; flex-wrap: wrap; }
 .table-wrap { overflow-x: auto; margin-top: 14px; max-height: 400px; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
 th, td { padding: 10px; border-bottom: 1px solid var(--border); }
@@ -534,6 +567,7 @@ th { background: #1a1d26; color: var(--text-muted); font-weight: 600; position: 
 tr:hover { background: rgba(255,255,255,0.02); }
 .tag-live { color: var(--green); font-weight: 600; }
 .tag-dead { color: var(--red); font-weight: 600; }
+.shortcut-hint { font-size: 11px; color: var(--text-muted); margin-top: 6px; text-align: right; }
 </style>
 </head>
 <body>
@@ -541,23 +575,29 @@ tr:hover { background: rgba(255,255,255,0.02); }
   <div class="header">
     <div class="brand">
       <h1>Netflix <span>Suite Pro</span></h1>
-      <span class="badge">v3.0 SQLite</span>
+      <span class="badge">v4.0 Concurrent</span>
     </div>
-    <div style="font-size:12px; color:var(--text-muted);">Self-Hosted Local Server</div>
+    <div style="font-size:12px; color:var(--text-muted);">Docker & Concurrency Ready</div>
   </div>
 
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('single')">Single Check / NFToken</button>
-    <button class="tab-btn" onclick="switchTab('bulk')">Bulk Mass Checker</button>
+    <button class="tab-btn" onclick="switchTab('bulk')">Concurrent Bulk</button>
     <button class="tab-btn" onclick="switchTab('history')">History Database</button>
   </div>
 
   <div class="proxy-bar">
     <div class="toggle-wrap" onclick="document.getElementById('proxy-toggle').click()">
       <input type="checkbox" id="proxy-toggle" checked onclick="event.stopPropagation()">
-      <span>Gunakan Proxy Rotasi (Webshare)</span>
+      <span>Rotasi Proxy (Auto Health-Check)</span>
     </div>
-    <span id="proxy-count-label" style="color:var(--text-muted)">Memuat proxy...</span>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div class="toggle-wrap" onclick="document.getElementById('sound-toggle').click()">
+        <input type="checkbox" id="sound-toggle" checked onclick="event.stopPropagation()">
+        <span>Sound Alert</span>
+      </div>
+      <span id="proxy-count-label" style="color:var(--text-muted)">Memuat proxy...</span>
+    </div>
   </div>
 
   <!-- PANEL 1: SINGLE -->
@@ -567,7 +607,8 @@ tr:hover { background: rgba(255,255,255,0.02); }
       <label style="cursor:pointer;"><input type="radio" name="single-mode" value="checker" onchange="toggleSingleMode()"> Mode: Membership Checker</label>
     </div>
     <textarea id="single-cookie" placeholder="Paste cookie di sini (Raw, JSON, Netscape)..."></textarea>
-    <button id="single-btn" class="btn-primary" onclick="runSingle()">
+    <div class="shortcut-hint">Tekan <strong>Ctrl + Enter</strong> untuk generate / check langsung</div>
+    <button id="single-btn" class="btn-primary" onclick="runSingle()" style="margin-top:10px;">
       <span id="single-btn-text">Generate NFToken</span>
     </button>
     <div id="single-out" class="card-out"></div>
@@ -575,10 +616,21 @@ tr:hover { background: rgba(255,255,255,0.02); }
 
   <!-- PANEL 2: BULK -->
   <div id="panel-bulk" class="section-panel">
-    <label>Paste multi-line cookies (1 baris = 1 akun / cookie):</label>
-    <textarea id="bulk-input" style="height:180px;" placeholder="NetflixId=...&#10;NetflixId=...; SecureNetflixId=...&#10;user:pass | Cookie = NetflixId=..."></textarea>
-    <div style="display:flex; gap:8px; margin-bottom:12px;">
-      <button id="bulk-btn" class="btn-primary" style="flex:2;" onclick="runBulk()">Mulai Bulk Check</button>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <label style="margin-bottom:0;">Multi-line cookies (1 baris = 1 akun):</label>
+      <div style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
+        <span>Threads:</span>
+        <select id="bulk-threads" style="background:#090a0d; color:#fff; border:1px solid var(--border); border-radius:4px; padding:2px 6px;">
+          <option value="3">3 Concurrent</option>
+          <option value="5" selected>5 Concurrent</option>
+          <option value="10">10 Concurrent</option>
+        </select>
+      </div>
+    </div>
+    <textarea id="bulk-input" style="height:170px;" placeholder="NetflixId=...&#10;NetflixId=...; SecureNetflixId=...&#10;user:pass | Cookie = NetflixId=..."></textarea>
+    <div class="shortcut-hint">Tekan <strong>Ctrl + Enter</strong> untuk start bulk | <strong>Esc</strong> untuk stop</div>
+    <div style="display:flex; gap:8px; margin: 10px 0 12px;">
+      <button id="bulk-btn" class="btn-primary" style="flex:2;" onclick="runBulk()">Mulai Concurrent Check</button>
       <button class="btn-secondary" style="flex:1;" onclick="stopBulk()">Stop</button>
     </div>
     <div id="bulk-progress" class="progress-wrap">
@@ -632,6 +684,50 @@ tr:hover { background: rgba(255,255,255,0.02); }
 let bulkRunning = false;
 let bulkResults = [];
 
+// Audio alert synthesiser
+function playAlert(type) {
+  if (!document.getElementById('sound-toggle').checked) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    if (type === '4k') {
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.15);
+    } else {
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+    }
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+  } catch(e) {}
+}
+
+function notifyBrowser(title, body) {
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification(title, { body });
+  }
+}
+
+if ("Notification" in window && Notification.permission !== "denied") {
+  Notification.requestPermission();
+}
+
+// Shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === 'Enter') {
+    const activeTab = document.querySelector('.section-panel.active').id;
+    if (activeTab === 'panel-single') runSingle();
+    if (activeTab === 'panel-bulk') runBulk();
+  } else if (e.key === 'Escape') {
+    stopBulk();
+  }
+});
+
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((b, i) => {
     b.classList.toggle('active', (i === 0 && tab === 'single') || (i === 1 && tab === 'bulk') || (i === 2 && tab === 'history'));
@@ -651,7 +747,7 @@ async function fetchStats() {
   try {
     const res = await fetch('/api/proxies');
     const d = await res.json();
-    document.getElementById('proxy-count-label').innerText = `${d.count} Proxy Aktif`;
+    document.getElementById('proxy-count-label').innerText = `${d.healthy}/${d.total} Proxy Healthy`;
   } catch(e) {}
 }
 
@@ -678,6 +774,7 @@ async function runSingle() {
 
     if (mode === 'nftoken') {
       if (d.error) throw new Error(d.error);
+      playAlert('live');
       out.className = 'card-out live';
       out.innerHTML = `
         <strong>Login NFToken Berhasil:</strong>
@@ -690,6 +787,7 @@ async function runSingle() {
       `;
     } else {
       if (!d.live) throw new Error(d.reason || 'Akun Dead');
+      if (d.plan.includes('4K')) playAlert('4k'); else playAlert('live');
       out.className = 'card-out live';
       out.innerHTML = `
         <strong>Akun Live Valid:</strong>
@@ -719,51 +817,70 @@ async function runBulk() {
   if (lines.length === 0) return;
 
   const use_proxy = document.getElementById('proxy-toggle').checked;
+  const concurrency = parseInt(document.getElementById('bulk-threads').value, 10) || 5;
+
   bulkRunning = true;
   bulkResults = [];
   document.getElementById('bulk-btn').disabled = true;
   document.getElementById('bulk-progress').style.display = 'block';
   document.getElementById('bulk-tbody').innerHTML = '';
 
-  let live = 0, fourk = 0, dead = 0;
+  let live = 0, fourk = 0, dead = 0, completed = 0;
   document.getElementById('stat-total').innerText = lines.length;
 
-  for (let i = 0; i < lines.length; i++) {
-    if (!bulkRunning) break;
-    const line = lines[i];
-    const pct = Math.round(((i + 1) / lines.length) * 100);
-    document.getElementById('progress-status').innerText = `Memeriksa ${i + 1}/${lines.length}...`;
-    document.getElementById('progress-percent').innerText = `${pct}%`;
-    document.getElementById('progress-fill').style.width = `${pct}%`;
+  // Concurrent worker queue
+  let currentIndex = 0;
 
-    try {
-      const res = await fetch('/api/check', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({cookie: line, use_proxy})
-      });
-      const d = await res.json();
-      const item = { index: i + 1, raw: line, ...d };
-      bulkResults.push(item);
+  async function worker() {
+    while (currentIndex < lines.length && bulkRunning) {
+      const idx = currentIndex++;
+      const line = lines[idx];
 
-      if (d.live) {
-        live++;
-        if (d.plan.includes('4K')) fourk++;
-      } else {
+      try {
+        const res = await fetch('/api/check', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({cookie: line, use_proxy})
+        });
+        const d = await res.json();
+        const item = { index: idx + 1, raw: line, ...d };
+        bulkResults.push(item);
+
+        if (d.live) {
+          live++;
+          if (d.plan && d.plan.includes('4K')) {
+            fourk++;
+            playAlert('4k');
+          } else {
+            playAlert('live');
+          }
+        } else {
+          dead++;
+        }
+        appendBulkRow(item);
+      } catch(e) {
         dead++;
+        appendBulkRow({ index: idx + 1, live: false, plan: 'Error', billing: '-', country: '-', route: '-' });
       }
-      appendBulkRow(item);
-    } catch(e) {
-      dead++;
-      appendBulkRow({ index: i + 1, live: false, plan: 'Error', billing: '-', country: '-', route: '-' });
-    }
 
-    document.getElementById('stat-live').innerText = live;
-    document.getElementById('stat-4k').innerText = fourk;
-    document.getElementById('stat-dead').innerText = dead;
+      completed++;
+      const pct = Math.round((completed / lines.length) * 100);
+      document.getElementById('progress-status').innerText = `Memeriksa ${completed}/${lines.length}...`;
+      document.getElementById('progress-percent').innerText = `${pct}%`;
+      document.getElementById('progress-fill').style.width = `${pct}%`;
+
+      document.getElementById('stat-live').innerText = live;
+      document.getElementById('stat-4k').innerText = fourk;
+      document.getElementById('stat-dead').innerText = dead;
+    }
   }
+
+  const workers = Array.from({ length: Math.min(concurrency, lines.length) }, () => worker());
+  await Promise.all(workers);
+
   bulkRunning = false;
   document.getElementById('bulk-btn').disabled = false;
+  notifyBrowser('Bulk Check Selesai', `Total: ${lines.length} | Live: ${live} | 4K: ${fourk}`);
 }
 
 function stopBulk() { bulkRunning = false; }
@@ -850,11 +967,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(HTML.encode("utf-8"))
         elif self.path == "/api/proxies":
-            p = load_proxies()
+            all_p = load_proxies()
+            with proxy_lock:
+                h_count = len(healthy_proxies) if healthy_proxies else len(all_p)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps({"count": len(p)}).encode("utf-8"))
+            self.wfile.write(json.dumps({"total": len(all_p), "healthy": h_count}).encode("utf-8"))
         elif self.path == "/api/history":
             rows = get_history()
             self.send_response(200)
@@ -910,6 +1029,8 @@ class ThreadingSimpleServer(socketserver.ThreadingMixIn, http.server.HTTPServer)
 
 def run():
     init_db()
+    t = threading.Thread(target=proxy_health_worker, daemon=True)
+    t.start()
     socketserver.TCPServer.allow_reuse_address = True
     server = ThreadingSimpleServer(("", PORT), Handler)
     print(f"Server jalan: http://localhost:{PORT}")
