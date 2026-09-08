@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+netflix_proxies.txt
+input.txt
+netflix.txt
+*.json
+.env

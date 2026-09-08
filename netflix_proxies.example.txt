@@ -1,0 +1,3 @@
+# Masukkan proxy Webshare per baris (opsional)
+# Format: ip:port:username:password atau ip:port
+31.59.20.176:6754:username:password
