@@ -5,142 +5,335 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Netflix Suite Pro — Complete Suite</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 :root {
-  --bg-main: #0c0d10;
-  --bg-card: #15171e;
-  --bg-input: #090a0d;
-  --border: #262934;
+  --bg-body: #08090c;
+  --bg-surface: #0f1117;
+  --bg-card: #151821;
+  --bg-subtle: #1b1f2b;
+  --bg-input: #0b0c10;
+  --border: #222634;
+  --border-subtle: #191c26;
+  --border-focus: #e50914;
+
   --primary: #e50914;
-  --primary-hover: #f40612;
-  --text-main: #f1f3f7;
-  --text-muted: #8b92a5;
-  --green: #22c55e;
-  --green-bg: rgba(34, 197, 94, 0.1);
-  --red: #ef4444;
-  --red-bg: rgba(239, 68, 68, 0.1);
+  --primary-hover: #b80710;
+  --primary-glow: rgba(229, 9, 20, 0.25);
+
+  --text-main: #f3f4f8;
+  --text-muted: #848b9f;
+  --text-dim: #515768;
+
+  --live: #10b981;
+  --live-bg: rgba(16, 185, 129, 0.1);
+  --live-border: rgba(16, 185, 129, 0.3);
+
+  --dead: #f43f5e;
+  --dead-bg: rgba(244, 63, 94, 0.1);
+  --dead-border: rgba(244, 63, 94, 0.3);
+
+  --accent-4k: #38bdf8;
+  --accent-4k-bg: rgba(56, 189, 248, 0.1);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
 }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: var(--bg-main);
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-body);
+  background-image: 
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(229, 9, 20, 0.12), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.01) 0%, transparent 100%);
   color: var(--text-main);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 30px 16px;
+  padding: 32px 16px 48px;
+  -webkit-font-smoothing: antialiased;
 }
+
 .container {
   width: 100%;
-  max-width: 980px;
-  background-color: var(--bg-card);
+  max-width: 1040px;
+  background-color: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 28px;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+  border-radius: var(--radius-xl);
+  padding: 28px 32px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(16px);
 }
+
+/* Header */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 18px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 20px;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 16px;
 }
-.brand { display: flex; align-items: center; gap: 12px; }
-.brand h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
-.brand span { color: var(--primary); }
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-icon {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #e50914 0%, #8b0000 100%);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 20px;
+  color: #fff;
+  box-shadow: 0 4px 14px var(--primary-glow);
+}
+
+.brand-text h1 {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-text h1 span { color: var(--primary); }
+
+.brand-text .sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
 .badge {
   font-size: 11px;
-  font-weight: 600;
-  background: #232733;
-  color: var(--text-muted);
-  padding: 4px 8px;
-  border-radius: 6px;
-  text-transform: uppercase;
+  font-weight: 700;
+  background: var(--bg-subtle);
+  color: #a5adc4;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
   letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
+
+.status-bar-top {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.pill-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  border-radius: 999px;
+}
+
+/* Tabs */
 .tabs {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 6px;
   background: var(--bg-input);
-  padding: 4px;
-  border-radius: 10px;
-  margin-bottom: 20px;
+  padding: 5px;
+  border-radius: var(--radius-md);
+  margin-bottom: 22px;
   border: 1px solid var(--border);
 }
+
 .tab-btn {
-  padding: 9px 4px;
+  padding: 10px 8px;
   border: 0;
   background: transparent;
   color: var(--text-muted);
+  font-family: inherit;
   font-weight: 600;
-  font-size: 12px;
-  border-radius: 7px;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
-.tab-btn.active { background: var(--bg-card); color: var(--text-main); box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
-.proxy-bar {
+
+.tab-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tab-btn.active {
+  background: var(--bg-card);
+  color: #fff;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Sub bar / Control ribbon */
+.control-ribbon {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(255,255,255,0.02);
+  background: var(--bg-card);
   border: 1px solid var(--border);
-  padding: 10px 14px;
-  border-radius: 8px;
-  margin-bottom: 20px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  margin-bottom: 24px;
   font-size: 13px;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
 }
-.toggle-wrap { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
-.toggle-wrap input { accent-color: var(--primary); cursor: pointer; }
+
+.toggle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 500;
+  color: var(--text-main);
+}
+
+.toggle-wrap input {
+  accent-color: var(--primary);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
 .section-panel { display: none; }
-.section-panel.active { display: block; }
-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; }
-textarea, input[type="text"], input[type="password"] {
+.section-panel.active { display: block; animation: fadeIn 0.15s ease-out; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Form controls */
+label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  letter-spacing: -0.1px;
+}
+
+textarea, input[type="text"], input[type="password"], select {
   width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
   color: #fff;
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
+  transition: all 0.2s;
+  outline: none;
+}
+
+textarea:focus, input:focus, select:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--primary-glow);
+}
+
+textarea {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+/* Radio Group Segmented */
+.segmented-radios {
+  display: inline-flex;
+  gap: 4px;
+  background: var(--bg-input);
+  padding: 4px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
   margin-bottom: 14px;
 }
-textarea:focus, input:focus { outline: none; border-color: var(--primary); }
+
+.segmented-radios label {
+  margin-bottom: 0;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.segmented-radios input { display: none; }
+
+.segmented-radios label.selected {
+  background: var(--bg-card);
+  color: #fff;
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+/* Buttons */
 .btn-primary {
   width: 100%;
-  padding: 12px;
+  padding: 12px 20px;
   background: var(--primary);
   color: #fff;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
+  font-family: inherit;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   justify-content: center;
   align-items: center;
   gap: 8px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 14px var(--primary-glow);
 }
-.btn-primary:hover { background: var(--primary-hover); }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
 .btn-secondary {
   padding: 8px 14px;
-  background: #232733;
+  background: var(--bg-subtle);
   color: var(--text-main);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -148,147 +341,385 @@ textarea:focus, input:focus { outline: none; border-color: var(--primary); }
   align-items: center;
   gap: 6px;
   text-decoration: none;
+  transition: all 0.15s;
 }
-.btn-secondary:hover { background: #2d3242; }
+
+.btn-secondary:hover {
+  background: #252a3a;
+  border-color: #31374a;
+  color: #fff;
+}
+
+.shortcut-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin: 6px 0 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.shortcut-hint kbd {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Result Cards */
 .card-out {
   margin-top: 20px;
-  border-radius: 10px;
-  padding: 16px;
+  border-radius: var(--radius-lg);
+  padding: 20px;
   border: 1px solid;
   font-size: 13px;
   display: none;
+  animation: fadeIn 0.2s ease-out;
 }
-.card-out.live { background: var(--green-bg); border-color: var(--green); }
-.card-out.dead { background: var(--red-bg); border-color: var(--red); }
+
+.card-out.live {
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.02) 100%);
+  border-color: var(--live-border);
+}
+
+.card-out.dead {
+  background: linear-gradient(180deg, rgba(244, 63, 94, 0.08) 0%, rgba(244, 63, 94, 0.02) 100%);
+  border-color: var(--dead-border);
+}
+
+.card-header-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
 .grid-meta {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 12px;
-  margin: 12px 0;
+  margin: 14px 0;
 }
+
 .meta-box {
-  background: rgba(0,0,0,0.3);
-  padding: 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.05);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.04);
 }
-.meta-box span { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 2px; }
-.meta-box strong { font-size: 14px; color: #fff; }
+
+.meta-box span {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.meta-box strong {
+  font-size: 14px;
+  color: #fff;
+  font-weight: 700;
+  word-break: break-word;
+}
+
 .token-link {
   word-break: break-all;
-  background: rgba(0,0,0,0.4);
-  padding: 10px;
-  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
   font-family: 'JetBrains Mono', monospace;
-  margin-top: 8px;
-  border: 1px dashed rgba(255,255,255,0.15);
-}
-.token-link a { color: #60a5fa; text-decoration: none; }
-.token-link a:hover { text-decoration: underline; }
-.action-row { display: flex; gap: 8px; margin-top: 12px; }
-.progress-wrap { margin-top: 16px; display: none; }
-.progress-bar-bg { width: 100%; height: 8px; background: #232733; border-radius: 4px; overflow: hidden; margin-top: 6px; }
-.progress-bar-fill { height: 100%; width: 0%; background: var(--primary); transition: width 0.2s; }
-.bulk-stats { display: flex; gap: 14px; font-size: 13px; margin: 12px 0; font-weight: 600; flex-wrap: wrap; }
-.table-wrap { overflow-x: auto; margin-top: 14px; max-height: 440px; }
-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
-th, td { padding: 10px; border-bottom: 1px solid var(--border); }
-th { background: #1a1d26; color: var(--text-muted); font-weight: 600; position: sticky; top: 0; z-index: 10; }
-tr:hover { background: rgba(255,255,255,0.02); }
-.tag-live { color: var(--green); font-weight: 600; }
-.tag-dead { color: var(--red); font-weight: 600; }
-.shortcut-hint { font-size: 11px; color: var(--text-muted); margin-top: 6px; text-align: right; }
-.filter-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
-.filter-row select, .filter-row input {
-  background: var(--bg-input);
-  color: #fff;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 10px;
   font-size: 12px;
+  margin-top: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
 }
+
+.token-link a { color: #38bdf8; text-decoration: none; font-weight: 500; }
+.token-link a:hover { text-decoration: underline; }
+
+/* Progress & Stats */
+.progress-wrap { margin-top: 18px; display: none; }
+
+.progress-bar-bg {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #e50914 0%, #ff4d58 100%);
+  border-radius: 999px;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 10px var(--primary-glow);
+}
+
+.bulk-stats {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0 14px;
+  flex-wrap: wrap;
+}
+
+.stat-pill {
+  flex: 1;
+  min-width: 110px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  text-align: center;
+}
+
+.stat-pill .label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-pill .num {
+  font-size: 18px;
+  font-weight: 800;
+  margin-top: 2px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Tables */
+.table-wrap {
+  overflow-x: auto;
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  max-height: 460px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+th, td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+tbody tr {
+  background: var(--bg-surface);
+  transition: background 0.15s;
+}
+
+tbody tr:hover {
+  background: var(--bg-subtle);
+}
+
+.tag-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--live);
+  background: var(--live-bg);
+  border: 1px solid var(--live-border);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.tag-dead {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--dead);
+  background: var(--dead-bg);
+  border: 1px solid var(--dead-border);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.filter-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .pagination-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 14px;
+  margin-top: 16px;
   font-size: 12px;
   color: var(--text-muted);
+  padding: 0 4px;
 }
+
+/* Charts */
 .chart-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-top: 16px;
+  gap: 18px;
+  margin-top: 18px;
 }
-@media (max-width: 680px) {
-  .chart-grid { grid-template-columns: 1fr; }
-  .tabs { grid-template-columns: 1fr 1fr; }
-}
+
 .chart-card {
-  background: var(--bg-input);
-  padding: 16px;
-  border-radius: 10px;
+  background: var(--bg-card);
+  padding: 20px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
 }
-/* Modal PIN */
+
+.chart-card label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 14px;
+}
+
+/* Security Modal */
 #pin-modal {
   position: fixed;
   top: 0; left: 0; width: 100vw; height: 100vh;
-  background: rgba(12, 13, 16, 0.96);
+  background: rgba(8, 9, 12, 0.94);
+  backdrop-filter: blur(12px);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 9999;
 }
+
 .pin-box {
-  background: var(--bg-card);
-  padding: 30px;
-  border-radius: 14px;
+  background: var(--bg-surface);
+  padding: 32px 36px;
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border);
   width: 100%;
-  max-width: 360px;
+  max-width: 380px;
   text-align: center;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.8);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
+
 .copy-btn-sm {
-  background: #232733;
-  color: #f1f3f7;
+  background: var(--bg-subtle);
+  color: var(--text-main);
   border: 1px solid var(--border);
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: 4px;
   cursor: pointer;
   font-size: 11px;
+  font-weight: 600;
+  transition: all 0.15s;
 }
-.copy-btn-sm:hover { background: #32384a; }
+
+.copy-btn-sm:hover {
+  background: #2b3144;
+  border-color: #3e465f;
+}
+
+/* Toast */
+#toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transform: translateY(100px);
+  opacity: 0;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 10000;
+}
+
+#toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+@media (max-width: 768px) {
+  body { padding: 16px 12px; }
+  .container { padding: 20px 18px; }
+  .tabs { grid-template-columns: repeat(2, 1fr); }
+  .chart-grid { grid-template-columns: 1fr; }
+  .header { flex-direction: column; align-items: flex-start; }
+}
 </style>
 </head>
 <body>
 
+<div id="toast"><span>✓</span> <span id="toast-msg">Pesan</span></div>
+
 <!-- PIN MODAL -->
 <div id="pin-modal" style="display:none;">
   <div class="pin-box">
-    <h2 style="font-size:18px; margin-bottom:8px;">Access Security PIN</h2>
-    <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">Masukkan 4-6 digit PIN untuk membuka dashboard.</p>
-    <input type="password" id="pin-input" placeholder="Masukkan PIN..." style="text-align:center; font-size:16px; letter-spacing:4px;" maxlength="10">
-    <button class="btn-primary" onclick="verifyPin()">Unlock Dashboard</button>
-    <div id="pin-err" style="color:var(--red); font-size:12px; margin-top:10px; display:none;">PIN Salah!</div>
+    <div style="width:48px; height:48px; background:rgba(229,9,20,0.1); border-radius:12px; display:inline-flex; align-items:center; justify-content:center; color:var(--primary); font-size:20px; margin-bottom:14px;">🔒</div>
+    <h2 style="font-size:18px; font-weight:800; margin-bottom:6px;">Security PIN Required</h2>
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:18px;">Masukkan PIN keamanan untuk mengakses dashboard.</p>
+    <input type="password" id="pin-input" placeholder="••••" style="text-align:center; font-size:20px; letter-spacing:6px; margin-bottom:14px;" maxlength="10">
+    <button class="btn-primary" onclick="verifyPin()">Buka Kunci</button>
+    <div id="pin-err" style="color:var(--dead); font-size:12px; font-weight:600; margin-top:12px; display:none;">PIN Tidak Valid!</div>
   </div>
 </div>
 
 <div class="container">
+  <!-- Header -->
   <div class="header">
     <div class="brand">
-      <h1>Netflix <span>Suite Pro</span></h1>
-      <span class="badge">v6.0 Enterprise</span>
+      <div class="brand-icon">N</div>
+      <div class="brand-text">
+        <h1>Netflix <span>Suite Pro</span></h1>
+        <div class="sub">Token Generator & Realtime Membership Checker</div>
+      </div>
+      <span class="badge">v6.1 Elite</span>
     </div>
-    <div style="font-size:12px; color:var(--text-muted); display:flex; gap:10px; align-items:center;">
-      <span id="server-health-badge" style="color:var(--green)">● Server Healthy</span>
-      <span>•</span>
-      <span id="pin-badge" style="cursor:pointer; color:var(--text-muted);" onclick="managePin()">PIN: Disabled</span>
+    <div class="status-bar-top">
+      <div class="pill-tag">
+        <span id="server-health-badge" style="color:var(--live); font-weight:600;">● Online</span>
+      </div>
+      <div class="pill-tag" style="cursor:pointer;" onclick="managePin()" title="Klik untuk atur / ubah PIN">
+        <span id="pin-badge" style="color:var(--text-muted)">PIN: Disabled</span>
+      </div>
     </div>
   </div>
 
+  <!-- Navigation Tabs -->
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('single')">Single Check</button>
     <button class="tab-btn" onclick="switchTab('bulk')">Concurrent Bulk</button>
@@ -297,29 +728,34 @@ tr:hover { background: rgba(255,255,255,0.02); }
     <button class="tab-btn" onclick="switchTab('analytics')">Analytics</button>
   </div>
 
-  <div class="proxy-bar">
+  <!-- Control Ribbon -->
+  <div class="control-ribbon">
     <div class="toggle-wrap" onclick="document.getElementById('proxy-toggle').click()">
       <input type="checkbox" id="proxy-toggle" checked onclick="event.stopPropagation()">
-      <span>Rotasi Proxy (Retry 2x Backoff)</span>
+      <span>Auto Rotasi Proxy (Retry 2x Backoff)</span>
     </div>
-    <div style="display:flex; align-items:center; gap:12px;">
+    <div style="display:flex; align-items:center; gap:16px;">
       <div class="toggle-wrap" onclick="document.getElementById('sound-toggle').click()">
         <input type="checkbox" id="sound-toggle" checked onclick="event.stopPropagation()">
         <span>Sound Alert</span>
       </div>
-      <span id="proxy-count-label" style="color:var(--text-muted)">Memuat proxy...</span>
+      <span id="proxy-count-label" class="pill-tag" style="color:var(--text-muted); font-size:11px;">Memuat proxy...</span>
     </div>
   </div>
 
   <!-- PANEL 1: SINGLE -->
   <div id="panel-single" class="section-panel active">
-    <div style="display:flex; gap:10px; margin-bottom:12px;">
-      <label style="cursor:pointer;"><input type="radio" name="single-mode" value="nftoken" checked onchange="toggleSingleMode()"> Mode: NFToken URL</label>
-      <label style="cursor:pointer;"><input type="radio" name="single-mode" value="checker" onchange="toggleSingleMode()"> Mode: Membership Checker</label>
+    <div class="segmented-radios">
+      <label id="lbl-mode-nftoken" class="selected">
+        <input type="radio" name="single-mode" value="nftoken" checked onchange="toggleSingleMode()"> Mode: NFToken URL
+      </label>
+      <label id="lbl-mode-checker">
+        <input type="radio" name="single-mode" value="checker" onchange="toggleSingleMode()"> Mode: Membership Checker
+      </label>
     </div>
-    <textarea id="single-cookie" placeholder="Paste cookie di sini (Raw, JSON, Netscape)..."></textarea>
-    <div class="shortcut-hint">Tekan <strong>Ctrl + Enter</strong> untuk generate / check langsung</div>
-    <button id="single-btn" class="btn-primary" onclick="runSingle()" style="margin-top:10px;">
+    <textarea id="single-cookie" placeholder="Paste cookie di sini (Raw string, JSON array, atau Netscape format)..." style="height:140px;"></textarea>
+    <div class="shortcut-hint">Tekan <kbd>Ctrl</kbd> + <kbd>Enter</kbd> untuk eksekusi langsung</div>
+    <button id="single-btn" class="btn-primary" onclick="runSingle()" style="margin-top:6px;">
       <span id="single-btn-text">Generate NFToken</span>
     </button>
     <div id="single-out" class="card-out"></div>
@@ -329,35 +765,47 @@ tr:hover { background: rgba(255,255,255,0.02); }
   <div id="panel-bulk" class="section-panel">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
       <label style="margin-bottom:0;">Multi-line cookies (1 baris = 1 akun):</label>
-      <div style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
-        <span>Threads:</span>
-        <select id="bulk-threads" style="background:#090a0d; color:#fff; border:1px solid var(--border); border-radius:4px; padding:2px 6px;">
+      <div style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:8px;">
+        <span style="font-weight:600;">Threads:</span>
+        <select id="bulk-threads" style="width:auto; padding:4px 8px; font-size:12px; border-radius:var(--radius-sm);">
           <option value="3">3 Concurrent</option>
           <option value="5" selected>5 Concurrent</option>
           <option value="10">10 Concurrent</option>
         </select>
       </div>
     </div>
-    <textarea id="bulk-input" style="height:170px;" placeholder="NetflixId=...&#10;NetflixId=...; SecureNetflixId=...&#10;user:pass | Cookie = NetflixId=..."></textarea>
-    <div class="shortcut-hint">Tekan <strong>Ctrl + Enter</strong> untuk start bulk | <strong>Esc</strong> untuk stop</div>
-    <div style="display:flex; gap:8px; margin: 10px 0 12px;">
+    <textarea id="bulk-input" style="height:180px;" placeholder="NetflixId=...&#10;NetflixId=...; SecureNetflixId=...&#10;user:pass | Cookie = NetflixId=..."></textarea>
+    <div class="shortcut-hint">Tekan <kbd>Ctrl</kbd> + <kbd>Enter</kbd> start | <kbd>Esc</kbd> stop</div>
+    <div style="display:flex; gap:10px; margin: 8px 0 14px;">
       <button id="bulk-btn" class="btn-primary" style="flex:2;" onclick="runBulk()">Mulai Concurrent Check</button>
-      <button class="btn-secondary" style="flex:1;" onclick="stopBulk()">Stop</button>
+      <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopBulk()">Stop</button>
     </div>
     <div id="bulk-progress" class="progress-wrap">
-      <div style="display:flex; justify-content:space-between; font-size:12px;">
-        <span id="progress-status">Memeriksa 0/0...</span>
-        <span id="progress-percent">0%</span>
+      <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600;">
+        <span id="progress-status" style="color:var(--text-muted)">Memeriksa 0/0...</span>
+        <span id="progress-percent" style="color:var(--primary)">0%</span>
       </div>
       <div class="progress-bar-bg"><div id="progress-fill" class="progress-bar-fill"></div></div>
     </div>
     <div class="bulk-stats">
-      <span>Total: <span id="stat-total">0</span></span>
-      <span style="color:var(--green)">Live: <span id="stat-live">0</span></span>
-      <span style="color:#60a5fa">4K: <span id="stat-4k">0</span></span>
-      <span style="color:var(--red)">Dead: <span id="stat-dead">0</span></span>
+      <div class="stat-pill">
+        <div class="label">Total</div>
+        <div class="num" id="stat-total">0</div>
+      </div>
+      <div class="stat-pill">
+        <div class="label" style="color:var(--live)">Live</div>
+        <div class="num" id="stat-live" style="color:var(--live)">0</div>
+      </div>
+      <div class="stat-pill">
+        <div class="label" style="color:var(--accent-4k)">4K Ultra</div>
+        <div class="num" id="stat-4k" style="color:var(--accent-4k)">0</div>
+      </div>
+      <div class="stat-pill">
+        <div class="label" style="color:var(--dead)">Dead</div>
+        <div class="num" id="stat-dead" style="color:var(--dead)">0</div>
+      </div>
     </div>
-    <div class="action-row">
+    <div style="display:flex; gap:8px; margin-bottom:12px;">
       <button class="btn-secondary" onclick="exportBulk('txt')">Export Live (TXT)</button>
       <button class="btn-secondary" onclick="exportBulk('json')">Export Live (JSON)</button>
     </div>
@@ -375,19 +823,19 @@ tr:hover { background: rgba(255,255,255,0.02); }
   <div id="panel-history" class="section-panel">
     <div class="filter-row">
       <input type="text" id="hist-search" placeholder="Cari negara / billing / plan..." oninput="onSearchInput()" style="flex:2; margin-bottom:0;">
-      <select id="hist-filter-status" onchange="resetPageAndLoad()" style="flex:1;">
+      <select id="hist-filter-status" onchange="resetPageAndLoad()" style="flex:1; margin-bottom:0;">
         <option value="">Semua Status</option>
         <option value="LIVE">Hanya LIVE</option>
         <option value="DEAD">Hanya DEAD</option>
       </select>
-      <select id="hist-filter-plan" onchange="resetPageAndLoad()" style="flex:1;">
+      <select id="hist-filter-plan" onchange="resetPageAndLoad()" style="flex:1; margin-bottom:0;">
         <option value="">Semua Plan</option>
         <option value="4K">Hanya 4K</option>
         <option value="Standard">Standard / Basic</option>
       </select>
       <a href="/api/history/export_csv" class="btn-secondary">Export CSV</a>
       <button class="btn-secondary" onclick="loadHistory()">Refresh</button>
-      <button class="btn-secondary" style="color:var(--red)" onclick="clearDbHistory()">Hapus</button>
+      <button class="btn-secondary" style="color:var(--dead); border-color:var(--dead-border);" onclick="clearDbHistory()">Hapus Semua</button>
     </div>
     <div class="table-wrap">
       <table>
@@ -398,10 +846,10 @@ tr:hover { background: rgba(255,255,255,0.02); }
       </table>
     </div>
     <div class="pagination-bar">
-      <div>Menampilkan <span id="pag-start">0</span>-<span id="pag-end">0</span> dari <span id="pag-total">0</span> data</div>
-      <div style="display:flex; gap:6px; align-items:center;">
+      <div>Menampilkan <span id="pag-start" style="color:#fff; font-weight:600;">0</span>-<span id="pag-end" style="color:#fff; font-weight:600;">0</span> dari <span id="pag-total" style="color:#fff; font-weight:600;">0</span> entri</div>
+      <div style="display:flex; gap:8px; align-items:center;">
         <button class="btn-secondary" id="btn-prev" onclick="prevPage()">Prev</button>
-        <span id="page-num">Halaman 1</span>
+        <span id="page-num" style="font-weight:600;">Halaman 1</span>
         <button class="btn-secondary" id="btn-next" onclick="nextPage()">Next</button>
       </div>
     </div>
@@ -410,7 +858,7 @@ tr:hover { background: rgba(255,255,255,0.02); }
   <!-- PANEL 4: PROXY MANAGER -->
   <div id="panel-proxies" class="section-panel">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <label style="margin-bottom:0;">Proxy List (`netflix_proxies.txt`):</label>
+      <label style="margin-bottom:0;">Proxy List (<code style="color:#38bdf8;">netflix_proxies.txt</code>):</label>
       <button class="btn-secondary" onclick="testAllProxies()">Test Ping Semua</button>
     </div>
     <textarea id="proxies-input" style="height:150px;" placeholder="ip:port:user:pass&#10;ip:port"></textarea>
@@ -427,7 +875,7 @@ tr:hover { background: rgba(255,255,255,0.02); }
 
   <!-- PANEL 5: ANALYTICS -->
   <div id="panel-analytics" class="section-panel">
-    <div style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">Visualisasi data hasil pengecekan yang tercatat di database SQLite.</div>
+    <div style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">Visualisasi ringkasan akun dan performa riwayat pengecekan SQLite.</div>
     <div class="chart-grid">
       <div class="chart-card">
         <label>Perbandingan Status (Live vs Dead)</label>
@@ -447,21 +895,30 @@ let bulkResults = [];
 let chartStatusObj = null;
 let chartCountryObj = null;
 
-// Pagination state
 let curPage = 1;
 const pageSize = 25;
 let searchDebounce = null;
 
-// Server Health Monitoring
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toast-msg').innerText = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// Health check
 async function checkServerHealth() {
   try {
     const res = await fetch('/api/health');
     const d = await res.json();
     const mins = Math.floor(d.uptime_seconds / 60);
-    document.getElementById('server-health-badge').innerText = `● Server Online (${mins}m)`;
+    const badge = document.getElementById('server-health-badge');
+    badge.innerText = `● Online (${mins}m)`;
+    badge.style.color = 'var(--live)';
   } catch(e) {
-    document.getElementById('server-health-badge').innerText = '● Server Disconnected';
-    document.getElementById('server-health-badge').style.color = 'var(--red)';
+    const badge = document.getElementById('server-health-badge');
+    badge.innerText = '● Offline';
+    badge.style.color = 'var(--dead)';
   }
 }
 setInterval(checkServerHealth, 30000);
@@ -469,21 +926,23 @@ checkServerHealth();
 
 // PIN Security
 async function checkPinStatus() {
-  const res = await fetch('/api/pin/status');
-  const d = await res.json();
-  const badge = document.getElementById('pin-badge');
-  if (d.enabled) {
-    badge.innerText = 'PIN: Enabled (Click to change)';
-    badge.style.color = 'var(--green)';
-    const unlocked = sessionStorage.getItem('suite_unlocked');
-    if (!unlocked) {
-      document.getElementById('pin-modal').style.display = 'flex';
-      document.getElementById('pin-input').focus();
+  try {
+    const res = await fetch('/api/pin/status');
+    const d = await res.json();
+    const badge = document.getElementById('pin-badge');
+    if (d.enabled) {
+      badge.innerText = 'PIN: Active';
+      badge.style.color = 'var(--live)';
+      const unlocked = sessionStorage.getItem('suite_unlocked');
+      if (!unlocked) {
+        document.getElementById('pin-modal').style.display = 'flex';
+        document.getElementById('pin-input').focus();
+      }
+    } else {
+      badge.innerText = 'PIN: Inactive';
+      badge.style.color = 'var(--text-muted)';
     }
-  } else {
-    badge.innerText = 'PIN: Disabled (Click to set)';
-    badge.style.color = 'var(--text-muted)';
-  }
+  } catch(e) {}
 }
 
 async function verifyPin() {
@@ -497,15 +956,16 @@ async function verifyPin() {
   if (d.ok) {
     sessionStorage.setItem('suite_unlocked', 'true');
     document.getElementById('pin-modal').style.display = 'none';
+    showToast('Dashboard tidak terkunci');
   } else {
     document.getElementById('pin-err').style.display = 'block';
   }
 }
 
 async function managePin() {
-  const current = prompt('Masukkan PIN saat ini (kosongkan jika belum pernah set):');
+  const current = prompt('Masukkan PIN saat ini (kosongkan jika belum ada):');
   if (current === null) return;
-  const newPin = prompt('Masukkan PIN Baru (4-10 digit, atau kosongkan untuk menghapus PIN):');
+  const newPin = prompt('Masukkan PIN Baru (4-10 digit, kosongkan untuk nonaktifkan):');
   if (newPin === null) return;
   const res = await fetch('/api/pin/set', {
     method: 'POST',
@@ -514,15 +974,15 @@ async function managePin() {
   });
   const d = await res.json();
   if (d.ok) {
-    alert(newPin ? 'PIN berhasil diaktifkan!' : 'PIN dinonaktifkan.');
+    showToast(newPin ? 'PIN berhasil diatur' : 'PIN dinonaktifkan');
     sessionStorage.setItem('suite_unlocked', 'true');
     checkPinStatus();
   } else {
-    alert('Gagal: ' + (d.error || 'PIN lama salah.'));
+    alert('Gagal: ' + (d.error || 'PIN saat ini salah.'));
   }
 }
 
-// Audio alert synthesiser
+// Audio synthesize
 function playAlert(type) {
   if (!document.getElementById('sound-toggle').checked) return;
   try {
@@ -550,7 +1010,6 @@ function notifyBrowser(title, body) {
     new Notification(title, { body });
   }
 }
-
 if ("Notification" in window && Notification.permission !== "denied") {
   Notification.requestPermission();
 }
@@ -579,6 +1038,8 @@ function switchTab(tab) {
 
 function toggleSingleMode() {
   const m = document.querySelector('input[name="single-mode"]:checked').value;
+  document.getElementById('lbl-mode-nftoken').classList.toggle('selected', m === 'nftoken');
+  document.getElementById('lbl-mode-checker').classList.toggle('selected', m === 'checker');
   document.getElementById('single-btn-text').innerText = m === 'nftoken' ? 'Generate NFToken' : 'Check Status Akun';
 }
 
@@ -586,7 +1047,7 @@ async function fetchStats() {
   try {
     const res = await fetch('/api/proxies');
     const d = await res.json();
-    document.getElementById('proxy-count-label').innerText = `${d.healthy}/${d.total} Proxy Healthy`;
+    document.getElementById('proxy-count-label').innerText = `${d.healthy}/${d.total} Proxy Active`;
   } catch(e) {}
 }
 
@@ -597,7 +1058,7 @@ async function runSingle() {
   const out = document.getElementById('single-out');
   const btn = document.getElementById('single-btn');
 
-  if (!cookie) { alert('Masukkan cookie terlebih dahulu'); return; }
+  if (!cookie) { showToast('Masukkan cookie terlebih dahulu'); return; }
 
   btn.disabled = true;
   out.style.display = 'none';
@@ -616,33 +1077,46 @@ async function runSingle() {
       playAlert('live');
       out.className = 'card-out live';
       out.innerHTML = `
-        <strong>Login NFToken Berhasil:</strong>
+        <div class="card-header-status" style="color:var(--live);">
+          <span>✓</span> <span>Login NFToken Berhasil</span>
+        </div>
         <div class="token-link"><a href="${d.url}" target="_blank">${d.url}</a></div>
         <div class="grid-meta">
           <div class="meta-box"><span>Expired</span><strong>${d.expires}</strong></div>
           <div class="meta-box"><span>Route</span><strong>${d.route}</strong></div>
         </div>
-        <div class="action-row"><button class="btn-secondary" onclick="copyText('${d.url}')">Salin URL</button></div>
+        <div style="display:flex; gap:8px; margin-top:12px;">
+          <button class="btn-secondary" onclick="copyText('${d.url}')">Salin URL</button>
+        </div>
       `;
     } else {
       if (!d.live) throw new Error(d.reason || 'Akun Dead');
       if (d.plan.includes('4K')) playAlert('4k'); else playAlert('live');
       out.className = 'card-out live';
       out.innerHTML = `
-        <strong>Akun Live Valid:</strong>
+        <div class="card-header-status" style="color:var(--live);">
+          <span>✓</span> <span>Akun Live Terverifikasi</span>
+        </div>
         <div class="grid-meta">
-          <div class="meta-box"><span>Plan</span><strong>${d.plan}</strong></div>
+          <div class="meta-box"><span>Plan</span><strong style="color:var(--accent-4k)">${d.plan}</strong></div>
           <div class="meta-box"><span>Next Billing</span><strong>${d.billing}</strong></div>
           <div class="meta-box"><span>Country</span><strong>${d.country}</strong></div>
           <div class="meta-box"><span>Route</span><strong>${d.route}</strong></div>
         </div>
-        <div class="action-row"><button class="btn-secondary" onclick="copyJson(${JSON.stringify(d.cookies).replace(/"/g, '&quot;')})">Salin Cookie JSON</button></div>
+        <div style="display:flex; gap:8px; margin-top:12px;">
+          <button class="btn-secondary" onclick="copyJson(${JSON.stringify(d.cookies).replace(/"/g, '&quot;')})">Salin Cookie JSON</button>
+        </div>
       `;
     }
     out.style.display = 'block';
   } catch(e) {
     out.className = 'card-out dead';
-    out.innerHTML = `<strong>Gagal:</strong> <div>${e.message}</div>`;
+    out.innerHTML = `
+      <div class="card-header-status" style="color:var(--dead);">
+        <span>✕</span> <span>Pengecekan Gagal</span>
+      </div>
+      <div style="color:var(--text-muted);">${e.message}</div>
+    `;
     out.style.display = 'block';
   } finally {
     btn.disabled = false;
@@ -651,7 +1125,7 @@ async function runSingle() {
 
 async function runBulk() {
   const text = document.getElementById('bulk-input').value.trim();
-  if (!text) { alert('Isi baris cookie terlebih dahulu'); return; }
+  if (!text) { showToast('Isi baris cookie terlebih dahulu'); return; }
   const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
   if (lines.length === 0) return;
 
@@ -719,17 +1193,23 @@ async function runBulk() {
   bulkRunning = false;
   document.getElementById('bulk-btn').disabled = false;
   notifyBrowser('Bulk Check Selesai', `Total: ${lines.length} | Live: ${live} | 4K: ${fourk}`);
+  showToast(`Bulk Check Selesai: ${live} Live / ${lines.length}`);
 }
 
-function stopBulk() { bulkRunning = false; }
+function stopBulk() {
+  if (bulkRunning) {
+    bulkRunning = false;
+    showToast('Proses bulk dihentikan');
+  }
+}
 
 function appendBulkRow(item) {
   const tbody = document.getElementById('bulk-tbody');
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td>${item.index}</td>
-    <td class="${item.live ? 'tag-live' : 'tag-dead'}">${item.live ? 'LIVE' : 'DEAD'}</td>
-    <td>${item.plan || '-'}</td>
+    <td><span class="${item.live ? 'tag-live' : 'tag-dead'}">${item.live ? '● LIVE' : '✕ DEAD'}</span></td>
+    <td style="${item.plan && item.plan.includes('4K') ? 'color:var(--accent-4k); font-weight:700;' : ''}">${item.plan || '-'}</td>
     <td>${item.billing || '-'}</td>
     <td>${item.country || '-'}</td>
     <td style="color:var(--text-muted)">${item.route || 'Direct'}</td>
@@ -739,7 +1219,7 @@ function appendBulkRow(item) {
 
 function exportBulk(type) {
   const lives = bulkResults.filter(r => r.live);
-  if (lives.length === 0) { alert('Belum ada akun LIVE'); return; }
+  if (lives.length === 0) { showToast('Belum ada akun LIVE untuk diexport'); return; }
 
   let blob, filename;
   if (type === 'txt') {
@@ -754,6 +1234,7 @@ function exportBulk(type) {
   a.href = URL.createObjectURL(blob);
   a.download = filename;
   a.click();
+  showToast(`File ${filename} didownload`);
 }
 
 // History DB Pagination & Search
@@ -783,7 +1264,7 @@ function nextPage() {
 
 async function loadHistory() {
   const tbody = document.getElementById('history-tbody');
-  tbody.innerHTML = '<tr><td colspan="7">Memuat data riwayat...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:20px;">Memuat data riwayat...</td></tr>';
 
   const q = document.getElementById('hist-search').value.trim();
   const st = document.getElementById('hist-filter-status').value;
@@ -802,7 +1283,7 @@ async function loadHistory() {
     const data = await res.json();
     renderHistoryTable(data);
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="7">Gagal memuat riwayat.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--dead); padding:20px;">Gagal memuat riwayat.</td></tr>';
   }
 }
 
@@ -812,7 +1293,7 @@ function renderHistoryTable(data) {
   const total = data.total || 0;
 
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7">Tidak ada data riwayat.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:20px;">Tidak ada data riwayat.</td></tr>';
     document.getElementById('pag-start').innerText = '0';
     document.getElementById('pag-end').innerText = '0';
     document.getElementById('pag-total').innerText = total;
@@ -823,15 +1304,15 @@ function renderHistoryTable(data) {
 
   tbody.innerHTML = rows.map(r => `
     <tr>
-      <td style="color:var(--text-muted)">${r.created_at}</td>
-      <td>${r.type.toUpperCase()}</td>
-      <td class="${r.status === 'LIVE' ? 'tag-live' : 'tag-dead'}">${r.status}</td>
-      <td>${r.plan || '-'}</td>
+      <td style="color:var(--text-muted); font-family:'JetBrains Mono', monospace; font-size:11px;">${r.created_at}</td>
+      <td style="font-weight:600;">${r.type.toUpperCase()}</td>
+      <td><span class="${r.status === 'LIVE' ? 'tag-live' : 'tag-dead'}">${r.status === 'LIVE' ? '● LIVE' : '✕ DEAD'}</span></td>
+      <td style="${r.plan && r.plan.includes('4K') ? 'color:var(--accent-4k); font-weight:700;' : ''}">${r.plan || '-'}</td>
       <td>${r.billing || '-'}</td>
       <td>${r.country || '-'}</td>
       <td>
         <div style="display:flex; gap:6px; align-items:center;">
-          ${r.token_url ? `<a href="${r.token_url}" target="_blank" style="color:#60a5fa">Link</a>` : ''}
+          ${r.token_url ? `<a href="${r.token_url}" target="_blank" class="btn-secondary" style="padding:2px 8px; color:#38bdf8;">Link</a>` : ''}
           ${r.raw_cookie ? `<button class="copy-btn-sm" onclick="copyText('${escapeAttr(r.raw_cookie)}')">Salin Cookie</button>` : '-'}
         </div>
       </td>
@@ -854,8 +1335,9 @@ function escapeAttr(str) {
 }
 
 async function clearDbHistory() {
-  if (!confirm('Yakin ingin menghapus seluruh riwayat di SQLite?')) return;
+  if (!confirm('Hapus seluruh riwayat di SQLite database?')) return;
   await fetch('/api/history/clear', {method: 'POST'});
+  showToast('Database riwayat dibersihkan');
   curPage = 1;
   loadHistory();
 }
@@ -867,14 +1349,14 @@ async function loadProxiesManager() {
   document.getElementById('proxies-input').value = d.raw_text || '';
   const tbody = document.getElementById('proxy-tbody');
   if (!d.list || d.list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3">Belum ada proxy tersimpan.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding:20px;">Belum ada proxy tersimpan.</td></tr>';
     return;
   }
   tbody.innerHTML = d.list.map(p => `
     <tr>
-      <td>${p.raw}</td>
-      <td>${p.latency ? p.latency + ' ms' : '-'}</td>
-      <td style="color:${p.status === 'OK' ? 'var(--green)' : 'var(--red)'}">${p.status}</td>
+      <td style="font-family:'JetBrains Mono', monospace;">${p.raw}</td>
+      <td style="font-weight:600; font-family:'JetBrains Mono', monospace;">${p.latency ? p.latency + ' ms' : '-'}</td>
+      <td><span class="${p.status === 'OK' ? 'tag-live' : 'tag-dead'}">${p.status === 'OK' ? '● ONLINE' : '✕ ERROR'}</span></td>
     </tr>
   `).join('');
 }
@@ -887,17 +1369,18 @@ async function saveProxiesList() {
     body: JSON.stringify({text})
   });
   const d = await res.json();
-  alert(`Tersimpan: ${d.count} proxy`);
+  showToast(`Tersimpan: ${d.count} proxy`);
   fetchStats();
   loadProxiesManager();
 }
 
 async function testAllProxies() {
   const tbody = document.getElementById('proxy-tbody');
-  tbody.innerHTML = '<tr><td colspan="3">Testing koneksi ke Netflix...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding:20px;">Menguji koneksi ke Netflix FTL API...</td></tr>';
   await fetch('/api/proxies/test', {method: 'POST'});
   loadProxiesManager();
   fetchStats();
+  showToast('Test proxy selesai');
 }
 
 // Analytics Charts
@@ -915,11 +1398,18 @@ async function loadAnalytics() {
       labels: ['LIVE', 'DEAD'],
       datasets: [{
         data: [d.status_counts.LIVE || 0, d.status_counts.DEAD || 0],
-        backgroundColor: ['#22c55e', '#ef4444'],
+        backgroundColor: ['#10b981', '#f43f5e'],
         borderWidth: 0
       }]
     },
-    options: { responsive: true, plugins: { legend: { labels: { color: '#8b92a5' } } } }
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          labels: { color: '#848b9f', font: { family: 'Plus Jakarta Sans', weight: 600 } }
+        }
+      }
+    }
   });
 
   const countryLabels = Object.keys(d.country_counts);
@@ -934,22 +1424,29 @@ async function loadAnalytics() {
         label: 'Jumlah Akun',
         data: countryData.length ? countryData : [0],
         backgroundColor: '#e50914',
-        borderRadius: 4
+        borderRadius: 6
       }]
     },
     options: {
       responsive: true,
       plugins: { legend: { display: false } },
       scales: {
-        x: { ticks: { color: '#8b92a5' }, grid: { display: false } },
-        y: { ticks: { color: '#8b92a5' }, grid: { color: '#262934' } }
+        x: { ticks: { color: '#848b9f', font: { family: 'Plus Jakarta Sans' } }, grid: { display: false } },
+        y: { ticks: { color: '#848b9f', font: { family: 'JetBrains Mono' } }, grid: { color: '#222634' } }
       }
     }
   });
 }
 
-function copyText(str) { navigator.clipboard.writeText(str); alert('Disalin ke clipboard!'); }
-function copyJson(obj) { navigator.clipboard.writeText(JSON.stringify(obj, null, 2)); alert('Cookie JSON disalin!'); }
+function copyText(str) {
+  navigator.clipboard.writeText(str);
+  showToast('Teks disalin ke clipboard');
+}
+
+function copyJson(obj) {
+  navigator.clipboard.writeText(JSON.stringify(obj, null, 2));
+  showToast('Cookie JSON disalin');
+}
 
 fetchStats();
 checkPinStatus();
