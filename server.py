@@ -545,7 +545,8 @@ def check_netflix_membership(cookie_text, use_proxy=True):
                 for k, v in cookies.items()
             ]
 
-            save_history("checker", "LIVE", plan=plan_detected, billing=billing, country=country, route=route, raw_cookie=cookie_text)
+            tok_link = (nftoken_data.get("url") if nftoken_data else "")
+            save_history("checker", "LIVE", plan=plan_detected, billing=billing, country=country, route=route, token_url=tok_link, raw_cookie=cookie_text)
 
             return {
                 "live": True,

@@ -841,14 +841,14 @@ tbody tr:hover {
         <option value="4K">Hanya 4K</option>
         <option value="Standard">Standard / Basic</option>
       </select>
-      <a href="/api/history/export_csv" class="btn-secondary">Export CSV</a>
+      <button class="btn-secondary" onclick="exportCsvWithAuth()">Export CSV</button>
       <button class="btn-secondary" onclick="loadHistory()">Refresh</button>
       <button class="btn-secondary" style="color:var(--dead); border-color:var(--dead-border);" onclick="clearDbHistory()">Hapus Semua</button>
     </div>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Waktu</th><th>Tipe</th><th>Status</th><th>Plan</th><th>Billing</th><th>Country</th><th>Aksi</th></tr>
+          <tr><th>Waktu</th><th>Tipe</th><th>Status</th><th>Plan</th><th>Billing</th><th>Country</th><th>Links / Aksi</th></tr>
         </thead>
         <tbody id="history-tbody"></tbody>
       </table>
@@ -1411,7 +1411,9 @@ function renderHistoryTable(data) {
     return;
   }
 
-  tbody.innerHTML = rows.map(r => `
+  tbody.innerHTML = rows.map(r => {
+    const launch = buildLaunchLinks(r.token_url);
+    return `
     <tr>
       <td style="color:var(--text-muted); font-family:'JetBrains Mono', monospace; font-size:11px;">${r.created_at}</td>
       <td style="font-weight:600;">${r.type.toUpperCase()}</td>
@@ -1420,13 +1422,16 @@ function renderHistoryTable(data) {
       <td>${r.billing || '-'}</td>
       <td>${r.country || '-'}</td>
       <td>
-        <div style="display:flex; gap:6px; align-items:center;">
-          ${r.token_url ? `<a href="${r.token_url}" target="_blank" class="btn-secondary" style="padding:2px 8px; color:#38bdf8;">Link</a>` : ''}
-          ${r.raw_cookie ? `<button class="copy-btn-sm" onclick="copyText('${escapeAttr(r.raw_cookie)}')">Salin Cookie</button>` : '-'}
+        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+          ${launch.browser ? `<a href="${launch.browser}" target="_blank" class="btn-outline-sm" style="color:#38bdf8; text-decoration:none; padding:2px 6px; font-size:11px;">Browser</a>` : ''}
+          ${launch.android ? `<a href="${launch.android}" target="_blank" class="btn-outline-sm" style="color:#4ade80; text-decoration:none; padding:2px 6px; font-size:11px;">Android</a>` : ''}
+          ${launch.tv ? `<a href="${launch.tv}" target="_blank" class="btn-outline-sm" style="color:#a855f7; text-decoration:none; padding:2px 6px; font-size:11px;">TV</a>` : ''}
+          ${r.raw_cookie ? `<button class="copy-btn-sm" onclick="copyText('${escapeAttr(r.raw_cookie)}')">Cookie</button>` : ''}
         </div>
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   const start = (curPage - 1) * pageSize + 1;
   const end = Math.min(curPage * pageSize, total);
@@ -1441,6 +1446,23 @@ function renderHistoryTable(data) {
 
 function escapeAttr(str) {
   return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
+}
+
+async function exportCsvWithAuth() {
+  try {
+    const res = await fetch('/api/history/export_csv', {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Gagal mengunduh CSV');
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `netflix_history_${Date.now()}.csv`;
+    a.click();
+    showToast('File CSV berhasil diunduh');
+  } catch(e) {
+    showToast('Gagal export CSV: ' + e.message);
+  }
 }
 
 async function clearDbHistory() {
@@ -1500,7 +1522,9 @@ async function testAllProxies() {
 
 // Analytics Charts
 async function loadAnalytics() {
-  const res = await fetch('/api/analytics');
+  const res = await fetch('/api/analytics', {
+    headers: getAuthHeaders()
+  });
   const d = await res.json();
 
   if (chartStatusObj) chartStatusObj.destroy();
