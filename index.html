@@ -1215,10 +1215,46 @@ async function runSingle() {
   }
 }
 
+// Helper to parse multiple cookie formats including complex blocks, JSON, and Netscape
+function parseCookieInputs(text) {
+  if (!text) return [];
+  text = text.trim();
+
+  // Pattern 1: Multi-account structured blocks (e.g. NETFLIX ACCOUNT DETAILS ... COOKIE [...])
+  if (text.includes('NETFLIX ACCOUNT DETAILS') || text.includes('COOKIE (browser import')) {
+    const blocks = text.split(/(?:█{5,}|═{5,}\s*\n(?=NETFLIX ACCOUNT DETAILS)|-{10,})/g);
+    const payloads = [];
+    for (const b of blocks) {
+      const s = b.trim();
+      if (!s) continue;
+      const m = s.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+      if (m) {
+        payloads.push(m[0]);
+      } else if (s.includes('NetflixId')) {
+        payloads.push(s);
+      }
+    }
+    if (payloads.length > 0) return payloads;
+  }
+
+  // Pattern 2: Multiple JSON arrays separated by newlines
+  if (text.includes('[{') && text.includes('}]')) {
+    const jsonMatches = text.match(/\[\s*\{[\s\S]*?\}\s*\]/g);
+    if (jsonMatches && jsonMatches.length > 1) {
+      return jsonMatches;
+    }
+  }
+
+  // Pattern 3: Line-by-line cookies (raw string, json per line, netscape)
+  return text.split('\n')
+    .map(l => l.trim())
+    .filter(l => l && !l.startsWith('#') && !l.startsWith('[{CHECK') && !l.startsWith('TIME:'));
+}
+
 async function runBulk() {
   const text = document.getElementById('bulk-input').value.trim();
   if (!text) { showToast('Isi baris cookie terlebih dahulu'); return; }
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#') && !l.startsWith('[{CHECK') && !l.startsWith('TIME:'));
+  const lines = parseCookieInputs(text);
   if (lines.length === 0) return;
 
   const use_proxy = document.getElementById('proxy-toggle').checked;

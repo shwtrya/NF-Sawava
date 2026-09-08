@@ -338,9 +338,24 @@ def extract_cookie_values(text):
         return cookie_dict
 
     text = str(text).strip()
+
+    # If text is a full detail block with embedded JSON (e.g. NETFLIX ACCOUNT DETAILS ... [ { "name": "NetflixId" ... } ])
+    json_match = re.search(r'\[\s*\{[\s\S]*?\}\s*\]', text)
+    if json_match:
+        try:
+            parsed = json.loads(json_match.group(0))
+            if isinstance(parsed, list):
+                for c in parsed:
+                    if isinstance(c, dict):
+                        n, v = c.get("name"), c.get("value")
+                        if n in COOKIE_KEYS and isinstance(v, str):
+                            cookie_dict[n] = urllib.parse.unquote(v) if "%" in v else v
+        except Exception:
+            pass
+
     for raw_line in text.splitlines():
         line = raw_line.strip()
-        if not line or line.startswith("#"):
+        if not line or line.startswith("#") or line.startswith("═") or line.startswith("█") or line.startswith("–"):
             continue
         parts = line.split("\t")
         if len(parts) >= 7:
