@@ -1417,11 +1417,30 @@ function exportBulk(type) {
 
   let blob, filename;
   if (type === 'txt') {
-    const lines = lives.map((r, i) => `[${i+1}] Plan: ${r.plan} | Billing: ${r.billing} | Country: ${r.country}\nCookie: ${r.raw}\n----------------------------------`);
-    blob = new Blob([lines.join('\n')], {type: 'text/plain'});
+    const lines = lives.map((r, i) => {
+      const tok = r.token_data || {};
+      const launch = buildLaunchLinks(tok.token || tok.url || tok.browser_url);
+      let block = `[${i+1}] Plan: ${r.plan || '-'} | Billing: ${r.billing || '-'} | Country: ${r.country || '-'}\n`;
+      if (r.email && r.email !== 'Account Valid') block += `Email  : ${r.email}\n`;
+      if (r.profiles && r.profiles.length) block += `Profile: ${r.profiles.join(', ')}\n`;
+      if (launch.browser) block += `Browser: ${launch.browser}\n`;
+      if (launch.android) block += `Android: ${launch.android}\n`;
+      if (launch.tv)      block += `SmartTV: ${launch.tv}\n`;
+      block += `Cookie : ${r.raw}\n----------------------------------`;
+      return block;
+    });
+    blob = new Blob([lines.join('\n')], {type: 'text/plain;charset=utf-8'});
     filename = `netflix_live_${Date.now()}.txt`;
   } else {
-    blob = new Blob([JSON.stringify(lives, null, 2)], {type: 'application/json'});
+    const enriched = lives.map(r => {
+      const tok = r.token_data || {};
+      const launch = buildLaunchLinks(tok.token || tok.url || tok.browser_url);
+      return {
+        ...r,
+        launch_links: launch
+      };
+    });
+    blob = new Blob([JSON.stringify(enriched, null, 2)], {type: 'application/json;charset=utf-8'});
     filename = `netflix_live_${Date.now()}.json`;
   }
   const a = document.createElement('a');

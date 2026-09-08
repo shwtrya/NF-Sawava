@@ -665,6 +665,25 @@ def check_netflix_membership(cookie_text, use_proxy=True):
     save_history("checker", "ERROR", route=route, raw_cookie=cookie_text)
     return {"live": False, "reason": f"Request gagal setelah retry: {str(last_err)}", "route": route}
 
+# In-memory sliding window rate limiter
+rate_limit_lock = threading.Lock()
+ip_request_history = {}
+
+def is_rate_limited(ip, max_requests=40, window_seconds=10):
+    if not ip:
+        return False
+    now = time.time()
+    with rate_limit_lock:
+        timestamps = ip_request_history.get(ip, [])
+        # prune timestamps older than window
+        timestamps = [t for t in timestamps if now - t < window_seconds]
+        if len(timestamps) >= max_requests:
+            ip_request_history[ip] = timestamps
+            return True
+        timestamps.append(now)
+        ip_request_history[ip] = timestamps
+        return False
+
 def check_pin_authorized(headers):
     cfg = get_config()
     req_pin = cfg.get("pin", "")
@@ -848,6 +867,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
 
         elif self.path in ("/api/token", "/api/check", "/api/proxies/save", "/api/proxies/test", "/api/history/clear"):
+            client_ip = self.headers.get("CF-Connecting-IP") or self.headers.get("X-Forwarded-For") or self.client_address[0]
+            if is_rate_limited(client_ip, max_requests=50, window_seconds=10):
+                self.send_response(429)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Retry-After", "5")
+                self.end_headers()
+                self.wfile.write(b'{"error": "Too Many Requests. Rate limit exceeded."}')
+                return
+
             if not check_pin_authorized(self.headers):
                 self.send_response(401)
                 self.send_header("Content-Type", "application/json")
