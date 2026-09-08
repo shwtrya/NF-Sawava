@@ -17,7 +17,7 @@ from urllib3.exceptions import InsecureRequestWarning
 
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
-PORT = 8080
+PORT = int(os.environ.get("PORT", 8080))
 PROXIES_FILE = "netflix_proxies.txt"
 DB_FILE = "netflix_suite.db"
 CONFIG_FILE = "suite_config.json"
