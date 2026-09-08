@@ -690,11 +690,55 @@ tbody tr:hover {
 }
 
 @media (max-width: 768px) {
-  body { padding: 16px 12px; }
-  .container { padding: 20px 18px; }
-  .tabs { grid-template-columns: repeat(2, 1fr); }
+  body { padding: 12px 8px; }
+  .container { padding: 16px 14px; border-radius: 16px; }
+  .header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .status-bar-top { width: 100%; justify-content: space-between; }
+  
+  /* Tabs: Smooth horizontal swipe */
+  .tabs { 
+    display: flex; 
+    overflow-x: auto; 
+    -webkit-overflow-scrolling: touch; 
+    gap: 8px; 
+    padding: 4px;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab-btn { 
+    white-space: nowrap; 
+    padding: 8px 14px; 
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  /* Ribbon & Control */
+  .control-ribbon { 
+    flex-direction: column; 
+    align-items: flex-start; 
+    gap: 10px;
+    padding: 12px;
+  }
+  
+  /* Stats 2x2 Grid */
+  .bulk-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .stat-pill { min-width: unset; padding: 8px 10px; }
+  .stat-pill .num { font-size: 16px; }
+
+  /* Table and touch targets */
+  .table-wrap { -webkit-overflow-scrolling: touch; }
+  table { font-size: 11px; }
+  th, td { padding: 8px 10px; }
+  .btn-sm, .btn-secondary, .btn-primary { 
+    padding: 8px 12px; 
+    min-height: 36px;
+    font-size: 12px;
+  }
   .chart-grid { grid-template-columns: 1fr; }
-  .header { flex-direction: column; align-items: flex-start; }
 }
 </style>
 </head>
