@@ -498,44 +498,99 @@ def check_netflix_membership(cookie_text, use_proxy=True):
                 return {"live": False, "reason": "Cookie Expired / Terlempar ke Login.", "route": route}
 
             html = r.text
-            plan_detected = 'Live (Standard/Basic)'
-            if re.search(r'4K video resolution[^<]*?(?:spatial audio|ad-free)', html, re.I) or 'Premium' in html:
+
+            # 1. PLAN DETECTION
+            plan_detected = 'Standard'
+            # Check explicit localizedPlanName in reactContext / JSON state
+            plan_json_match = re.search(r'"localizedPlanName"\s*:\s*\{\s*"fieldType"\s*:\s*"String"\s*,\s*"value"\s*:\s*"([^"]+)"', html)
+            if plan_json_match:
+                raw_p = plan_json_match.group(1).encode().decode('unicode_escape', errors='ignore')
+                raw_p_lower = raw_p.lower()
+                if 'iklan' in raw_p_lower or 'ads' in raw_p_lower:
+                    plan_detected = 'Standard with Ads'
+                elif 'ultra' in raw_p_lower or 'premium' in raw_p_lower or '4k' in raw_p_lower:
+                    plan_detected = 'PREMIUM (ULTRA HD)'
+                elif 'mobile' in raw_p_lower or 'ponsel' in raw_p_lower:
+                    plan_detected = 'Mobile'
+                elif 'dasar' in raw_p_lower or 'basic' in raw_p_lower:
+                    plan_detected = 'Basic'
+                else:
+                    plan_detected = raw_p
+            elif re.search(r'4K video resolution[^<]*?(?:spatial audio|ad-free)', html, re.I) or re.search(r'\bpremium\b', html, re.I):
                 plan_detected = 'PREMIUM (ULTRA HD)'
             else:
                 plan_match = re.search(r'data-uia="account-membership-page\+plan-card\+title"[^>]*>([^<]{1,30}?)<', html)
                 if plan_match:
-                    plan_detected = plan_match.group(1).strip()
+                    p_txt = plan_match.group(1).strip()
+                    p_txt_lower = p_txt.lower()
+                    if 'iklan' in p_txt_lower or 'ads' in p_txt_lower:
+                        plan_detected = 'Standard with Ads'
+                    elif 'ultra' in p_txt_lower or 'premium' in p_txt_lower:
+                        plan_detected = 'PREMIUM (ULTRA HD)'
+                    elif 'mobile' in p_txt_lower or 'ponsel' in p_txt_lower:
+                        plan_detected = 'Mobile'
+                    elif 'dasar' in p_txt_lower or 'basic' in p_txt_lower:
+                        plan_detected = 'Basic'
+                    else:
+                        plan_detected = p_txt
 
-            # Extract user email
-            email_match = re.search(r'"userEmail"\s*:\s*"([^"]+)"', html)
+            # 2. EMAIL EXTRACTION
+            email_match = re.search(r'"emailAddress"\s*:\s*"([^"]+)"', html)
+            if not email_match:
+                email_match = re.search(r'"userEmail"\s*:\s*"([^"]+)"', html)
             if not email_match:
                 email_match = re.search(r'data-uia="account-email"[^>]*>([^<]+)<', html)
             email = email_match.group(1).strip() if email_match else 'Account Valid'
+            # Clean hex escapes if any
+            if r'\x40' in email or r'\x' in email:
+                try:
+                    email = email.encode('utf-8').decode('unicode_escape')
+                except Exception:
+                    pass
+                email = email.replace(r'\x40', '@')
 
-            # Extract phone
+            # 3. PHONE EXTRACTION
             phone_match = re.search(r'"phoneNumber"\s*:\s*"([^"]+)"', html)
             if not phone_match:
                 phone_match = re.search(r'data-uia="account-phone"[^>]*>([^<]+)<', html)
             phone = phone_match.group(1).strip() if phone_match else 'None'
+            if r'\x20' in phone:
+                phone = phone.replace(r'\x20', ' ')
 
-            # Extract profiles
+            # 4. PROFILES EXTRACTION
             profiles = []
-            for pm in re.finditer(r'"profileName"\s*:\s*"([^"]+)"', html):
-                p_name = pm.group(1).encode().decode('unicode_escape', errors='ignore')
-                if p_name not in profiles:
+            # Method A: match GraphQL Profile objects
+            for pm in re.finditer(r'Profile:\{.*?\"name\":\"([^\"]+)\"', html):
+                p_name = pm.group(1).strip()
+                if p_name and p_name not in profiles and not p_name.lower().startswith(('paket', 'plan', 'standard', 'premium', 'basic', 'mobile')):
                     profiles.append(p_name)
 
-            date_match = re.search(
-                r'data-uia="account-membership-page\+payments-card\+title"[^>]*>Next payment</h3>[^<]*<p[^>]*data-uia="account-membership-page\+payments-card\+description"[^>]*>([^<]+?)</p>',
-                html, re.DOTALL | re.I
-            )
-            billing = date_match.group(1).strip() if date_match else 'Auto-renew active'
+            # Method B: fallback to profileName or guid name
+            if not profiles:
+                for pm in re.finditer(r'"profileName"\s*:\s*"([^"]+)"', html):
+                    p_name = pm.group(1).encode().decode('unicode_escape', errors='ignore').strip()
+                    if p_name and p_name not in profiles:
+                        profiles.append(p_name)
 
-            # Member since
+            # 5. NEXT BILLING DATE
+            date_match = re.search(r'"nextBillingDate"\s*:\s*\{\s*"fieldType"\s*:\s*"String"\s*,\s*"value"\s*:\s*"([^"]+)"', html)
+            if date_match:
+                billing = date_match.group(1).encode().decode('unicode_escape', errors='ignore').strip()
+            else:
+                date_dom_match = re.search(
+                    r'data-uia="account-membership-page\+payments-card\+title"[^>]*>Next payment</h3>[^<]*<p[^>]*data-uia="account-membership-page\+payments-card\+description"[^>]*>([^<]+?)</p>',
+                    html, re.DOTALL | re.I
+                )
+                billing = date_dom_match.group(1).strip() if date_dom_match else 'Auto-renew active'
+
+            # 6. MEMBER SINCE
             member_since_match = re.search(r'"memberSince"\s*:\s*"([^"]+)"', html)
             member_since = member_since_match.group(1).strip() if member_since_match else 'Active'
 
-            country_match = re.search(r'"(?:countryOfSignup|currentCountry|memberCountry|geoCountry)"\s*:\s*"([A-Za-z]{2})"', html)
+            # 7. COUNTRY
+            country_match = re.search(r'"(?:countryOfSignup|currentCountry)"\s*:\s*"([A-Za-z]{2})"', html)
+            if not country_match:
+                country_match = re.search(r'"(?:memberCountry|geoCountry)"\s*:\s*"([A-Za-z]{2})"', html)
             country = normalize_country(country_match.group(1)) if country_match else 'Unknown'
 
             # Try generating nftoken simultaneously if possible

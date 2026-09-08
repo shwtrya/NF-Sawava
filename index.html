@@ -1332,7 +1332,8 @@ async function runBulk() {
 
         if (d.live) {
           live++;
-          if (d.plan && d.plan.includes('4K')) {
+          const isUltra = (d.plan && (d.plan.includes('4K') || d.plan.includes('ULTRA')));
+          if (isUltra) {
             fourk++;
             playAlert('4k');
           } else {
