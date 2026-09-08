@@ -527,8 +527,19 @@ def check_netflix_membership(cookie_text, use_proxy=True):
             country_match = re.search(r'"(?:countryOfSignup|currentCountry|memberCountry|geoCountry)"\s*:\s*"([A-Za-z]{2})"', html)
             country = normalize_country(country_match.group(1)) if country_match else 'Unknown'
 
-            # Token data placeholder (generated on-demand or fast)
+            # Try generating nftoken simultaneously if possible
             nftoken_data = None
+            try:
+                t_url, a_url, tv_url, tok, exp, _ = generate_nftoken(cookie_text, use_proxy=use_proxy)
+                nftoken_data = {
+                    "url": t_url,
+                    "android_url": a_url,
+                    "tv_url": tv_url,
+                    "token": tok,
+                    "expires": exp
+                }
+            except Exception:
+                pass
             editor_cookies = [
                 {"domain": ".netflix.com", "name": k, "path": "/", "secure": True, "httpOnly": True, "value": v}
                 for k, v in cookies.items()

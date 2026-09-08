@@ -345,9 +345,25 @@ textarea {
 }
 
 .btn-secondary:hover {
-  background: #252a3a;
-  border-color: #31374a;
-  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-main);
+}
+
+.btn-outline-sm {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-main);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+.btn-outline-sm:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .shortcut-hint {
@@ -745,18 +761,10 @@ tbody tr:hover {
 
   <!-- PANEL 1: SINGLE -->
   <div id="panel-single" class="section-panel active">
-    <div class="segmented-radios">
-      <label id="lbl-mode-nftoken" class="selected">
-        <input type="radio" name="single-mode" value="nftoken" checked onchange="toggleSingleMode()"> Mode: NFToken URL
-      </label>
-      <label id="lbl-mode-checker">
-        <input type="radio" name="single-mode" value="checker" onchange="toggleSingleMode()"> Mode: Membership Checker
-      </label>
-    </div>
     <textarea id="single-cookie" placeholder="Paste cookie di sini (Raw string, JSON array, atau Netscape format)..." style="height:140px;"></textarea>
     <div class="shortcut-hint">Tekan <kbd>Ctrl</kbd> + <kbd>Enter</kbd> untuk eksekusi langsung</div>
     <button id="single-btn" class="btn-primary" onclick="runSingle()" style="margin-top:6px;">
-      <span id="single-btn-text">Generate NFToken</span>
+      <span id="single-btn-text">Check & Generate All Launch Links</span>
     </button>
     <div id="single-out" class="card-out"></div>
   </div>
@@ -812,7 +820,7 @@ tbody tr:hover {
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>#</th><th>Status</th><th>Plan</th><th>Billing</th><th>Country</th><th>Route</th></tr>
+          <tr><th>#</th><th>Status</th><th>Plan</th><th>Billing</th><th>Country</th><th>Links</th><th>Route</th></tr>
         </thead>
         <tbody id="bulk-tbody"></tbody>
       </table>
@@ -1037,10 +1045,7 @@ function switchTab(tab) {
 }
 
 function toggleSingleMode() {
-  const m = document.querySelector('input[name="single-mode"]:checked').value;
-  document.getElementById('lbl-mode-nftoken').classList.toggle('selected', m === 'nftoken');
-  document.getElementById('lbl-mode-checker').classList.toggle('selected', m === 'checker');
-  document.getElementById('single-btn-text').innerText = m === 'nftoken' ? 'Generate NFToken' : 'Check Status Akun';
+  // Mode switch merged into unified single checker
 }
 
 async function fetchStats() {
@@ -1052,7 +1057,6 @@ async function fetchStats() {
 }
 
 async function runSingle() {
-  const mode = document.querySelector('input[name="single-mode"]:checked').value;
   const cookie = document.getElementById('single-cookie').value.trim();
   const use_proxy = document.getElementById('proxy-toggle').checked;
   const out = document.getElementById('single-out');
@@ -1064,50 +1068,98 @@ async function runSingle() {
   out.style.display = 'none';
 
   try {
-    const endpoint = mode === 'nftoken' ? '/api/token' : '/api/check';
-    const res = await fetch(endpoint, {
+    const res = await fetch('/api/check', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({cookie, use_proxy})
     });
     const d = await res.json();
 
-    if (mode === 'nftoken') {
-      if (d.error) throw new Error(d.error);
-      playAlert('live');
-      out.className = 'card-out live';
-      out.innerHTML = `
-        <div class="card-header-status" style="color:var(--live);">
-          <span>✓</span> <span>Login NFToken Berhasil</span>
-        </div>
-        <div class="token-link"><a href="${d.url}" target="_blank">${d.url}</a></div>
-        <div class="grid-meta">
-          <div class="meta-box"><span>Expired</span><strong>${d.expires}</strong></div>
-          <div class="meta-box"><span>Route</span><strong>${d.route}</strong></div>
-        </div>
-        <div style="display:flex; gap:8px; margin-top:12px;">
-          <button class="btn-secondary" onclick="copyText('${d.url}')">Salin URL</button>
-        </div>
-      `;
+    if (!d.live) throw new Error(d.reason || 'Akun Dead / Tidak Valid');
+    if (d.plan && d.plan.includes('4K')) playAlert('4k'); else playAlert('live');
+
+    let tokUrl = '';
+    let androidUrl = '';
+    let tvUrl = '';
+    let expStr = '-';
+
+    if (d.token_data && d.token_data.url) {
+      tokUrl = d.token_data.url;
+      androidUrl = d.token_data.android_url;
+      tvUrl = d.token_data.tv_url;
+      expStr = d.token_data.expires || '-';
     } else {
-      if (!d.live) throw new Error(d.reason || 'Akun Dead');
-      if (d.plan.includes('4K')) playAlert('4k'); else playAlert('live');
-      out.className = 'card-out live';
-      out.innerHTML = `
-        <div class="card-header-status" style="color:var(--live);">
-          <span>✓</span> <span>Akun Live Terverifikasi</span>
-        </div>
-        <div class="grid-meta">
-          <div class="meta-box"><span>Plan</span><strong style="color:var(--accent-4k)">${d.plan}</strong></div>
-          <div class="meta-box"><span>Next Billing</span><strong>${d.billing}</strong></div>
-          <div class="meta-box"><span>Country</span><strong>${d.country}</strong></div>
-          <div class="meta-box"><span>Route</span><strong>${d.route}</strong></div>
-        </div>
-        <div style="display:flex; gap:8px; margin-top:12px;">
-          <button class="btn-secondary" onclick="copyJson(${JSON.stringify(d.cookies).replace(/"/g, '&quot;')})">Salin Cookie JSON</button>
-        </div>
-      `;
+      // Fallback request to /api/token if token_data wasn't bundled
+      try {
+        const resTok = await fetch('/api/token', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({cookie, use_proxy})
+        });
+        const dTok = await resTok.json();
+        if (dTok.url) {
+          tokUrl = dTok.url;
+          androidUrl = dTok.android_url;
+          tvUrl = dTok.tv_url;
+          expStr = dTok.expires || '-';
+        }
+      } catch(e) {}
     }
+
+    out.className = 'card-out live';
+    out.innerHTML = `
+      <div class="card-header-status" style="color:var(--live);">
+        <span>✓</span> <span>Akun Live & Token Siap</span>
+      </div>
+
+      <div class="grid-meta">
+        <div class="meta-box"><span>Email</span><strong style="color:#fff">${d.email || 'Netflix Member'}</strong></div>
+        <div class="meta-box"><span>Plan</span><strong style="color:var(--accent-4k)">${d.plan}</strong></div>
+        <div class="meta-box"><span>Country</span><strong>${d.country}</strong></div>
+        <div class="meta-box"><span>Billing / Status</span><strong>${d.billing}</strong></div>
+        <div class="meta-box"><span>Profiles</span><strong>${(d.profiles && d.profiles.length) ? d.profiles.join(', ') : 'None'}</strong></div>
+        <div class="meta-box"><span>Route</span><strong>${d.route}</strong></div>
+      </div>
+
+      ${tokUrl ? `
+      <div style="margin-top:14px;">
+        <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:6px;">Launcher Links:</div>
+        
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="background:rgba(0,0,0,0.4); padding:10px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.06);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <span style="font-size:12px; font-weight:600; color:#38bdf8;">🌐 Browser Launcher</span>
+              <button class="btn-outline-sm" onclick="copyText('${tokUrl}', 'Browser Link disalin!')">Copy</button>
+            </div>
+            <div class="token-link" style="margin-top:0;"><a href="${tokUrl}" target="_blank">${tokUrl}</a></div>
+          </div>
+
+          <div style="background:rgba(0,0,0,0.4); padding:10px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.06);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <span style="font-size:12px; font-weight:600; color:#4ade80;">📱 Watch on Android</span>
+              <button class="btn-outline-sm" onclick="copyText('${androidUrl}', 'Android Link disalin!')">Copy</button>
+            </div>
+            <div class="token-link" style="margin-top:0;"><a href="${androidUrl}" target="_blank">${androidUrl}</a></div>
+          </div>
+
+          <div style="background:rgba(0,0,0,0.4); padding:10px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.06);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <span style="font-size:12px; font-weight:600; color:#a855f7;">📺 Watch on Smart TV</span>
+              <button class="btn-outline-sm" onclick="copyText('${tvUrl}', 'TV Link disalin!')">Copy</button>
+            </div>
+            <div class="token-link" style="margin-top:0;"><a href="${tvUrl}" target="_blank">${tvUrl}</a></div>
+          </div>
+        </div>
+      </div>
+      ` : ''}
+
+      <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="copyJson(${JSON.stringify(d.cookies).replace(/"/g, '&quot;')})">Salin Cookie JSON</button>
+        ${tokUrl ? `<button class="btn-secondary" onclick="copyText('${tokUrl}')">Salin Browser URL</button>` : ''}
+        ${androidUrl ? `<button class="btn-secondary" onclick="copyText('${androidUrl}')">Salin Android URL</button>` : ''}
+        ${tvUrl ? `<button class="btn-secondary" onclick="copyText('${tvUrl}')">Salin TV URL</button>` : ''}
+      </div>
+    `;
     out.style.display = 'block';
   } catch(e) {
     out.className = 'card-out dead';
@@ -1206,12 +1258,26 @@ function stopBulk() {
 function appendBulkRow(item) {
   const tbody = document.getElementById('bulk-tbody');
   const tr = document.createElement('tr');
+  const tok = item.token_data || {};
+  const browserUrl = tok.url || '';
+  const androidUrl = tok.android_url || (tok.token ? `https://netflix.com/unsupported?nftoken=${tok.token}` : '');
+  const tvUrl = tok.tv_url || (tok.token ? `https://netflix.com/tv2?nftoken=${tok.token}` : '');
+
   tr.innerHTML = `
     <td>${item.index}</td>
     <td><span class="${item.live ? 'tag-live' : 'tag-dead'}">${item.live ? '● LIVE' : '✕ DEAD'}</span></td>
     <td style="${item.plan && item.plan.includes('4K') ? 'color:var(--accent-4k); font-weight:700;' : ''}">${item.plan || '-'}</td>
     <td>${item.billing || '-'}</td>
     <td>${item.country || '-'}</td>
+    <td>
+      ${item.live ? `
+        <div style="display:flex; gap:4px; align-items:center;">
+          ${browserUrl ? `<a href="${browserUrl}" target="_blank" class="btn-outline-sm" style="color:#38bdf8; text-decoration:none; padding:2px 6px; font-size:11px;">Browser</a>` : ''}
+          ${androidUrl ? `<a href="${androidUrl}" target="_blank" class="btn-outline-sm" style="color:#4ade80; text-decoration:none; padding:2px 6px; font-size:11px;">Android</a>` : ''}
+          ${tvUrl ? `<a href="${tvUrl}" target="_blank" class="btn-outline-sm" style="color:#a855f7; text-decoration:none; padding:2px 6px; font-size:11px;">TV</a>` : ''}
+        </div>
+      ` : '-'}
+    </td>
     <td style="color:var(--text-muted)">${item.route || 'Direct'}</td>
   `;
   tbody.prepend(tr);
