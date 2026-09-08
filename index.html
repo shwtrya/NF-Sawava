@@ -692,6 +692,20 @@ tr:hover { background: rgba(255,255,255,0.02); }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
         Bulk Check
       </button>
+      <button id="btn-stop-bulk" class="btn-outline-sm" style="display:none; padding:8px 12px; color:var(--dead); border-color:rgba(239,68,68,0.4);" onclick="stopBulkCheck()">
+        Stop
+      </button>
+    </div>
+
+    <!-- Bulk Progress Bar -->
+    <div id="bulk-progress-wrap" style="display:none; margin: 12px 0; background:var(--bg-card); padding:10px 12px; border-radius:8px; border:1px solid var(--border);">
+      <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted); margin-bottom:6px;">
+        <span id="bulk-progress-text">Memeriksa 0/0...</span>
+        <span id="bulk-progress-pct">0%</span>
+      </div>
+      <div style="width:100%; height:6px; background:#1c202b; border-radius:3px; overflow:hidden;">
+        <div id="bulk-progress-bar" style="width:0%; height:100%; background:var(--primary); transition:width 0.2s;"></div>
+      </div>
     </div>
 
     <div class="sub-controls">
@@ -703,6 +717,15 @@ tr:hover { background: rgba(255,255,255,0.02); }
         <input type="checkbox" id="chk-sound" checked>
         <span>Sound Alert</span>
       </label>
+      <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted);">
+        <span>Concurrency:</span>
+        <select id="bulk-concurrency" style="background:var(--bg-input); color:#fff; border:1px solid var(--border); border-radius:4px; padding:2px 6px; font-size:11px;">
+          <option value="1">1 Worker</option>
+          <option value="3">3 Workers</option>
+          <option value="5" selected>5 Workers</option>
+          <option value="10">10 Workers</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -801,6 +824,7 @@ tr:hover { background: rgba(255,255,255,0.02); }
 let accountsData = [];
 let currentFilter = 'all';
 let currentPinSession = localStorage.getItem('suite_pin') || '';
+let isBulkRunning = false;
 
 function getAuthHeaders(extraHeaders = {}) {
   const h = { ...extraHeaders };
@@ -980,58 +1004,107 @@ async function handleGenerateToken() {
   }
 }
 
-// Bulk Check or Direct Membership Check
+// Bulk Check with Multi-threaded Concurrency & Stop Control
+function stopBulkCheck() {
+  isBulkRunning = false;
+  showToast('Menghentikan proses bulk check...');
+}
+
 async function handleBulkOrCheck() {
   const text = document.getElementById('cookie-input').value.trim();
   if (!text) { showToast('Masukkan baris cookie terlebih dahulu'); return; }
 
-  // Check if multiple lines or single
   const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  if (lines.length === 0) return;
+
   const use_proxy = document.getElementById('chk-proxy').checked;
+  const concurrency = parseInt(document.getElementById('bulk-concurrency').value, 10) || 5;
+
   const btn = document.getElementById('btn-bulk');
+  const btnStop = document.getElementById('btn-stop-bulk');
+  const progressWrap = document.getElementById('bulk-progress-wrap');
+  const progressText = document.getElementById('bulk-progress-text');
+  const progressPct = document.getElementById('bulk-progress-pct');
+  const progressBar = document.getElementById('bulk-progress-bar');
 
+  isBulkRunning = true;
   btn.disabled = true;
-  btn.innerText = `Checking (${lines.length})...`;
+  btnStop.style.display = 'inline-flex';
+  progressWrap.style.display = 'block';
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    try {
-      const res = await fetch('/api/check', {
-        method: 'POST',
-        headers: getAuthHeaders({'Content-Type': 'application/json'}),
-        body: JSON.stringify({cookie: line, use_proxy})
-      });
-      const d = await res.json();
+  let completed = 0;
+  let currentIndex = 0;
 
-      if (d.live) {
-        if (d.plan && d.plan.includes('4K')) playBeep('4k'); else playBeep('live');
-        const tok = d.token_data || {};
-        accountsData.unshift({
-          id: Date.now() + i,
-          live: true,
-          email: d.email || 'Netflix Member',
-          country: d.country || 'Unknown',
-          plan: d.plan || 'PREMIUM (ULTRA HD)',
-          phone: d.phone || 'None',
-          payment: d.billing || 'Auto-renew active',
-          profiles: d.profiles && d.profiles.length ? d.profiles : ['Profile 1'],
-          renewal: d.billing || 'Active',
-          member_since: d.member_since || 'Active',
-          token_url: tok.url || '',
-          android_url: tok.android_url || (tok.token ? `https://netflix.com/unsupported?nftoken=${tok.token}` : ''),
-          tv_url: tok.tv_url || (tok.token ? `https://netflix.com/tv2?nftoken=${tok.token}` : ''),
-          raw_cookie: line,
-          route: d.route || 'Direct'
+  function updateProgress() {
+    const pct = Math.round((completed / lines.length) * 100);
+    progressText.innerText = `Memeriksa ${completed}/${lines.length} akun...`;
+    progressPct.innerText = `${pct}%`;
+    progressBar.style.width = `${pct}%`;
+  }
+
+  updateProgress();
+
+  async function worker() {
+    while (currentIndex < lines.length && isBulkRunning) {
+      const idx = currentIndex++;
+      const line = lines[idx];
+
+      try {
+        const res = await fetch('/api/check', {
+          method: 'POST',
+          headers: getAuthHeaders({'Content-Type': 'application/json'}),
+          body: JSON.stringify({cookie: line, use_proxy})
         });
-      } else {
+        const d = await res.json();
+
+        if (d.live) {
+          if (d.plan && d.plan.includes('4K')) playBeep('4k'); else playBeep('live');
+          const tok = d.token_data || {};
+          accountsData.unshift({
+            id: Date.now() + idx,
+            live: true,
+            email: d.email || 'Netflix Member',
+            country: d.country || 'Unknown',
+            plan: d.plan || 'PREMIUM (ULTRA HD)',
+            phone: d.phone || 'None',
+            payment: d.billing || 'Auto-renew active',
+            profiles: d.profiles && d.profiles.length ? d.profiles : ['Profile 1'],
+            renewal: d.billing || 'Active',
+            member_since: d.member_since || 'Active',
+            token_url: tok.url || '',
+            android_url: tok.android_url || (tok.token ? `https://netflix.com/unsupported?nftoken=${tok.token}` : ''),
+            tv_url: tok.tv_url || (tok.token ? `https://netflix.com/tv2?nftoken=${tok.token}` : ''),
+            raw_cookie: line,
+            route: d.route || 'Direct'
+          });
+        } else {
+          accountsData.unshift({
+            id: Date.now() + idx,
+            live: false,
+            email: 'Dead Account',
+            country: '-',
+            plan: 'DEAD',
+            phone: '-',
+            payment: d.reason || 'Expired / Login',
+            profiles: [],
+            renewal: '-',
+            member_since: '-',
+            token_url: '',
+            android_url: '',
+            tv_url: '',
+            raw_cookie: line,
+            route: d.route || 'Direct'
+          });
+        }
+      } catch(e) {
         accountsData.unshift({
-          id: Date.now() + i,
+          id: Date.now() + idx,
           live: false,
-          email: 'Dead Account',
+          email: 'Error Request',
           country: '-',
           plan: 'DEAD',
           phone: '-',
-          payment: d.reason || 'Expired / Login',
+          payment: e.message,
           profiles: [],
           renewal: '-',
           member_since: '-',
@@ -1039,35 +1112,26 @@ async function handleBulkOrCheck() {
           android_url: '',
           tv_url: '',
           raw_cookie: line,
-          route: d.route || 'Direct'
+          route: 'Error'
         });
       }
-    } catch(e) {
-      accountsData.unshift({
-        id: Date.now() + i,
-        live: false,
-        email: 'Error Request',
-        country: '-',
-        plan: 'DEAD',
-        phone: '-',
-        payment: e.message,
-        profiles: [],
-        renewal: '-',
-        member_since: '-',
-        token_url: '',
-        android_url: '',
-        tv_url: '',
-        raw_cookie: line,
-        route: 'Error'
-      });
+
+      completed++;
+      updateProgress();
+      renderCards();
+      updateCounts();
     }
-    renderCards();
-    updateCounts();
   }
 
+  const workers = Array.from({ length: Math.min(concurrency, lines.length) }, () => worker());
+  await Promise.all(workers);
+
+  isBulkRunning = false;
   btn.disabled = false;
+  btnStop.style.display = 'none';
   btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> Bulk Check`;
-  showToast(`Selesai memeriksa ${lines.length} akun`);
+
+  showToast(`Selesai memeriksa ${completed}/${lines.length} akun`);
 }
 
 // Render Results Cards
