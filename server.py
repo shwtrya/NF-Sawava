@@ -394,8 +394,8 @@ def generate_nftoken(cookie_text, use_proxy=True):
     headers = dict(BASE_HEADERS)
     headers["Cookie"] = f"NetflixId={nid}"
 
-    # Auto-retry exponential backoff max 2 retries
-    max_retries = 2
+    # Auto-retry exponential backoff max 1 retry
+    max_retries = 1
     last_err = None
 
     for attempt in range(max_retries + 1):
@@ -455,7 +455,7 @@ def check_netflix_membership(cookie_text, use_proxy=True):
         'Referer': 'https://www.netflix.com/browse',
     }
 
-    max_retries = 2
+    max_retries = 1
     last_err = None
 
     for attempt in range(max_retries + 1):
@@ -474,7 +474,7 @@ def check_netflix_membership(cookie_text, use_proxy=True):
                 'https://www.netflix.com/account/membership',
                 headers=headers,
                 proxies=proxies,
-                timeout=14,
+                timeout=7,
                 allow_redirects=True,
                 verify=False
             )
@@ -527,14 +527,8 @@ def check_netflix_membership(cookie_text, use_proxy=True):
             country_match = re.search(r'"(?:countryOfSignup|currentCountry|memberCountry|geoCountry)"\s*:\s*"([A-Za-z]{2})"', html)
             country = normalize_country(country_match.group(1)) if country_match else 'Unknown'
 
-            # Try generating nftoken simultaneously if possible
+            # Token data placeholder (generated on-demand or fast)
             nftoken_data = None
-            try:
-                t_url, a_url, tv_url, tok, exp, _ = generate_nftoken(cookie_text, use_proxy=False)
-                nftoken_data = {"url": t_url, "android_url": a_url, "tv_url": tv_url, "token": tok, "expires": exp}
-            except Exception:
-                pass
-
             editor_cookies = [
                 {"domain": ".netflix.com", "name": k, "path": "/", "secure": True, "httpOnly": True, "value": v}
                 for k, v in cookies.items()

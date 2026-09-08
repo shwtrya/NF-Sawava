@@ -1068,11 +1068,15 @@ async function handleBulkOrCheck() {
       const line = lines[idx];
 
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
         const res = await fetch('/api/check', {
           method: 'POST',
           headers: getAuthHeaders({'Content-Type': 'application/json'}),
-          body: JSON.stringify({cookie: line, use_proxy})
+          body: JSON.stringify({cookie: line, use_proxy}),
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
         const d = await res.json();
 
         if (d.live) {
@@ -1116,14 +1120,15 @@ async function handleBulkOrCheck() {
           });
         }
       } catch(e) {
+        const errMsg = e.name === 'AbortError' ? 'Timeout 12s (Proxy Slow)' : e.message;
         accountsData.unshift({
           id: Date.now() + idx,
           live: false,
-          email: 'Error Request',
+          email: 'Error / Timeout',
           country: '-',
           plan: 'DEAD',
           phone: '-',
-          payment: e.message,
+          payment: errMsg,
           profiles: [],
           renewal: '-',
           member_since: '-',
@@ -1131,7 +1136,7 @@ async function handleBulkOrCheck() {
           android_url: '',
           tv_url: '',
           raw_cookie: line,
-          route: 'Error'
+          route: 'Timeout'
         });
       }
 
