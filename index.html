@@ -821,6 +821,23 @@ tr:hover { background: rgba(255,255,255,0.02); }
 <div id="toast">Disalin ke clipboard</div>
 
 <script>
+function getLaunchLinks(tokenOrUrl) {
+  if (!tokenOrUrl) return { browser: '', android: '', tv: '', token: '' };
+  let tok = tokenOrUrl.trim();
+  if (tok.includes('nftoken=')) {
+    const m = tok.match(/[?&]nftoken=([^&]+)/);
+    if (m) tok = m[1];
+  }
+  if (!tok || tok === 'undefined' || tok === 'null') {
+    return { browser: '', android: '', tv: '', token: '' };
+  }
+  return {
+    browser: `https://netflix.com/?nftoken=${tok}`,
+    android: `https://netflix.com/unsupported?nftoken=${tok}`,
+    tv: `https://netflix.com/tv2?nftoken=${tok}`,
+    token: tok
+  };
+}
 let accountsData = [];
 let currentFilter = 'all';
 let currentPinSession = localStorage.getItem('suite_pin') || '';
@@ -953,6 +970,7 @@ async function handleGenerateToken() {
     if (d.error) throw new Error(d.error);
 
     playBeep('live');
+    const links = getLaunchLinks(d.token || d.url);
     const accItem = {
       id: Date.now(),
       live: true,
@@ -964,9 +982,9 @@ async function handleGenerateToken() {
       profiles: ['Default Profile'],
       renewal: 'Active Session',
       member_since: 'Active',
-      token_url: d.url,
-      android_url: d.android_url || `https://netflix.com/unsupported?nftoken=${d.token}`,
-      tv_url: d.tv_url || `https://netflix.com/tv2?nftoken=${d.token}`,
+      token_url: links.browser,
+      android_url: links.android,
+      tv_url: links.tv,
       raw_cookie: cookie,
       route: d.route || 'Direct'
     };
@@ -1060,6 +1078,7 @@ async function handleBulkOrCheck() {
         if (d.live) {
           if (d.plan && d.plan.includes('4K')) playBeep('4k'); else playBeep('live');
           const tok = d.token_data || {};
+          const links = getLaunchLinks(tok.token || tok.url);
           accountsData.unshift({
             id: Date.now() + idx,
             live: true,
@@ -1071,9 +1090,9 @@ async function handleBulkOrCheck() {
             profiles: d.profiles && d.profiles.length ? d.profiles : ['Profile 1'],
             renewal: d.billing || 'Active',
             member_since: d.member_since || 'Active',
-            token_url: tok.url || '',
-            android_url: tok.android_url || (tok.token ? `https://netflix.com/unsupported?nftoken=${tok.token}` : ''),
-            tv_url: tok.tv_url || (tok.token ? `https://netflix.com/tv2?nftoken=${tok.token}` : ''),
+            token_url: links.browser,
+            android_url: links.android,
+            tv_url: links.tv,
             raw_cookie: line,
             route: d.route || 'Direct'
           });

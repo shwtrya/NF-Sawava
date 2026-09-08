@@ -782,6 +782,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": True}).encode("utf-8"))
 
+            elif self.path == "/api/system/reload":
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"status": "reloading"}')
+                def _do_exit():
+                    time.sleep(0.5)
+                    os._exit(0)
+                threading.Thread(target=_do_exit, daemon=True).start()
             elif self.path == "/api/history/clear":
                 clear_history()
                 self.send_response(200)
