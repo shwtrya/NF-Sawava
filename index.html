@@ -892,7 +892,7 @@ tbody tr:hover {
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Waktu</th><th>Tipe</th><th>Status</th><th>Plan</th><th>Billing</th><th>Country</th><th>Links / Aksi</th></tr>
+          <tr><th>Waktu</th><th>Tipe</th><th>Status</th><th>Plan</th><th>Billing</th><th>Country</th><th>Aksi</th></tr>
         </thead>
         <tbody id="history-tbody"></tbody>
       </table>
@@ -1492,7 +1492,6 @@ function renderHistoryTable(data) {
   }
 
   tbody.innerHTML = rows.map(r => {
-    const launch = buildLaunchLinks(r.token_url);
     return `
     <tr>
       <td style="color:var(--text-muted); font-family:'JetBrains Mono', monospace; font-size:11px;">${r.created_at}</td>
@@ -1502,11 +1501,8 @@ function renderHistoryTable(data) {
       <td>${r.billing || '-'}</td>
       <td>${r.country || '-'}</td>
       <td>
-        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-          ${launch.browser ? `<a href="${launch.browser}" target="_blank" class="btn-outline-sm" style="color:#38bdf8; text-decoration:none; padding:2px 6px; font-size:11px;">Browser</a>` : ''}
-          ${launch.android ? `<a href="${launch.android}" target="_blank" class="btn-outline-sm" style="color:#4ade80; text-decoration:none; padding:2px 6px; font-size:11px;">Android</a>` : ''}
-          ${launch.tv ? `<a href="${launch.tv}" target="_blank" class="btn-outline-sm" style="color:#a855f7; text-decoration:none; padding:2px 6px; font-size:11px;">TV</a>` : ''}
-          ${r.raw_cookie ? `<button class="copy-btn-sm" onclick="copyText('${escapeAttr(r.raw_cookie)}')">Cookie</button>` : ''}
+        <div style="display:flex; gap:6px; align-items:center;">
+          ${r.raw_cookie ? `<button class="copy-btn-sm" onclick="copyText('${escapeAttr(r.raw_cookie)}')">Salin Cookie</button>` : '-'}
         </div>
       </td>
     </tr>
