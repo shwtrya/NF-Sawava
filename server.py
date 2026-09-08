@@ -388,7 +388,6 @@ def generate_nftoken(cookie_text, use_proxy=True):
     cookies = extract_cookie_values(cookie_text)
     nid = cookies.get("NetflixId")
     if not nid:
-        save_history("nftoken", "DEAD", raw_cookie=cookie_text)
         raise ValueError("Cookie NetflixId tidak ditemukan.")
 
     headers = dict(BASE_HEADERS)
@@ -419,7 +418,6 @@ def generate_nftoken(cookie_text, use_proxy=True):
             token = token_node.get("token")
             expires = token_node.get("expires")
             if not token:
-                save_history("nftoken", "DEAD", route=route, raw_cookie=cookie_text)
                 raise ValueError("Netflix tidak mengembalikan token. Cookie mati/invalid.")
 
             exp_str = "Unknown"
@@ -430,7 +428,6 @@ def generate_nftoken(cookie_text, use_proxy=True):
             token_url = f"https://netflix.com/?nftoken={token}"
             android_url = f"https://netflix.com/unsupported?nftoken={token}"
             tv_url = f"https://netflix.com/tv2?nftoken={token}"
-            save_history("nftoken", "LIVE", route=route, token_url=token_url, raw_cookie=cookie_text)
             return token_url, android_url, tv_url, token, exp_str, route
 
         except Exception as e:
@@ -439,7 +436,6 @@ def generate_nftoken(cookie_text, use_proxy=True):
                 time.sleep(1.0 * (attempt + 1))
                 continue
 
-    save_history("nftoken", "ERROR", route=route, raw_cookie=cookie_text)
     raise last_err
 
 def check_netflix_membership(cookie_text, use_proxy=True):
