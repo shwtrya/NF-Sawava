@@ -5,3 +5,8 @@ input.txt
 netflix.txt
 *.json
 .env
+netflix_suite.db
+netflix_suite.db-wal
+netflix_suite.db-shm
+*.log
+suite.log

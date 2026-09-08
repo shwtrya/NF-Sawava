@@ -112,9 +112,14 @@ def save_config(cfg):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
 
+def get_db():
+    conn = sqlite3.connect(DB_FILE, timeout=30)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    return conn
+
 def init_db():
     with db_lock:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_db()
         c = conn.cursor()
         c.execute('''
             CREATE TABLE IF NOT EXISTS history (
@@ -136,7 +141,7 @@ def init_db():
 def save_history(entry_type, status, plan='', billing='', country='', route='', token_url='', raw_cookie=''):
     with db_lock:
         try:
-            conn = sqlite3.connect(DB_FILE)
+            conn = get_db()
             c = conn.cursor()
             c.execute('''
                 INSERT INTO history (created_at, type, status, plan, billing, country, route, token_url, raw_cookie)
@@ -160,7 +165,7 @@ def save_history(entry_type, status, plan='', billing='', country='', route='', 
 
 def get_history(limit=50, offset=0, search='', status='', plan=''):
     with db_lock:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_db()
         c = conn.cursor()
         query = 'SELECT id, created_at, type, status, plan, billing, country, route, token_url, raw_cookie FROM history WHERE 1=1'
         params = []
@@ -201,7 +206,7 @@ def get_history(limit=50, offset=0, search='', status='', plan=''):
 
 def export_history_csv():
     with db_lock:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_db()
         c = conn.cursor()
         c.execute('SELECT id, created_at, type, status, plan, billing, country, route, token_url, raw_cookie FROM history ORDER BY id DESC')
         rows = c.fetchall()
@@ -211,12 +216,18 @@ def export_history_csv():
         writer = csv.writer(output)
         writer.writerow(["ID", "Waktu", "Tipe", "Status", "Plan", "Billing", "Negara", "Route", "Token URL", "Raw Cookie"])
         for r in rows:
-            writer.writerow(r)
+            safe_row = []
+            for cell in r:
+                s = str(cell) if cell is not None else ""
+                if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
+                    s = "'" + s
+                safe_row.append(s)
+            writer.writerow(safe_row)
         return output.getvalue()
 
 def get_analytics():
     with db_lock:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_db()
         c = conn.cursor()
         c.execute('SELECT status, COUNT(*) FROM history GROUP BY status')
         status_counts = dict(c.fetchall())
@@ -227,7 +238,7 @@ def get_analytics():
 
 def clear_history():
     with db_lock:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_db()
         c = conn.cursor()
         c.execute('DELETE FROM history')
         conn.commit()
@@ -297,15 +308,29 @@ def test_all_proxies_now():
         healthy_proxies = good
     return all_p
 
+proxy_cooldown = {}
+proxy_cooldown_lock = threading.Lock()
+
+def mark_proxy_cooldown(proxy_url, duration=600):
+    if not proxy_url:
+        return
+    with proxy_cooldown_lock:
+        proxy_cooldown[proxy_url] = time.time() + duration
+
 def get_random_proxy():
     global healthy_proxies
+    now = time.time()
     with proxy_lock:
         pool = list(healthy_proxies) if healthy_proxies else load_proxies()
-    if not pool:
+    with proxy_cooldown_lock:
+        valid_pool = [p for p in pool if proxy_cooldown.get(p["proxy"], 0) <= now]
+    if not valid_pool:
+        valid_pool = pool
+    if not valid_pool:
         return None, None
-    choice = random.choice(pool)
+    choice = random.choice(valid_pool)
     lat_info = f" ({choice.get('latency', 0)}ms)" if choice.get("latency") else ""
-    return {"http": choice["proxy"], "https": choice["proxy"]}, f"{choice['raw']}{lat_info}"
+    return {"http": choice["proxy"], "https": choice["proxy"]}, f"{choice['raw']}{lat_info}", choice["proxy"]
 
 def extract_cookie_values(text):
     cookie_dict = {}
@@ -374,11 +399,16 @@ def generate_nftoken(cookie_text, use_proxy=True):
     last_err = None
 
     for attempt in range(max_retries + 1):
-        proxies, proxy_label = get_random_proxy() if use_proxy else (None, None)
+        if use_proxy:
+            proxies, proxy_label, proxy_raw_url = get_random_proxy()
+        else:
+            proxies, proxy_label, proxy_raw_url = None, None, None
         route = f"Proxy ({proxy_label})" if proxy_label else "Direct"
 
         try:
             res = requests.get(API_URL, params=QUERY_PARAMS, headers=headers, proxies=proxies, timeout=18, verify=False)
+            if res.status_code in (403, 429) and proxy_raw_url:
+                mark_proxy_cooldown(proxy_raw_url, 600)
             res.raise_for_status()
 
             data = res.json()
@@ -429,7 +459,10 @@ def check_netflix_membership(cookie_text, use_proxy=True):
     last_err = None
 
     for attempt in range(max_retries + 1):
-        proxies, proxy_label = get_random_proxy() if use_proxy else (None, None)
+        if use_proxy:
+            proxies, proxy_label, proxy_raw_url = get_random_proxy()
+        else:
+            proxies, proxy_label, proxy_raw_url = None, None, None
         route = f"Proxy ({proxy_label})" if proxy_label else "Direct"
 
         try:
@@ -445,6 +478,9 @@ def check_netflix_membership(cookie_text, use_proxy=True):
                 allow_redirects=True,
                 verify=False
             )
+
+            if r.status_code in (403, 429) and proxy_raw_url:
+                mark_proxy_cooldown(proxy_raw_url, 600)
 
             if "login" in r.url.lower() or r.status_code in (401, 403) or 'data-uia="login-page"' in r.text:
                 save_history("checker", "DEAD", route=route, raw_cookie=cookie_text)
@@ -528,6 +564,16 @@ def check_netflix_membership(cookie_text, use_proxy=True):
     save_history("checker", "ERROR", route=route, raw_cookie=cookie_text)
     return {"live": False, "reason": f"Request gagal setelah retry: {str(last_err)}", "route": route}
 
+def check_pin_authorized(headers):
+    cfg = get_config()
+    req_pin = cfg.get("pin", "")
+    if not req_pin:
+        return True
+    pin_header = headers.get("X-Suite-Pin") or headers.get("Authorization", "")
+    if pin_header.startswith("Bearer "):
+        pin_header = pin_header[7:].strip()
+    return pin_header == req_pin
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
@@ -580,45 +626,53 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({"total": len(all_p), "healthy": h_count}).encode("utf-8"))
 
-        elif path == "/api/proxies/detail":
-            raw_text = ""
-            if os.path.exists(PROXIES_FILE):
-                with open(PROXIES_FILE, "r", encoding="utf-8", errors="ignore") as f:
-                    raw_text = f.read()
-            with proxy_lock:
-                p_list = healthy_proxies if healthy_proxies else load_proxies()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"raw_text": raw_text, "list": p_list}).encode("utf-8"))
+        elif path in ("/api/history", "/api/history/export_csv", "/api/analytics", "/api/proxies/detail"):
+            if not check_pin_authorized(self.headers):
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"error": "Unauthorized: PIN required"}')
+                return
 
-        elif path == "/api/history":
-            limit = int(qs.get("limit", [25])[0])
-            offset = int(qs.get("offset", [0])[0])
-            search = qs.get("search", [""])[0]
-            status = qs.get("status", [""])[0]
-            plan = qs.get("plan", [""])[0]
+            if path == "/api/history":
+                limit = int(qs.get("limit", [25])[0])
+                offset = int(qs.get("offset", [0])[0])
+                search = qs.get("search", [""])[0]
+                status = qs.get("status", [""])[0]
+                plan = qs.get("plan", [""])[0]
 
-            data = get_history(limit=limit, offset=offset, search=search, status=status, plan=plan)
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(data).encode("utf-8"))
+                data = get_history(limit=limit, offset=offset, search=search, status=status, plan=plan)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(data).encode("utf-8"))
 
-        elif path == "/api/history/export_csv":
-            csv_data = export_history_csv()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/csv; charset=utf-8")
-            self.send_header("Content-Disposition", f"attachment; filename=netflix_history_{int(time.time())}.csv")
-            self.end_headers()
-            self.wfile.write(csv_data.encode("utf-8"))
+            elif path == "/api/history/export_csv":
+                csv_data = export_history_csv()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f"attachment; filename=netflix_history_{int(time.time())}.csv")
+                self.end_headers()
+                self.wfile.write(csv_data.encode("utf-8"))
 
-        elif path == "/api/analytics":
-            an = get_analytics()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(an).encode("utf-8"))
+            elif path == "/api/analytics":
+                an = get_analytics()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(an).encode("utf-8"))
+
+            elif path == "/api/proxies/detail":
+                raw_text = ""
+                if os.path.exists(PROXIES_FILE):
+                    with open(PROXIES_FILE, "r", encoding="utf-8", errors="ignore") as f:
+                        raw_text = f.read()
+                with proxy_lock:
+                    p_list = healthy_proxies if healthy_proxies else load_proxies()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"raw_text": raw_text, "list": p_list}).encode("utf-8"))
 
         else:
             self.send_response(404)
@@ -663,69 +717,77 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(400)
                 self.end_headers()
 
-        elif self.path == "/api/token":
-            try:
-                p = json.loads(body.decode("utf-8"))
-                token_url, android_url, tv_url, token, exp, route = generate_nftoken(p.get("cookie", ""), use_proxy=p.get("use_proxy", True))
-                res = json.dumps({
-                    "url": token_url,
-                    "android_url": android_url,
-                    "tv_url": tv_url,
-                    "token": token,
-                    "expires": exp,
-                    "route": route
-                }).encode("utf-8")
-                self.send_response(200)
-            except Exception as e:
-                res = json.dumps({"error": str(e)}).encode("utf-8")
-                self.send_response(400)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(res)
+        elif self.path in ("/api/token", "/api/check", "/api/proxies/save", "/api/proxies/test", "/api/history/clear"):
+            if not check_pin_authorized(self.headers):
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"error": "Unauthorized: PIN required"}')
+                return
 
-        elif self.path == "/api/check":
-            try:
-                p = json.loads(body.decode("utf-8"))
-                out = check_netflix_membership(p.get("cookie", ""), use_proxy=p.get("use_proxy", True))
-                res = json.dumps(out).encode("utf-8")
-                self.send_response(200)
-            except Exception as e:
-                res = json.dumps({"live": False, "reason": str(e)}).encode("utf-8")
-                self.send_response(400)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(res)
+            if self.path == "/api/token":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    token_url, android_url, tv_url, token, exp, route = generate_nftoken(p.get("cookie", ""), use_proxy=p.get("use_proxy", True))
+                    res = json.dumps({
+                        "url": token_url,
+                        "android_url": android_url,
+                        "tv_url": tv_url,
+                        "token": token,
+                        "expires": exp,
+                        "route": route
+                    }).encode("utf-8")
+                    self.send_response(200)
+                except Exception as e:
+                    res = json.dumps({"error": str(e)}).encode("utf-8")
+                    self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(res)
 
-        elif self.path == "/api/proxies/save":
-            try:
-                p = json.loads(body.decode("utf-8"))
-                text = p.get("text", "")
-                with open(PROXIES_FILE, "w", encoding="utf-8") as f:
-                    f.write(text.strip() + "\n")
-                all_p = load_proxies()
-                with proxy_lock:
-                    healthy_proxies.clear()
+            elif self.path == "/api/check":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    out = check_netflix_membership(p.get("cookie", ""), use_proxy=p.get("use_proxy", True))
+                    res = json.dumps(out).encode("utf-8")
+                    self.send_response(200)
+                except Exception as e:
+                    res = json.dumps({"live": False, "reason": str(e)}).encode("utf-8")
+                    self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(res)
+
+            elif self.path == "/api/proxies/save":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    text = p.get("text", "")
+                    with open(PROXIES_FILE, "w", encoding="utf-8") as f:
+                        f.write(text.strip() + "\n")
+                    all_p = load_proxies()
+                    with proxy_lock:
+                        healthy_proxies.clear()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": True, "count": len(all_p)}).encode("utf-8"))
+                except Exception as e:
+                    self.send_response(400)
+                    self.end_headers()
+
+            elif self.path == "/api/proxies/test":
+                test_all_proxies_now()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
-                self.wfile.write(json.dumps({"ok": True, "count": len(all_p)}).encode("utf-8"))
-            except Exception as e:
-                self.send_response(400)
+                self.wfile.write(json.dumps({"ok": True}).encode("utf-8"))
+
+            elif self.path == "/api/history/clear":
+                clear_history()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
                 self.end_headers()
-
-        elif self.path == "/api/proxies/test":
-            test_all_proxies_now()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"ok": True}).encode("utf-8"))
-
-        elif self.path == "/api/history/clear":
-            clear_history()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(b'{"status": "cleared"}')
+                self.wfile.write(b'{"status": "cleared"}')
         else:
             self.send_response(404)
             self.end_headers()

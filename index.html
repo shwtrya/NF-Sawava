@@ -712,6 +712,7 @@ tr:hover { background: rgba(255,255,255,0.02); }
       <div class="stat-filter-group">
         <div class="filter-chip active" id="chip-all" onclick="filterResults('all')">All (<span id="count-all">0</span>)</div>
         <div class="filter-chip live-chip" id="chip-live" onclick="filterResults('live')">Live (<span id="count-live">0</span>)</div>
+        <div class="filter-chip live-chip" id="chip-4k" onclick="filterResults('4k')">4K UHD</div>
         <div class="filter-chip dead-chip" id="chip-dead" onclick="filterResults('dead')">Dead (<span id="count-dead">0</span>)</div>
       </div>
       <div class="topbar-exports">
@@ -799,6 +800,15 @@ tr:hover { background: rgba(255,255,255,0.02); }
 <script>
 let accountsData = [];
 let currentFilter = 'all';
+let currentPinSession = localStorage.getItem('suite_pin') || '';
+
+function getAuthHeaders(extraHeaders = {}) {
+  const h = { ...extraHeaders };
+  if (currentPinSession) {
+    h['X-Suite-Pin'] = currentPinSession;
+  }
+  return h;
+}
 let chartStatusInstance = null;
 let chartCountryInstance = null;
 let debounceHistTimer = null;
@@ -911,7 +921,7 @@ async function handleGenerateToken() {
   try {
     const res = await fetch('/api/token', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: getAuthHeaders({'Content-Type': 'application/json'}),
       body: JSON.stringify({cookie, use_proxy})
     });
     const d = await res.json();
@@ -988,7 +998,7 @@ async function handleBulkOrCheck() {
     try {
       const res = await fetch('/api/check', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: getAuthHeaders({'Content-Type': 'application/json'}),
         body: JSON.stringify({cookie: line, use_proxy})
       });
       const d = await res.json();
@@ -1067,6 +1077,7 @@ function renderCards() {
 
   let filtered = accountsData;
   if (currentFilter === 'live') filtered = accountsData.filter(a => a.live);
+  if (currentFilter === '4k') filtered = accountsData.filter(a => a.live && a.plan && a.plan.includes('ULTRA HD'));
   if (currentFilter === 'dead') filtered = accountsData.filter(a => !a.live);
 
   if (filtered.length === 0) {
@@ -1230,7 +1241,9 @@ async function loadHistory() {
   const q = document.getElementById('hist-search').value.trim();
   tbody.innerHTML = '<tr><td colspan="7">Memuat riwayat...</td></tr>';
   try {
-    const res = await fetch(`/api/history?limit=30&search=${encodeURIComponent(q)}`);
+    const res = await fetch(`/api/history?limit=30&search=${encodeURIComponent(q)}`, {
+      headers: getAuthHeaders()
+    });
     const d = await res.json();
     if (!d.items || d.items.length === 0) {
       tbody.innerHTML = '<tr><td colspan="7">Tidak ada data riwayat.</td></tr>';
@@ -1264,13 +1277,18 @@ function debounceHistory() {
 
 async function clearAllHistory() {
   if (!confirm('Hapus seluruh riwayat di database?')) return;
-  await fetch('/api/history/clear', {method: 'POST'});
+  await fetch('/api/history/clear', {
+    method: 'POST',
+    headers: getAuthHeaders()
+  });
   loadHistory();
 }
 
 // Proxies API
 async function loadProxies() {
-  const res = await fetch('/api/proxies/detail');
+  const res = await fetch('/api/proxies/detail', {
+    headers: getAuthHeaders()
+  });
   const d = await res.json();
   document.getElementById('proxy-list-text').value = d.raw_text || '';
   const tbody = document.getElementById('proxy-tbody');
@@ -1291,7 +1309,7 @@ async function saveProxies() {
   const text = document.getElementById('proxy-list-text').value.trim();
   const res = await fetch('/api/proxies/save', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: getAuthHeaders({'Content-Type': 'application/json'}),
     body: JSON.stringify({text})
   });
   const d = await res.json();
@@ -1302,14 +1320,19 @@ async function saveProxies() {
 
 async function testProxies() {
   showToast('Testing proxy ke Netflix...');
-  await fetch('/api/proxies/test', {method: 'POST'});
+  await fetch('/api/proxies/test', {
+    method: 'POST',
+    headers: getAuthHeaders()
+  });
   loadProxies();
   fetchHealth();
 }
 
 // Analytics API
 async function loadAnalytics() {
-  const res = await fetch('/api/analytics');
+  const res = await fetch('/api/analytics', {
+    headers: getAuthHeaders()
+  });
   const d = await res.json();
 
   if (chartStatusInstance) chartStatusInstance.destroy();
@@ -1385,6 +1408,13 @@ async function managePin() {
   });
   const d = await res.json();
   if (d.ok) {
+    if (nw) {
+      localStorage.setItem('suite_pin', nw);
+      currentPinSession = nw;
+    } else {
+      localStorage.removeItem('suite_pin');
+      currentPinSession = '';
+    }
     showToast('PIN berhasil diupdate!');
   } else {
     showToast(`Gagal: ${d.error || 'PIN salah'}`);
