@@ -887,7 +887,8 @@ tbody tr:hover {
       </select>
       <button class="btn-secondary" onclick="exportCsvWithAuth()">Export CSV</button>
       <button class="btn-secondary" onclick="loadHistory()">Refresh</button>
-      <button class="btn-secondary" style="color:var(--dead); border-color:var(--dead-border);" onclick="clearDbHistory()">Hapus Semua</button>
+      <button class="btn-secondary" style="color:#f59e0b; border-color:rgba(245,158,11,0.3);" onclick="clearDbHistory(true)">Hapus DEAD Saja</button>
+      <button class="btn-secondary" style="color:var(--dead); border-color:var(--dead-border);" onclick="clearDbHistory(false)">Hapus Semua</button>
     </div>
     <div class="table-wrap">
       <table>
@@ -934,6 +935,10 @@ tbody tr:hover {
         <canvas id="chart-status" height="200"></canvas>
       </div>
       <div class="chart-card">
+        <label>Distribusi Paket Akun (LIVE)</label>
+        <canvas id="chart-plan" height="200"></canvas>
+      </div>
+      <div class="chart-card" style="grid-column: 1 / -1;">
         <label>Distribusi Akun per Negara</label>
         <canvas id="chart-country" height="200"></canvas>
       </div>
@@ -946,6 +951,7 @@ let bulkRunning = false;
 let bulkResults = [];
 let chartStatusObj = null;
 let chartCountryObj = null;
+let chartPlanObj = null;
 
 let curPage = 1;
 const pageSize = 25;
@@ -1527,7 +1533,12 @@ function escapeAttr(str) {
 
 async function exportCsvWithAuth() {
   try {
-    const res = await fetch('/api/history/export_csv', {
+    const q = document.getElementById('hist-search').value.trim();
+    const st = document.getElementById('hist-filter-status').value;
+    const pl = document.getElementById('hist-filter-plan').value;
+    const params = new URLSearchParams({ search: q, status: st, plan: pl });
+
+    const res = await fetch(`/api/history/export_csv?${params.toString()}`, {
       headers: getAuthHeaders()
     });
     if (!res.ok) throw new Error('Gagal mengunduh CSV');
@@ -1536,19 +1547,21 @@ async function exportCsvWithAuth() {
     a.href = URL.createObjectURL(blob);
     a.download = `netflix_history_${Date.now()}.csv`;
     a.click();
-    showToast('File CSV berhasil diunduh');
+    showToast('File CSV berhasil diunduh (sesuai filter)');
   } catch(e) {
     showToast('Gagal export CSV: ' + e.message);
   }
 }
 
-async function clearDbHistory() {
-  if (!confirm('Hapus seluruh riwayat di SQLite database?')) return;
+async function clearDbHistory(onlyDead = false) {
+  const msg = onlyDead ? 'Hapus semua entri DEAD / ERROR di database?' : 'Hapus SELURUH riwayat di database?';
+  if (!confirm(msg)) return;
   await fetch('/api/history/clear', {
     method: 'POST',
-    headers: getAuthHeaders()
+    headers: getAuthHeaders({'Content-Type': 'application/json'}),
+    body: JSON.stringify({ only_dead: onlyDead })
   });
-  showToast('Database riwayat dibersihkan');
+  showToast(onlyDead ? 'Riwayat DEAD berhasil dibersihkan' : 'Seluruh database dibersihkan');
   curPage = 1;
   loadHistory();
 }
@@ -1606,6 +1619,7 @@ async function loadAnalytics() {
 
   if (chartStatusObj) chartStatusObj.destroy();
   if (chartCountryObj) chartCountryObj.destroy();
+  if (chartPlanObj) chartPlanObj.destroy();
 
   const ctxStatus = document.getElementById('chart-status').getContext('2d');
   chartStatusObj = new Chart(ctxStatus, {
@@ -1615,6 +1629,29 @@ async function loadAnalytics() {
       datasets: [{
         data: [d.status_counts.LIVE || 0, d.status_counts.DEAD || 0],
         backgroundColor: ['#10b981', '#f43f5e'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          labels: { color: '#848b9f', font: { family: 'Plus Jakarta Sans', weight: 600 } }
+        }
+      }
+    }
+  });
+
+  const planLabels = Object.keys(d.plan_counts || {});
+  const planData = Object.values(d.plan_counts || {});
+  const ctxPlan = document.getElementById('chart-plan').getContext('2d');
+  chartPlanObj = new Chart(ctxPlan, {
+    type: 'doughnut',
+    data: {
+      labels: planLabels.length ? planLabels : ['Belum ada data'],
+      datasets: [{
+        data: planData.length ? planData : [0],
+        backgroundColor: ['#a855f7', '#38bdf8', '#f59e0b', '#ec4899', '#10b981', '#64748b'],
         borderWidth: 0
       }]
     },

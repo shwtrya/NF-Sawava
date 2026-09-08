@@ -204,11 +204,25 @@ def get_history(limit=50, offset=0, search='', status='', plan=''):
         ]
         return {"total": total, "items": items}
 
-def export_history_csv():
+def export_history_csv(search='', status='', plan=''):
     with db_lock:
         conn = get_db()
         c = conn.cursor()
-        c.execute('SELECT id, created_at, type, status, plan, billing, country, route, token_url, raw_cookie FROM history ORDER BY id DESC')
+        query = 'SELECT id, created_at, type, status, plan, billing, country, route, token_url, raw_cookie FROM history WHERE 1=1'
+        params = []
+        if search:
+            query += ' AND (country LIKE ? OR billing LIKE ? OR plan LIKE ? OR raw_cookie LIKE ?)'
+            params.extend([f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%'])
+        if status:
+            query += ' AND status = ?'
+            params.append(status)
+        if plan:
+            if plan == '4K':
+                query += ' AND (plan LIKE "%4K%" OR plan LIKE "%ULTRA%")'
+            else:
+                query += ' AND plan NOT LIKE "%4K%" AND plan NOT LIKE "%ULTRA%" AND plan != ""'
+        query += ' ORDER BY id DESC'
+        c.execute(query, params)
         rows = c.fetchall()
         conn.close()
 
@@ -233,17 +247,23 @@ def get_analytics():
         status_counts = dict(c.fetchall())
         c.execute('SELECT country, COUNT(*) FROM history WHERE country != "" AND country != "Unknown" GROUP BY country ORDER BY COUNT(*) DESC LIMIT 8')
         country_counts = dict(c.fetchall())
+        c.execute('SELECT plan, COUNT(*) FROM history WHERE status = "LIVE" AND plan != "" GROUP BY plan ORDER BY COUNT(*) DESC LIMIT 6')
+        plan_counts = dict(c.fetchall())
         conn.close()
-        return {"status_counts": status_counts, "country_counts": country_counts}
+        return {"status_counts": status_counts, "country_counts": country_counts, "plan_counts": plan_counts}
 
-def clear_history():
+def clear_history(only_dead=False):
     with db_lock:
         conn = get_db()
         c = conn.cursor()
-        c.execute('DELETE FROM history')
+        if only_dead:
+            c.execute('DELETE FROM history WHERE status = "DEAD" OR status = "ERROR"')
+            logging.info("Deleted only DEAD/ERROR history records.")
+        else:
+            c.execute('DELETE FROM history')
+            logging.info("History database cleared completely.")
         conn.commit()
         conn.close()
-        logging.info("History database cleared.")
 
 def load_proxies():
     if not os.path.exists(PROXIES_FILE):
@@ -296,14 +316,23 @@ def test_all_proxies_now():
     global healthy_proxies
     all_p = load_proxies()
     good = []
-    for p in all_p:
+    
+    # Concurrent ping testing using ThreadPoolExecutor for speed
+    import concurrent.futures
+    def _test_single(p):
         ok, lat = check_proxy_health(p)
         if ok:
             p["latency"] = lat
             p["status"] = "OK"
-            good.append(p)
+            return p
         else:
             p["status"] = "FAIL"
+            return None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+        results = list(ex.map(_test_single, all_p))
+    
+    good = [p for p in results if p is not None]
     with proxy_lock:
         healthy_proxies = good
     return all_p
@@ -739,7 +768,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps(data).encode("utf-8"))
 
             elif path == "/api/history/export_csv":
-                csv_data = export_history_csv()
+                search = q_params.get("search", [""])[0]
+                status = q_params.get("status", [""])[0]
+                plan = q_params.get("plan", [""])[0]
+                csv_data = export_history_csv(search=search, status=status, plan=plan)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/csv; charset=utf-8")
                 self.send_header("Content-Disposition", f"attachment; filename=netflix_history_{int(time.time())}.csv")
@@ -890,7 +922,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     os._exit(0)
                 threading.Thread(target=_do_exit, daemon=True).start()
             elif self.path == "/api/history/clear":
-                clear_history()
+                try:
+                    payload = json.loads(body.decode("utf-8")) if body else {}
+                except Exception:
+                    payload = {}
+                only_dead = bool(payload.get("only_dead", False))
+                clear_history(only_dead=only_dead)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
