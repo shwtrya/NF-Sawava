@@ -171,8 +171,8 @@ def get_history(limit=50, offset=0, search='', status='', plan=''):
         params = []
 
         if search:
-            query += ' AND (country LIKE ? OR billing LIKE ? OR plan LIKE ?)'
-            params.extend([f'%{search}%', f'%{search}%', f'%{search}%'])
+            query += ' AND (country LIKE ? OR billing LIKE ? OR plan LIKE ? OR raw_cookie LIKE ?)'
+            params.extend([f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%'])
         if status:
             query += ' AND status = ?'
             params.append(status)
@@ -595,6 +595,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+    def do_HEAD(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        if path in ("/", "/index.html"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.end_headers()
+        elif path in ("/api/health", "/api/pin/status", "/api/proxies"):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+        else:
+            self.send_response(200)
+            self.end_headers()
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
@@ -609,6 +626,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 content = b"<h1>index.html not found</h1>"
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
             self.end_headers()
             self.wfile.write(content)
 
@@ -719,12 +738,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 cfg = get_config()
                 cur_pin = cfg.get("pin", "")
                 if cur_pin and p.get("current") != cur_pin:
+                    self.send_response(401)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "error": "PIN saat ini salah"}).encode("utf-8"))
+                    return
+                new_p = str(p.get("new_pin", "")).strip()
+                if new_p and len(new_p) > 20:
                     self.send_response(400)
                     self.send_header("Content-Type", "application/json")
                     self.end_headers()
-                    self.wfile.write(json.dumps({"ok": False, "error": "PIN lama salah"}).encode("utf-8"))
+                    self.wfile.write(json.dumps({"ok": False, "error": "PIN terlalu panjang (maks 20 karakter)"}).encode("utf-8"))
                     return
-                cfg["pin"] = str(p.get("new_pin", "")).strip()
+                cfg["pin"] = new_p
                 save_config(cfg)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
