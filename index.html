@@ -825,52 +825,39 @@ function splitIntoAccountPayloads(text) {
   if (!text) return [];
   text = text.trim();
 
-  // If entire input is JSON array of cookies for multiple accounts or single
+  // 1. JSON handling (Cookie-Editor JSON)
   if (text.startsWith('[') && text.endsWith(']')) {
     try {
       const parsed = JSON.parse(text);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // If it's array of objects, is it 1 account's cookie array or array of accounts?
-        const isCookieObj = parsed[0] && (parsed[0].name || parsed[0].domain);
-        if (isCookieObj) {
-          // Check if multiple NetflixId exist in this array (combos merged)
-          const nidCount = parsed.filter(c => c && c.name === 'NetflixId').length;
-          if (nidCount <= 1) {
-            return [text];
-          }
+        if (Array.isArray(parsed[0])) {
+          return parsed.map(acc => JSON.stringify(acc));
+        }
+        const nidCount = parsed.filter(c => c && (c.name === 'NetflixId' || c.name === 'SecureNetflixId')).length;
+        if (nidCount <= 2) {
+          return [text];
         }
       }
     } catch(e) {}
   }
 
-  // Split by Netscape multi-account separator or double newlines / dividers
-  const rawSections = text.split(/(?:\r?\n){2,}|-{10,}|={10,}/);
-  const payloads = [];
-
-  for (const sec of rawSections) {
-    const s = sec.trim();
-    if (!s) continue;
-
-    // Check if section has NetflixId or .netflix.com
-    if (s.includes('NetflixId') || s.includes('.netflix.com')) {
-      payloads.push(s);
-    } else {
-      // Fallback line by line if lines contain cookies
-      const lines = s.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
-      for (const line of lines) {
-        if (line.includes('NetflixId') || line.includes('SecureNetflixId') || line.includes('.netflix.com')) {
-          payloads.push(line);
-        }
-      }
+  // 2. Netscape format detection (tab separated blocks)
+  if (text.includes('\t') && (text.includes('# Netscape') || text.includes('.netflix.com\t'))) {
+    const blocks = text.split(/(?:\r?\n){2,}|\n(?=#\s*Netscape)/i).map(b => b.trim()).filter(Boolean);
+    if (blocks.length > 1) {
+      return blocks;
     }
   }
 
-  // Fallback: if no multi-delimiter matched, split line by line
-  if (payloads.length === 0) {
-    return text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  // 3. Line-by-line cookies (String cookie standard: 1 baris per akun)
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  const validLines = lines.filter(l => l.includes('NetflixId') || l.includes('SecureNetflixId') || l.includes('nftoken=') || l.includes('.netflix.com'));
+
+  if (validLines.length > 0) {
+    return validLines;
   }
 
-  return payloads;
+  return lines;
 }
 
 function getLaunchLinks(tokenOrUrl) {
