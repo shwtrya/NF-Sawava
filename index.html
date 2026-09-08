@@ -907,6 +907,13 @@ let curPage = 1;
 const pageSize = 25;
 let searchDebounce = null;
 
+function getAuthHeaders(extra = {}) {
+  const pin = sessionStorage.getItem('suite_pin') || localStorage.getItem('suite_pin') || '';
+  const headers = {...extra};
+  if (pin) headers['X-Suite-Pin'] = pin;
+  return headers;
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   document.getElementById('toast-msg').innerText = msg;
@@ -963,6 +970,8 @@ async function verifyPin() {
   const d = await res.json();
   if (d.ok) {
     sessionStorage.setItem('suite_unlocked', 'true');
+    sessionStorage.setItem('suite_pin', pin);
+    localStorage.setItem('suite_pin', pin);
     document.getElementById('pin-modal').style.display = 'none';
     showToast('Dashboard tidak terkunci');
   } else {
@@ -984,6 +993,13 @@ async function managePin() {
   if (d.ok) {
     showToast(newPin ? 'PIN berhasil diatur' : 'PIN dinonaktifkan');
     sessionStorage.setItem('suite_unlocked', 'true');
+    if (newPin) {
+      sessionStorage.setItem('suite_pin', newPin);
+      localStorage.setItem('suite_pin', newPin);
+    } else {
+      sessionStorage.removeItem('suite_pin');
+      localStorage.removeItem('suite_pin');
+    }
     checkPinStatus();
   } else {
     alert('Gagal: ' + (d.error || 'PIN saat ini salah.'));
@@ -1089,7 +1105,7 @@ async function runSingle() {
   try {
     const res = await fetch('/api/check', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: getAuthHeaders({'Content-Type': 'application/json'}),
       body: JSON.stringify({cookie, use_proxy})
     });
     const d = await res.json();
@@ -1113,7 +1129,7 @@ async function runSingle() {
       try {
         const resTok = await fetch('/api/token', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
+          headers: getAuthHeaders({'Content-Type': 'application/json'}),
           body: JSON.stringify({cookie, use_proxy})
         });
         const dTok = await resTok.json();
@@ -1202,7 +1218,7 @@ async function runSingle() {
 async function runBulk() {
   const text = document.getElementById('bulk-input').value.trim();
   if (!text) { showToast('Isi baris cookie terlebih dahulu'); return; }
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#') && !l.startsWith('[{CHECK') && !l.startsWith('TIME:'));
   if (lines.length === 0) return;
 
   const use_proxy = document.getElementById('proxy-toggle').checked;
@@ -1227,7 +1243,7 @@ async function runBulk() {
       try {
         const res = await fetch('/api/check', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
+          headers: getAuthHeaders({'Content-Type': 'application/json'}),
           body: JSON.stringify({cookie: line, use_proxy})
         });
         const d = await res.json();
@@ -1248,7 +1264,7 @@ async function runBulk() {
         appendBulkRow(item);
       } catch(e) {
         dead++;
-        appendBulkRow({ index: idx + 1, live: false, plan: 'Error', billing: '-', country: '-', route: '-' });
+        appendBulkRow({ index: idx + 1, live: false, plan: e.message || 'Error', billing: '-', country: '-', route: '-' });
       }
 
       completed++;
@@ -1370,7 +1386,9 @@ async function loadHistory() {
       status: st,
       plan: pl
     });
-    const res = await fetch(`/api/history?${params.toString()}`);
+    const res = await fetch(`/api/history?${params.toString()}`, {
+      headers: getAuthHeaders()
+    });
     const data = await res.json();
     renderHistoryTable(data);
   } catch(e) {
@@ -1427,7 +1445,10 @@ function escapeAttr(str) {
 
 async function clearDbHistory() {
   if (!confirm('Hapus seluruh riwayat di SQLite database?')) return;
-  await fetch('/api/history/clear', {method: 'POST'});
+  await fetch('/api/history/clear', {
+    method: 'POST',
+    headers: getAuthHeaders()
+  });
   showToast('Database riwayat dibersihkan');
   curPage = 1;
   loadHistory();
@@ -1456,7 +1477,7 @@ async function saveProxiesList() {
   const text = document.getElementById('proxies-input').value.trim();
   const res = await fetch('/api/proxies/save', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: getAuthHeaders({'Content-Type': 'application/json'}),
     body: JSON.stringify({text})
   });
   const d = await res.json();
@@ -1468,7 +1489,10 @@ async function saveProxiesList() {
 async function testAllProxies() {
   const tbody = document.getElementById('proxy-tbody');
   tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding:20px;">Menguji koneksi ke Netflix FTL API...</td></tr>';
-  await fetch('/api/proxies/test', {method: 'POST'});
+  await fetch('/api/proxies/test', {
+    method: 'POST',
+    headers: getAuthHeaders()
+  });
   loadProxiesManager();
   fetchStats();
   showToast('Test proxy selesai');
