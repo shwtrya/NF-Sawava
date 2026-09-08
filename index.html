@@ -1056,6 +1056,25 @@ async function fetchStats() {
   } catch(e) {}
 }
 
+// Extract and build launch links for browser, android, and tv
+function buildLaunchLinks(tokOrUrl) {
+  if (!tokOrUrl) return { browser: '', android: '', tv: '', token: '' };
+  let tok = String(tokOrUrl).trim();
+  if (tok.includes('nftoken=')) {
+    const m = tok.match(/[?&]nftoken=([^&]+)/);
+    if (m) tok = m[1];
+  }
+  if (!tok || tok === 'undefined' || tok === 'null') {
+    return { browser: '', android: '', tv: '', token: '' };
+  }
+  return {
+    browser: `https://netflix.com/?nftoken=${tok}`,
+    android: `https://netflix.com/unsupported?nftoken=${tok}`,
+    tv: `https://netflix.com/tv2?nftoken=${tok}`,
+    token: tok
+  };
+}
+
 async function runSingle() {
   const cookie = document.getElementById('single-cookie').value.trim();
   const use_proxy = document.getElementById('proxy-toggle').checked;
@@ -1083,12 +1102,13 @@ async function runSingle() {
     let tvUrl = '';
     let expStr = '-';
 
-    if (d.token_data && d.token_data.url) {
-      tokUrl = d.token_data.url;
-      androidUrl = d.token_data.android_url;
-      tvUrl = d.token_data.tv_url;
+    let launch = null;
+    if (d.token_data) {
+      launch = buildLaunchLinks(d.token_data.token || d.token_data.url);
       expStr = d.token_data.expires || '-';
-    } else {
+    }
+
+    if (!launch || !launch.browser) {
       // Fallback request to /api/token if token_data wasn't bundled
       try {
         const resTok = await fetch('/api/token', {
@@ -1097,13 +1117,17 @@ async function runSingle() {
           body: JSON.stringify({cookie, use_proxy})
         });
         const dTok = await resTok.json();
-        if (dTok.url) {
-          tokUrl = dTok.url;
-          androidUrl = dTok.android_url;
-          tvUrl = dTok.tv_url;
+        if (dTok.url || dTok.token) {
+          launch = buildLaunchLinks(dTok.token || dTok.url);
           expStr = dTok.expires || '-';
         }
       } catch(e) {}
+    }
+
+    if (launch && launch.browser) {
+      tokUrl = launch.browser;
+      androidUrl = launch.android;
+      tvUrl = launch.tv;
     }
 
     out.className = 'card-out live';
@@ -1259,9 +1283,10 @@ function appendBulkRow(item) {
   const tbody = document.getElementById('bulk-tbody');
   const tr = document.createElement('tr');
   const tok = item.token_data || {};
-  const browserUrl = tok.url || '';
-  const androidUrl = tok.android_url || (tok.token ? `https://netflix.com/unsupported?nftoken=${tok.token}` : '');
-  const tvUrl = tok.tv_url || (tok.token ? `https://netflix.com/tv2?nftoken=${tok.token}` : '');
+  const launch = buildLaunchLinks(tok.token || tok.url || tok.browser_url);
+  const browserUrl = launch.browser;
+  const androidUrl = launch.android;
+  const tvUrl = launch.tv;
 
   tr.innerHTML = `
     <td>${item.index}</td>
