@@ -1044,6 +1044,7 @@ async function verifyPin() {
     localStorage.setItem('suite_pin', pin);
     document.getElementById('pin-modal').style.display = 'none';
     showToast('Dashboard tidak terkunci');
+    loadProxiesManager();
   } else {
     document.getElementById('pin-err').style.display = 'block';
   }
@@ -1712,27 +1713,41 @@ function updateProxyLineCount() {
 }
 
 async function loadProxiesManager() {
-  const res = await fetch('/api/proxies/detail');
-  const d = await res.json();
-  document.getElementById('proxies-input').value = d.raw_text || '';
-  updateProxyLineCount();
-  const tbody = document.getElementById('proxy-tbody');
-  if (!d.list || d.list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding:20px;">Belum ada proxy tersimpan.</td></tr>';
-    return;
+  try {
+    const res = await fetch('/api/proxies/detail', {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      if (res.status === 401) showToast('PIN dibutuhkan untuk akses proxy manager');
+      return;
+    }
+    const d = await res.json();
+    document.getElementById('proxies-input').value = d.raw_text || '';
+    updateProxyLineCount();
+    const tbody = document.getElementById('proxy-tbody');
+    if (!d.list || d.list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding:20px;">Belum ada proxy tersimpan.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = d.list.map(p => `
+      <tr>
+        <td style="font-family:'JetBrains Mono', monospace;">${p.raw}</td>
+        <td style="font-weight:600; font-family:'JetBrains Mono', monospace;">${p.latency ? p.latency + ' ms' : '-'}</td>
+        <td><span class="${p.status === 'OK' ? 'tag-live' : 'tag-dead'}">${p.status === 'OK' ? '● ONLINE' : '✕ ERROR'}</span></td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    console.error(e);
   }
-  tbody.innerHTML = d.list.map(p => `
-    <tr>
-      <td style="font-family:'JetBrains Mono', monospace;">${p.raw}</td>
-      <td style="font-weight:600; font-family:'JetBrains Mono', monospace;">${p.latency ? p.latency + ' ms' : '-'}</td>
-      <td><span class="${p.status === 'OK' ? 'tag-live' : 'tag-dead'}">${p.status === 'OK' ? '● ONLINE' : '✕ ERROR'}</span></td>
-    </tr>
-  `).join('');
 }
 
 async function removeFailProxies() {
-  const res = await fetch('/api/proxies/detail');
-  const d = await res.json();
+  try {
+    const res = await fetch('/api/proxies/detail', {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) return;
+    const d = await res.json();
   const currentList = d.list || [];
   if (currentList.length === 0) {
     showToast('Tidak ada proxy untuk dibersihkan');
@@ -1759,6 +1774,9 @@ async function removeFailProxies() {
   document.getElementById('proxies-input').value = newText;
   await saveProxiesList();
   showToast(`Dibersihkan: ${currentList.length - okList.length} proxy FAIL dibuang`);
+  } catch(e) {
+    console.error(e);
+  }
 }
 
 async function saveProxiesList() {
@@ -1879,6 +1897,7 @@ function copyJson(obj) {
 
 fetchStats();
 checkPinStatus();
+loadProxiesManager();
 </script>
 </body>
 </html>
