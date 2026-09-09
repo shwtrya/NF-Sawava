@@ -896,8 +896,10 @@ tbody tr:hover {
       </select>
       <select id="hist-filter-plan" onchange="resetPageAndLoad()" style="flex:1; margin-bottom:0;">
         <option value="">Semua Plan</option>
-        <option value="4K">Hanya 4K</option>
-        <option value="Standard">Standard / Basic</option>
+        <option value="PREMIUM">Premium (4K UHD)</option>
+        <option value="STANDARD">Standard</option>
+        <option value="BASIC">Basic</option>
+        <option value="MOBILE">Mobile</option>
       </select>
       <button class="btn-secondary" onclick="exportCsvWithAuth()">Export CSV</button>
       <button class="btn-secondary" onclick="loadHistory()">Refresh</button>

@@ -177,10 +177,18 @@ def get_history(limit=50, offset=0, search='', status='', plan=''):
             query += ' AND status = ?'
             params.append(status)
         if plan:
-            if plan == '4K':
-                query += ' AND plan LIKE "%4K%"'
+            p_upper = plan.upper()
+            if p_upper in ('PREMIUM', '4K'):
+                query += ' AND (plan LIKE "%4K%" OR plan LIKE "%ULTRA%" OR plan LIKE "%PREMIUM%")'
+            elif p_upper == 'STANDARD':
+                query += ' AND (plan LIKE "%STANDARD%" OR plan LIKE "%STANDAR%")'
+            elif p_upper == 'BASIC':
+                query += ' AND (plan LIKE "%BASIC%" OR plan LIKE "%DASAR%")'
+            elif p_upper == 'MOBILE':
+                query += ' AND (plan LIKE "%MOBILE%" OR plan LIKE "%PONSEL%")'
             else:
-                query += ' AND plan NOT LIKE "%4K%"'
+                query += ' AND plan LIKE ?'
+                params.append(f'%{plan}%')
 
         # Count total
         count_query = 'SELECT COUNT(*) FROM (' + query + ')'
@@ -217,10 +225,18 @@ def export_history_csv(search='', status='', plan=''):
             query += ' AND status = ?'
             params.append(status)
         if plan:
-            if plan == '4K':
-                query += ' AND (plan LIKE "%4K%" OR plan LIKE "%ULTRA%")'
+            p_upper = plan.upper()
+            if p_upper in ('PREMIUM', '4K'):
+                query += ' AND (plan LIKE "%4K%" OR plan LIKE "%ULTRA%" OR plan LIKE "%PREMIUM%")'
+            elif p_upper == 'STANDARD':
+                query += ' AND (plan LIKE "%STANDARD%" OR plan LIKE "%STANDAR%")'
+            elif p_upper == 'BASIC':
+                query += ' AND (plan LIKE "%BASIC%" OR plan LIKE "%DASAR%")'
+            elif p_upper == 'MOBILE':
+                query += ' AND (plan LIKE "%MOBILE%" OR plan LIKE "%PONSEL%")'
             else:
-                query += ' AND plan NOT LIKE "%4K%" AND plan NOT LIKE "%ULTRA%" AND plan != ""'
+                query += ' AND plan LIKE ?'
+                params.append(f'%{plan}%')
         query += ' ORDER BY id DESC'
         c.execute(query, params)
         rows = c.fetchall()
