@@ -96,6 +96,7 @@ COUNTRY_CODE_NAMES = {
 
 db_lock = threading.Lock()
 healthy_proxies = []
+all_tested_proxies = []
 proxy_lock = threading.Lock()
 server_start_time = time.time()
 
@@ -317,6 +318,8 @@ def load_proxies():
         for line in f:
             item = parse_single_proxy(line)
             if item:
+                # Default status unverified/initial
+                item["status"] = "UNVERIFIED"
                 res.append(item)
     return res
 
@@ -341,46 +344,52 @@ def check_proxy_health(p):
     return False, 0
 
 def proxy_health_worker():
-    global healthy_proxies
+    global healthy_proxies, all_tested_proxies
     while True:
         all_p = load_proxies()
         good = []
-        for p in all_p:
+        import concurrent.futures
+        def _bg_test(p):
             ok, lat = check_proxy_health(p)
             if ok:
                 p["latency"] = lat
                 p["status"] = "OK"
-                good.append(p)
             else:
+                p["latency"] = 0
                 p["status"] = "FAIL"
+            return p
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
+            tested = list(ex.map(_bg_test, all_p))
+
+        good = [p for p in tested if p["status"] == "OK"]
         with proxy_lock:
-            healthy_proxies = good if good else all_p
+            all_tested_proxies = tested
+            healthy_proxies = good
         time.sleep(300)
 
 def test_all_proxies_now():
-    global healthy_proxies
+    global healthy_proxies, all_tested_proxies
     all_p = load_proxies()
-    good = []
-    
-    # Concurrent ping testing using ThreadPoolExecutor for speed
     import concurrent.futures
     def _test_single(p):
         ok, lat = check_proxy_health(p)
         if ok:
             p["latency"] = lat
             p["status"] = "OK"
-            return p
         else:
+            p["latency"] = 0
             p["status"] = "FAIL"
-            return None
+        return p
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
-        results = list(ex.map(_test_single, all_p))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
+        tested = list(ex.map(_test_single, all_p))
     
-    good = [p for p in results if p is not None]
+    good = [p for p in tested if p["status"] == "OK"]
     with proxy_lock:
+        all_tested_proxies = list(tested)
         healthy_proxies = good
-    return all_p
+    return tested
 
 proxy_cooldown = {}
 proxy_cooldown_lock = threading.Lock()
@@ -804,7 +813,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/api/proxies":
             all_p = load_proxies()
             with proxy_lock:
-                h_count = len(healthy_proxies) if healthy_proxies else len(all_p)
+                h_count = len(healthy_proxies) if all_tested_proxies else len(all_p)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -855,7 +864,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     with open(PROXIES_FILE, "r", encoding="utf-8", errors="ignore") as f:
                         raw_text = f.read()
                 with proxy_lock:
-                    p_list = healthy_proxies if healthy_proxies else load_proxies()
+                    p_list = all_tested_proxies if all_tested_proxies else load_proxies()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
@@ -970,6 +979,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     all_p = load_proxies()
                     with proxy_lock:
                         healthy_proxies.clear()
+                        all_tested_proxies.clear()
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
                     self.end_headers()
