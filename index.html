@@ -805,8 +805,13 @@ tbody tr:hover {
 
   <!-- PANEL 1: SINGLE -->
   <div id="panel-single" class="section-panel active">
-    <textarea id="single-cookie" placeholder="Paste cookie di sini (Raw string, JSON array, atau Netscape format)..." style="height:140px;"></textarea>
-    <div class="shortcut-hint">Tekan <kbd>Ctrl</kbd> + <kbd>Enter</kbd> untuk eksekusi langsung</div>
+    <textarea id="single-cookie" placeholder="Paste cookie di sini (Raw string, JSON array, atau Netscape format)..." style="height:140px;" oninput="detectSingleCookieFormat()"></textarea>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+      <div id="single-format-badge" style="font-size:11px; font-weight:600; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;">
+        <span>Format: Belum ada input</span>
+      </div>
+      <div class="shortcut-hint" style="margin-top:0;">Tekan <kbd>Ctrl</kbd> + <kbd>Enter</kbd> untuk eksekusi</div>
+    </div>
     <button id="single-btn" class="btn-primary" onclick="runSingle()" style="margin-top:6px;">
       <span id="single-btn-text">Check & Generate All Launch Links</span>
     </button>
@@ -857,9 +862,18 @@ tbody tr:hover {
         <div class="num" id="stat-dead" style="color:var(--dead)">0</div>
       </div>
     </div>
-    <div style="display:flex; gap:8px; margin-bottom:12px;">
-      <button class="btn-secondary" onclick="exportBulk('txt')">Export Live (TXT)</button>
-      <button class="btn-secondary" onclick="exportBulk('json')">Export Live (JSON)</button>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+      <div style="display:flex; gap:6px; align-items:center;">
+        <span style="font-size:12px; font-weight:600; color:var(--text-muted); margin-right:4px;">Filter:</span>
+        <button id="btn-filter-all" class="btn-secondary" style="padding:4px 10px; font-size:11px; background:var(--bg-subtle);" onclick="setBulkFilter('ALL')">Semua</button>
+        <button id="btn-filter-live" class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="setBulkFilter('LIVE')">Hanya LIVE</button>
+        <button id="btn-filter-4k" class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="setBulkFilter('4K')">4K Ultra</button>
+        <button id="btn-filter-dead" class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="setBulkFilter('DEAD')">DEAD</button>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-secondary" onclick="exportBulk('txt')">Export Live (TXT)</button>
+        <button class="btn-secondary" onclick="exportBulk('json')">Export Live (JSON)</button>
+      </div>
     </div>
     <div class="table-wrap">
       <table>
@@ -910,11 +924,14 @@ tbody tr:hover {
 
   <!-- PANEL 4: PROXY MANAGER -->
   <div id="panel-proxies" class="section-panel">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <label style="margin-bottom:0;">Proxy List (<code style="color:#38bdf8;">netflix_proxies.txt</code>):</label>
-      <button class="btn-secondary" onclick="testAllProxies()">Test Ping Semua</button>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+      <label style="margin-bottom:0;">Proxy List (<code style="color:#38bdf8;">netflix_proxies.txt</code>): <span id="proxy-lines-count" style="color:var(--text-muted); font-size:12px;">(0 terdeteksi)</span></label>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-secondary" style="color:#f59e0b; border-color:rgba(245,158,11,0.3);" onclick="removeFailProxies()">Hapus Proxy FAIL</button>
+        <button class="btn-secondary" onclick="testAllProxies()">Test Ping Semua</button>
+      </div>
     </div>
-    <textarea id="proxies-input" style="height:150px;" placeholder="ip:port:user:pass&#10;ip:port"></textarea>
+    <textarea id="proxies-input" style="height:150px;" placeholder="ip:port:user:pass&#10;ip:port" oninput="updateProxyLineCount()"></textarea>
     <button class="btn-primary" onclick="saveProxiesList()" style="margin-bottom:16px;">Simpan Proxy List</button>
     <div class="table-wrap">
       <table>
@@ -949,6 +966,7 @@ tbody tr:hover {
 <script>
 let bulkRunning = false;
 let bulkResults = [];
+let bulkFilter = 'ALL';
 let chartStatusObj = null;
 let chartCountryObj = null;
 let chartPlanObj = null;
@@ -1304,8 +1322,28 @@ function parseCookieInputs(text) {
 async function runBulk() {
   const text = document.getElementById('bulk-input').value.trim();
   if (!text) { showToast('Isi baris cookie terlebih dahulu'); return; }
-  const lines = parseCookieInputs(text);
-  if (lines.length === 0) return;
+  const rawLines = parseCookieInputs(text);
+  if (rawLines.length === 0) return;
+
+  // Deduplication check
+  const seen = new Set();
+  const lines = [];
+  let duplicates = 0;
+  for (const l of rawLines) {
+    // extract key or fingerprint
+    const m = l.match(/NetflixId=([^;]+)/) || l.match(/"name":\s*"NetflixId"[^}]*?"value":\s*"([^"]+)"/);
+    const key = m ? m[1] : l;
+    if (seen.has(key)) {
+      duplicates++;
+    } else {
+      seen.add(key);
+      lines.push(l);
+    }
+  }
+
+  if (duplicates > 0) {
+    showToast(`Ditemukan ${duplicates} cookie duplikat, dilewati otomatis`);
+  }
 
   const use_proxy = document.getElementById('proxy-toggle').checked;
   const concurrency = parseInt(document.getElementById('bulk-threads').value, 10) || 5;
@@ -1382,8 +1420,72 @@ function stopBulk() {
   }
 }
 
-function appendBulkRow(item) {
+// Detect single cookie format in realtime
+function detectSingleCookieFormat() {
+  const text = document.getElementById('single-cookie').value.trim();
+  const badge = document.getElementById('single-format-badge');
+  if (!text) {
+    badge.innerHTML = '<span>Format: Belum ada input</span>';
+    badge.style.color = 'var(--text-muted)';
+    return;
+  }
+  if (text.startsWith('[') && text.endsWith(']')) {
+    try {
+      const arr = JSON.parse(text);
+      if (Array.isArray(arr)) {
+        const hasNid = arr.some(c => (c.name === 'NetflixId' || c.key === 'NetflixId'));
+        badge.innerHTML = hasNid ? '<span>✓ Format: JSON Cookie-Editor (Valid NetflixId)</span>' : '<span>⚠ Format: JSON Array (NetflixId Tidak Ditemukan)</span>';
+        badge.style.color = hasNid ? '#4ade80' : '#f59e0b';
+        return;
+      }
+    } catch(e) {}
+  }
+  if (text.includes('\t.netflix.com\t') || text.includes('.netflix.com\tTRUE\t') || text.includes('# Netscape HTTP Cookie File')) {
+    badge.innerHTML = '<span>✓ Format: Netscape Cookie File</span>';
+    badge.style.color = '#38bdf8';
+    return;
+  }
+  if (text.includes('NetflixId=')) {
+    badge.innerHTML = '<span>✓ Format: Raw Cookie Header (NetflixId Ada)</span>';
+    badge.style.color = '#4ade80';
+    return;
+  }
+  if (text.includes('NETFLIX ACCOUNT DETAILS') || text.includes('███')) {
+    badge.innerHTML = '<span>✓ Format: Structured Account Combo Block</span>';
+    badge.style.color = '#a855f7';
+    return;
+  }
+  badge.innerHTML = '<span>⚠ Format: Teks Bebas (Mungkin tidak valid)</span>';
+  badge.style.color = '#f59e0b';
+}
+
+// Bulk check row filter
+function setBulkFilter(filter) {
+  bulkFilter = filter;
+  ['all', 'live', '4k', 'dead'].forEach(f => {
+    const el = document.getElementById(`btn-filter-${f}`);
+    if (el) el.style.background = (filter.toLowerCase() === f) ? 'var(--bg-subtle)' : 'transparent';
+  });
+  renderBulkFilteredRows();
+}
+
+function renderBulkFilteredRows() {
   const tbody = document.getElementById('bulk-tbody');
+  tbody.innerHTML = '';
+  const filtered = bulkResults.filter(item => {
+    if (bulkFilter === 'ALL') return true;
+    if (bulkFilter === 'LIVE') return item.live;
+    if (bulkFilter === 'DEAD') return !item.live;
+    if (bulkFilter === '4K') return item.live && (item.plan && (item.plan.includes('4K') || item.plan.includes('ULTRA')));
+    return true;
+  });
+  filtered.forEach(item => {
+    const tr = createBulkRowElement(item);
+    tbody.prepend(tr);
+  });
+}
+
+function createBulkRowElement(item) {
   const tr = document.createElement('tr');
   const tok = item.token_data || {};
   const launch = buildLaunchLinks(tok.token || tok.url || tok.browser_url);
@@ -1394,7 +1496,7 @@ function appendBulkRow(item) {
   tr.innerHTML = `
     <td>${item.index}</td>
     <td><span class="${item.live ? 'tag-live' : 'tag-dead'}">${item.live ? '● LIVE' : '✕ DEAD'}</span></td>
-    <td style="${item.plan && item.plan.includes('4K') ? 'color:var(--accent-4k); font-weight:700;' : ''}">${item.plan || '-'}</td>
+    <td style="${item.plan && (item.plan.includes('4K') || item.plan.includes('ULTRA')) ? 'color:var(--accent-4k); font-weight:700;' : ''}">${item.plan || '-'}</td>
     <td>${item.billing || '-'}</td>
     <td>${item.country || '-'}</td>
     <td>
@@ -1408,7 +1510,21 @@ function appendBulkRow(item) {
     </td>
     <td style="color:var(--text-muted)">${item.route || 'Direct'}</td>
   `;
-  tbody.prepend(tr);
+  return tr;
+}
+
+function appendBulkRow(item) {
+  // Check if item matches current filter
+  let visible = true;
+  if (bulkFilter === 'LIVE') visible = item.live;
+  else if (bulkFilter === 'DEAD') visible = !item.live;
+  else if (bulkFilter === '4K') visible = item.live && (item.plan && (item.plan.includes('4K') || item.plan.includes('ULTRA')));
+  
+  if (visible) {
+    const tbody = document.getElementById('bulk-tbody');
+    const tr = createBulkRowElement(item);
+    tbody.prepend(tr);
+  }
 }
 
 function exportBulk(type) {
@@ -1586,10 +1702,18 @@ async function clearDbHistory(onlyDead = false) {
 }
 
 // Proxy Manager
+function updateProxyLineCount() {
+  const val = document.getElementById('proxies-input').value.trim();
+  const count = val ? val.split('\n').filter(l => l.trim() && !l.trim().startsWith('#')).length : 0;
+  const el = document.getElementById('proxy-lines-count');
+  if (el) el.innerText = `(${count} terdeteksi)`;
+}
+
 async function loadProxiesManager() {
   const res = await fetch('/api/proxies/detail');
   const d = await res.json();
   document.getElementById('proxies-input').value = d.raw_text || '';
+  updateProxyLineCount();
   const tbody = document.getElementById('proxy-tbody');
   if (!d.list || d.list.length === 0) {
     tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding:20px;">Belum ada proxy tersimpan.</td></tr>';
@@ -1602,6 +1726,37 @@ async function loadProxiesManager() {
       <td><span class="${p.status === 'OK' ? 'tag-live' : 'tag-dead'}">${p.status === 'OK' ? '● ONLINE' : '✕ ERROR'}</span></td>
     </tr>
   `).join('');
+}
+
+async function removeFailProxies() {
+  const res = await fetch('/api/proxies/detail');
+  const d = await res.json();
+  const currentList = d.list || [];
+  if (currentList.length === 0) {
+    showToast('Tidak ada proxy untuk dibersihkan');
+    return;
+  }
+  const okList = currentList.filter(p => p.status === 'OK');
+  if (okList.length === currentList.length) {
+    showToast('Semua proxy berstatus OK');
+    return;
+  }
+  // Filter raw text lines
+  const rawLines = (d.raw_text || '').split('\n');
+  const keptLines = [];
+  for (const line of rawLines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      keptLines.push(line);
+      continue;
+    }
+    const isOk = okList.some(p => trimmed.startsWith(p.raw));
+    if (isOk) keptLines.push(line);
+  }
+  const newText = keptLines.join('\n');
+  document.getElementById('proxies-input').value = newText;
+  await saveProxiesList();
+  showToast(`Dibersihkan: ${currentList.length - okList.length} proxy FAIL dibuang`);
 }
 
 async function saveProxiesList() {
