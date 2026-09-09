@@ -302,15 +302,15 @@ def parse_single_proxy(line):
         netloc_parts = netloc.split(":")
         raw = f"{netloc_parts[0]}:{netloc_parts[1]}"
         proxy = f"{actual_scheme}://{auth_part}@{netloc}"
-        return {"raw": raw, "proxy": proxy, "latency": 0, "status": "OK"}
+        return {"raw": raw, "proxy": proxy, "line": p, "latency": 0, "status": "OK"}
 
     parts = remainder.split(":")
     if len(parts) == 4:
         ip, port, user, pwd = parts
-        return {"raw": f"{ip}:{port}", "proxy": f"{actual_scheme}://{user}:{pwd}@{ip}:{port}", "latency": 0, "status": "OK"}
+        return {"raw": f"{ip}:{port}", "proxy": f"{actual_scheme}://{user}:{pwd}@{ip}:{port}", "line": p, "latency": 0, "status": "OK"}
     elif len(parts) == 2:
         ip, port = parts
-        return {"raw": f"{ip}:{port}", "proxy": f"{actual_scheme}://{ip}:{port}", "latency": 0, "status": "OK"}
+        return {"raw": f"{ip}:{port}", "proxy": f"{actual_scheme}://{ip}:{port}", "line": p, "latency": 0, "status": "OK"}
     return None
 
 def load_proxies():

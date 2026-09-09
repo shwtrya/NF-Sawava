@@ -1776,32 +1776,43 @@ async function removeFailProxies() {
     });
     if (!res.ok) return;
     const d = await res.json();
-  const currentList = d.list || [];
-  if (currentList.length === 0) {
-    showToast('Tidak ada proxy untuk dibersihkan');
-    return;
-  }
-  const okList = currentList.filter(p => p.status === 'OK');
-  if (okList.length === currentList.length && currentList.every(p => p.status === 'OK' && p.latency > 0)) {
-    showToast('Semua proxy berstatus OK');
-    return;
-  }
-  // Filter raw text lines
-  const rawLines = (d.raw_text || '').split('\n');
-  const keptLines = [];
-  for (const line of rawLines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) {
-      keptLines.push(line);
-      continue;
+    const currentList = d.list || [];
+    if (currentList.length === 0) {
+      showToast('Tidak ada proxy untuk dibersihkan');
+      return;
     }
-    const isOk = okList.some(p => trimmed.startsWith(p.raw));
-    if (isOk) keptLines.push(line);
-  }
-  const newText = keptLines.join('\n');
-  document.getElementById('proxies-input').value = newText;
-  await saveProxiesList();
-  showToast(`Dibersihkan: ${currentList.length - okList.length} proxy FAIL dibuang`);
+    const deadList = currentList.filter(p => p.status === 'FAIL');
+    if (deadList.length === 0) {
+      showToast('Tidak ada proxy berstatus FAIL / DEAD');
+      return;
+    }
+
+    // Identify which lines or raw endpoints failed
+    const deadIdentifiers = new Set();
+    deadList.forEach(p => {
+      if (p.raw) deadIdentifiers.add(p.raw);
+      if (p.line) deadIdentifiers.add(p.line);
+    });
+
+    // Filter raw text lines
+    const rawLines = (d.raw_text || '').split('\n');
+    const keptLines = [];
+    for (const line of rawLines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) {
+        keptLines.push(line);
+        continue;
+      }
+      // Check if this line matches any dead proxy
+      const isDead = deadList.some(p => {
+        return (p.raw && trimmed.includes(p.raw)) || (p.line && trimmed === p.line);
+      });
+      if (!isDead) keptLines.push(line);
+    }
+    const newText = keptLines.join('\n');
+    document.getElementById('proxies-input').value = newText;
+    await saveProxiesList();
+    showToast(`Dibersihkan: ${deadList.length} proxy FAIL dibuang`);
   } catch(e) {
     console.error(e);
   }
