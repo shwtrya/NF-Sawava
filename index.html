@@ -1291,25 +1291,27 @@ function parseCookieInputs(text) {
   if (!text) return [];
   text = text.trim();
 
-  // Pattern 1: Multi-account structured blocks with 'HIT #' or 'Account Details'
-  if (text.includes('HIT #') || text.includes('Account Details:') || text.includes('• Cookie:')) {
-    const blocks = text.split(/(?:={10,}\s*HIT\s*#\d+\s*={10,}|={20,})/gi);
-    const payloads = [];
-    for (const b of blocks) {
-      const s = b.trim();
+  // Pattern 0: Hit blocks like 'HIT #1' or 'Account Details:'
+  if (text.indexOf('HIT #') !== -1 || text.indexOf('Account Details:') !== -1 || text.indexOf('Cookie:') !== -1) {
+    const hits = text.split(/={10,}/);
+    const hitsPayloads = [];
+    for (let i = 0; i < hits.length; i++) {
+      const s = hits[i].trim();
       if (!s) continue;
-      const m = s.match(/(?:•\s*Cookie:\s*|Cookie:\s*)([^
-\n]+)/i);
-      if (m && m[1].includes('NetflixId')) {
-        payloads.push(m[1].trim());
-      } else if (s.includes('NetflixId')) {
-        payloads.push(s);
+      const lines = s.split('\n');
+      for (let j = 0; j < lines.length; j++) {
+        const line = lines[j];
+        if (line.indexOf('Cookie:') !== -1 && line.indexOf('NetflixId') !== -1) {
+          const cookiePart = line.substring(line.indexOf('NetflixId')).trim();
+          hitsPayloads.push(cookiePart);
+          break;
+        }
       }
     }
-    if (payloads.length > 0) return payloads;
+    if (hitsPayloads.length > 0) return hitsPayloads;
   }
 
-  // Pattern 2: Multi-account structured blocks (e.g. NETFLIX ACCOUNT DETAILS ... COOKIE [...])
+  // Pattern 1: Multi-account structured blocks (e.g. NETFLIX ACCOUNT DETAILS ... COOKIE [...])
   if (text.includes('NETFLIX ACCOUNT DETAILS') || text.includes('COOKIE (browser import')) {
     const blocks = text.split(/(?:█{5,}|═{5,}\s*\n(?=NETFLIX ACCOUNT DETAILS)|-{10,})/g);
     const payloads = [];
@@ -1326,7 +1328,7 @@ function parseCookieInputs(text) {
     if (payloads.length > 0) return payloads;
   }
 
-  // Pattern 3: Multiple JSON arrays separated by newlines or text
+  // Pattern 2: Multiple JSON arrays separated by newlines
   if (text.includes('[{') && text.includes('}]')) {
     const jsonMatches = text.match(/\[\s*\{[\s\S]*?\}\s*\]/g);
     if (jsonMatches && jsonMatches.length > 1) {
@@ -1334,18 +1336,10 @@ function parseCookieInputs(text) {
     }
   }
 
-  // Pattern 4: Netscape multi-cookies separated by blank lines / boundaries
-  if (text.includes('.netflix.com') && text.includes('\t')) {
-    const netscapeBlocks = text.split(/\n\s*\n/);
-    if (netscapeBlocks.length > 1) {
-      return netscapeBlocks.map(b => b.trim()).filter(b => b.includes('NetflixId'));
-    }
-  }
-
-  // Pattern 5: Line-by-line cookies (raw string, json per line, single netscape)
+  // Pattern 3: Line-by-line cookies (raw string, json per line, netscape)
   return text.split('\n')
     .map(l => l.trim())
-    .filter(l => l && !l.startsWith('#') && !l.startsWith('[{CHECK') && !l.startsWith('TIME:') && !l.startsWith('Generated:') && !l.startsWith('Hits:'));
+    .filter(l => l && !l.startsWith('#') && !l.startsWith('[{CHECK') && !l.startsWith('TIME:'));
 }
 
 async function runBulk() {
@@ -1360,8 +1354,7 @@ async function runBulk() {
   let duplicates = 0;
   for (const l of rawLines) {
     // extract key or fingerprint
-    const m = l.match(/NetflixId=([^;,
-\n\s]+)/) || l.match(/"name":\s*"NetflixId"[^}]*?"value":\s*"([^"]+)"/);
+    const m = l.match(/NetflixId=([^;]+)/) || l.match(/"name":\s*"NetflixId"[^}]*?"value":\s*"([^"]+)"/);
     const key = m ? m[1] : l;
     if (seen.has(key)) {
       duplicates++;
