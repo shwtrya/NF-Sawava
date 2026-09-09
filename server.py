@@ -281,34 +281,63 @@ def clear_history(only_dead=False):
         conn.commit()
         conn.close()
 
+def parse_single_proxy(line):
+    p = line.strip()
+    if not p or p.startswith("#"):
+        return None
+    scheme = None
+    if "://" in p:
+        scheme, remainder = p.split("://", 1)
+        scheme = scheme.lower()
+    else:
+        remainder = p
+
+    # Format user:pass@ip:port
+    if "@" in remainder:
+        auth_part, netloc = remainder.split("@", 1)
+        netloc_parts = netloc.split(":")
+        raw = f"{netloc_parts[0]}:{netloc_parts[1]}"
+        proxy = f"{scheme or 'http'}://{auth_part}@{netloc}"
+        return {"raw": raw, "proxy": proxy, "latency": 0, "status": "OK"}
+
+    parts = remainder.split(":")
+    if len(parts) == 4:
+        ip, port, user, pwd = parts
+        return {"raw": f"{ip}:{port}", "proxy": f"{scheme or 'http'}://{user}:{pwd}@{ip}:{port}", "latency": 0, "status": "OK"}
+    elif len(parts) == 2:
+        ip, port = parts
+        return {"raw": f"{ip}:{port}", "proxy": f"{scheme or 'http'}://{ip}:{port}", "latency": 0, "status": "OK"}
+    return None
+
 def load_proxies():
     if not os.path.exists(PROXIES_FILE):
         return []
     res = []
     with open(PROXIES_FILE, "r", encoding="utf-8", errors="ignore") as f:
         for line in f:
-            p = line.strip()
-            if not p or p.startswith("#"):
-                continue
-            parts = p.split(":")
-            if len(parts) == 4:
-                ip, port, user, pwd = parts
-                res.append({"raw": f"{ip}:{port}", "proxy": f"http://{user}:{pwd}@{ip}:{port}", "latency": 0, "status": "OK"})
-            elif len(parts) == 2:
-                ip, port = parts
-                res.append({"raw": f"{ip}:{port}", "proxy": f"http://{ip}:{port}", "latency": 0, "status": "OK"})
+            item = parse_single_proxy(line)
+            if item:
+                res.append(item)
     return res
 
 def check_proxy_health(p):
     t0 = time.time()
-    try:
-        proxies = {"http": p["proxy"], "https": p["proxy"]}
-        r = requests.get("https://www.netflix.com/favicon.ico", proxies=proxies, timeout=5, verify=False)
-        if r.status_code in (200, 301, 302, 404):
-            latency = int((time.time() - t0) * 1000)
-            return True, latency
-    except Exception:
-        pass
+    candidates = [p["proxy"]]
+    if p["proxy"].startswith("http://"):
+        candidates.append("https://" + p["proxy"][7:])
+    elif p["proxy"].startswith("https://"):
+        candidates.append("http://" + p["proxy"][8:])
+
+    for prx in candidates:
+        try:
+            proxies = {"http": prx, "https": prx}
+            r = requests.get("https://www.netflix.com/favicon.ico", proxies=proxies, timeout=5, verify=False)
+            if r.status_code in (200, 301, 302, 404):
+                p["proxy"] = prx
+                latency = int((time.time() - t0) * 1000)
+                return True, latency
+        except Exception:
+            pass
     return False, 0
 
 def proxy_health_worker():

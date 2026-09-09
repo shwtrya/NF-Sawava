@@ -1,3 +1,10 @@
-# Masukkan proxy Webshare per baris (opsional)
-# Format: ip:port:username:password atau ip:port
+# Masukkan proxy per baris (opsional)
+# Format yang didukung:
+# - ip:port (contoh: 84.17.47.150:9002)
+# - http://ip:port atau https://ip:port
+# - ip:port:username:password (contoh: 31.59.20.176:6754:user:pass)
+# - http://user:pass@ip:port
 31.59.20.176:6754:username:password
+http://84.17.47.150:9002
+https://84.17.47.150:9002
+

@@ -34,6 +34,10 @@ http://localhost:8080
 Buat file `netflix_proxies.txt` di satu folder dengan `server.py` jika ingin menggunakan rotasi proxy:
 ```text
 ip:port:username:password
+http://ip:port
+https://ip:port
+ip:port
+http://user:pass@ip:port
 ```
 
 Jika file tidak ada atau opsi dimatikan di UI, server otomatis memakai koneksi direct.
