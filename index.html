@@ -933,7 +933,7 @@ tbody tr:hover {
         <button class="btn-secondary" onclick="testAllProxies()">Test Ping Semua</button>
       </div>
     </div>
-    <textarea id="proxies-input" style="height:150px;" placeholder="http://ip:port&#10;https://ip:port&#10;ip:port&#10;ip:port:user:pass" oninput="updateProxyLineCount()"></textarea>
+    <textarea id="proxies-input" style="height:150px;" placeholder="http://ip:port&#10;https://ip:port&#10;socks5://ip:port&#10;socks4://ip:port&#10;ip:port:user:pass" oninput="updateProxyLineCount()"></textarea>
     <button class="btn-primary" onclick="saveProxiesList()" style="margin-bottom:16px;">Simpan Proxy List</button>
     <div class="table-wrap">
       <table>

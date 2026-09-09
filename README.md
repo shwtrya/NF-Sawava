@@ -36,8 +36,11 @@ Buat file `netflix_proxies.txt` di satu folder dengan `server.py` jika ingin men
 ip:port:username:password
 http://ip:port
 https://ip:port
+socks5://ip:port
+socks4://ip:port
 ip:port
 http://user:pass@ip:port
+socks5://user:pass@ip:port
 ```
 
 Jika file tidak ada atau opsi dimatikan di UI, server otomatis memakai koneksi direct.

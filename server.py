@@ -293,21 +293,24 @@ def parse_single_proxy(line):
     else:
         remainder = p
 
+    # Default scheme is http if not specified
+    actual_scheme = scheme or "http"
+
     # Format user:pass@ip:port
     if "@" in remainder:
         auth_part, netloc = remainder.split("@", 1)
         netloc_parts = netloc.split(":")
         raw = f"{netloc_parts[0]}:{netloc_parts[1]}"
-        proxy = f"{scheme or 'http'}://{auth_part}@{netloc}"
+        proxy = f"{actual_scheme}://{auth_part}@{netloc}"
         return {"raw": raw, "proxy": proxy, "latency": 0, "status": "OK"}
 
     parts = remainder.split(":")
     if len(parts) == 4:
         ip, port, user, pwd = parts
-        return {"raw": f"{ip}:{port}", "proxy": f"{scheme or 'http'}://{user}:{pwd}@{ip}:{port}", "latency": 0, "status": "OK"}
+        return {"raw": f"{ip}:{port}", "proxy": f"{actual_scheme}://{user}:{pwd}@{ip}:{port}", "latency": 0, "status": "OK"}
     elif len(parts) == 2:
         ip, port = parts
-        return {"raw": f"{ip}:{port}", "proxy": f"{scheme or 'http'}://{ip}:{port}", "latency": 0, "status": "OK"}
+        return {"raw": f"{ip}:{port}", "proxy": f"{actual_scheme}://{ip}:{port}", "latency": 0, "status": "OK"}
     return None
 
 def load_proxies():
@@ -330,11 +333,15 @@ def check_proxy_health(p):
         candidates.append("https://" + p["proxy"][7:])
     elif p["proxy"].startswith("https://"):
         candidates.append("http://" + p["proxy"][8:])
+    elif p["proxy"].startswith("socks5://"):
+        candidates.append("socks5h://" + p["proxy"][9:])
+    elif p["proxy"].startswith("socks4://"):
+        candidates.append("socks4a://" + p["proxy"][9:])
 
     for prx in candidates:
         try:
             proxies = {"http": prx, "https": prx}
-            r = requests.get("https://www.netflix.com/favicon.ico", proxies=proxies, timeout=5, verify=False)
+            r = requests.get("https://www.netflix.com/favicon.ico", proxies=proxies, timeout=6, verify=False)
             if r.status_code in (200, 301, 302, 404):
                 p["proxy"] = prx
                 latency = int((time.time() - t0) * 1000)
