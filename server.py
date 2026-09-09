@@ -463,7 +463,7 @@ def extract_cookie_values(text):
 
     for k in COOKIE_KEYS:
         if k not in cookie_dict:
-            m = re.search(rf"(?<!\w){re.escape(k)}=([^;,\s]+)", text)
+            m = re.search(rf"(?:•\s*Cookie:\s*|[;\s]|^){re.escape(k)}=([^;,\r\n\s]+)", text)
             if m:
                 v = m.group(1)
                 cookie_dict[k] = urllib.parse.unquote(v) if "%" in v else v
