@@ -10,3 +10,4 @@ netflix_suite.db-wal
 netflix_suite.db-shm
 *.log
 suite.log
+start.bat
