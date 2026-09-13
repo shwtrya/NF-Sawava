@@ -31,6 +31,10 @@
   --live-bg: rgba(16, 185, 129, 0.1);
   --live-border: rgba(16, 185, 129, 0.3);
 
+  --hold: #f59e0b;
+  --hold-bg: rgba(245, 158, 11, 0.1);
+  --hold-border: rgba(245, 158, 11, 0.3);
+
   --dead: #f43f5e;
   --dead-bg: rgba(244, 63, 94, 0.1);
   --dead-border: rgba(244, 63, 94, 0.3);
@@ -401,6 +405,11 @@ textarea {
   border-color: var(--live-border);
 }
 
+.card-out.hold {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.08) 0%, rgba(245, 158, 11, 0.02) 100%);
+  border-color: var(--hold-border);
+}
+
 .card-out.dead {
   background: linear-gradient(180deg, rgba(244, 63, 94, 0.08) 0%, rgba(244, 63, 94, 0.02) 100%);
   border-color: var(--dead-border);
@@ -563,6 +572,19 @@ tbody tr:hover {
   color: var(--live);
   background: var(--live-bg);
   border: 1px solid var(--live-border);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.tag-hold {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--hold);
+  background: var(--hold-bg);
+  border: 1px solid var(--hold-border);
   padding: 2px 8px;
   border-radius: 999px;
   font-weight: 700;
@@ -854,6 +876,10 @@ tbody tr:hover {
         <div class="num" id="stat-live" style="color:var(--live)">0</div>
       </div>
       <div class="stat-pill">
+        <div class="label" style="color:var(--hold)">Hold</div>
+        <div class="num" id="stat-hold" style="color:var(--hold)">0</div>
+      </div>
+      <div class="stat-pill">
         <div class="label" style="color:var(--accent-4k)">4K Ultra</div>
         <div class="num" id="stat-4k" style="color:var(--accent-4k)">0</div>
       </div>
@@ -867,11 +893,13 @@ tbody tr:hover {
         <span style="font-size:12px; font-weight:600; color:var(--text-muted); margin-right:4px;">Filter:</span>
         <button id="btn-filter-all" class="btn-secondary" style="padding:4px 10px; font-size:11px; background:var(--bg-subtle);" onclick="setBulkFilter('ALL')">Semua</button>
         <button id="btn-filter-live" class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="setBulkFilter('LIVE')">Hanya LIVE</button>
+        <button id="btn-filter-hold" class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="setBulkFilter('HOLD')">HOLD</button>
         <button id="btn-filter-4k" class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="setBulkFilter('4K')">4K Ultra</button>
         <button id="btn-filter-dead" class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="setBulkFilter('DEAD')">DEAD</button>
       </div>
       <div style="display:flex; gap:8px;">
-        <button class="btn-secondary" onclick="exportBulk('txt')">Export Live (TXT)</button>
+        <button class="btn-secondary" onclick="exportBulk('txt', 'LIVE')">Export Live (TXT)</button>
+        <button class="btn-secondary" style="color:var(--hold); border-color:var(--hold-border);" onclick="exportBulk('txt', 'HOLD')">Export Hold (TXT)</button>
         <button class="btn-secondary" onclick="exportBulk('json')">Export Live (JSON)</button>
       </div>
     </div>
@@ -892,6 +920,7 @@ tbody tr:hover {
       <select id="hist-filter-status" onchange="resetPageAndLoad()" style="flex:1; margin-bottom:0;">
         <option value="">Semua Status</option>
         <option value="LIVE">Hanya LIVE</option>
+        <option value="HOLD">Hanya HOLD</option>
         <option value="DEAD">Hanya DEAD</option>
       </select>
       <select id="hist-filter-plan" onchange="resetPageAndLoad()" style="flex:1; margin-bottom:0;">
@@ -1089,6 +1118,9 @@ function playAlert(type) {
     if (type === '4k') {
       osc.frequency.setValueAtTime(880, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.15);
+    } else if (type === 'hold') {
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(330, ctx.currentTime + 0.18);
     } else {
       osc.frequency.setValueAtTime(587.33, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
@@ -1181,8 +1213,11 @@ async function runSingle() {
     });
     const d = await res.json();
 
-    if (!d.live) throw new Error(d.reason || 'Akun Dead / Tidak Valid');
-    if (d.plan && d.plan.includes('4K')) playAlert('4k'); else playAlert('live');
+    if (!d.live && d.status !== 'HOLD' && !d.is_hold) throw new Error(d.reason || 'Akun Dead / Tidak Valid');
+    const isHold = (d.status === 'HOLD' || d.is_hold);
+    if (isHold) playAlert('hold');
+    else if (d.plan && d.plan.includes('4K')) playAlert('4k');
+    else playAlert('live');
 
     let tokUrl = '';
     let androidUrl = '';
@@ -1217,17 +1252,23 @@ async function runSingle() {
       tvUrl = launch.tv;
     }
 
-    out.className = 'card-out live';
+    out.className = isHold ? 'card-out hold' : 'card-out live';
     out.innerHTML = `
-      <div class="card-header-status" style="color:var(--live);">
-        <span>✓</span> <span>Akun Live & Token Siap</span>
+      <div class="card-header-status" style="color:${isHold ? 'var(--hold)' : 'var(--live)'};">
+        <span>${isHold ? '⏸' : '✓'}</span> <span>${isHold ? 'Akun On Hold / Membership Paused' : 'Akun Live & Token Siap'}</span>
       </div>
+
+      ${isHold ? `
+      <div style="background:rgba(245, 158, 11, 0.12); border:1px solid rgba(245, 158, 11, 0.3); color:#fcd34d; padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:12px; font-size:12px; display:flex; align-items:center; gap:8px;">
+        <span>⚠️</span> <span><strong>Membership Paused:</strong> Akun ini dalam status hold / pembayaran dijeda. Perlu metode pembayaran baru untuk melanjutkan streaming.</span>
+      </div>
+      ` : ''}
 
       <div class="grid-meta">
         <div class="meta-box"><span>Email</span><strong style="color:#fff">${d.email || 'Netflix Member'}</strong></div>
         <div class="meta-box"><span>Plan</span><strong style="color:var(--accent-4k)">${d.plan}</strong></div>
         <div class="meta-box"><span>Country</span><strong>${d.country}</strong></div>
-        <div class="meta-box"><span>Billing / Status</span><strong>${d.billing}</strong></div>
+        <div class="meta-box"><span>Billing / Status</span><strong style="${isHold ? 'color:var(--hold)' : ''}">${d.billing}</strong></div>
         <div class="meta-box"><span>Profiles</span><strong>${(d.profiles && d.profiles.length) ? d.profiles.join(', ') : 'None'}</strong></div>
         <div class="meta-box"><span>Route</span><strong>${d.route}</strong></div>
       </div>
@@ -1377,8 +1418,12 @@ async function runBulk() {
   document.getElementById('bulk-progress').style.display = 'block';
   document.getElementById('bulk-tbody').innerHTML = '';
 
-  let live = 0, fourk = 0, dead = 0, completed = 0;
+  let live = 0, fourk = 0, hold = 0, dead = 0, completed = 0;
   document.getElementById('stat-total').innerText = lines.length;
+  document.getElementById('stat-live').innerText = '0';
+  document.getElementById('stat-hold').innerText = '0';
+  document.getElementById('stat-4k').innerText = '0';
+  document.getElementById('stat-dead').innerText = '0';
 
   let currentIndex = 0;
 
@@ -1397,8 +1442,14 @@ async function runBulk() {
         const item = { index: idx + 1, raw: line, ...d };
         bulkResults.push(item);
 
-        if (d.live) {
+        if (d.status === 'HOLD' || d.is_hold) {
+          hold++;
+          item.status = 'HOLD';
+          item.is_hold = true;
+          playAlert('hold');
+        } else if (d.live) {
           live++;
+          item.status = 'LIVE';
           const isUltra = (d.plan && (d.plan.includes('4K') || d.plan.includes('ULTRA')));
           if (isUltra) {
             fourk++;
@@ -1408,11 +1459,12 @@ async function runBulk() {
           }
         } else {
           dead++;
+          item.status = 'DEAD';
         }
         appendBulkRow(item);
       } catch(e) {
         dead++;
-        appendBulkRow({ index: idx + 1, live: false, plan: e.message || 'Error', billing: '-', country: '-', route: '-' });
+        appendBulkRow({ index: idx + 1, status: 'DEAD', live: false, plan: e.message || 'Error', billing: '-', country: '-', route: '-' });
       }
 
       completed++;
@@ -1422,6 +1474,7 @@ async function runBulk() {
       document.getElementById('progress-fill').style.width = `${pct}%`;
 
       document.getElementById('stat-live').innerText = live;
+      document.getElementById('stat-hold').innerText = hold;
       document.getElementById('stat-4k').innerText = fourk;
       document.getElementById('stat-dead').innerText = dead;
     }
@@ -1432,8 +1485,8 @@ async function runBulk() {
 
   bulkRunning = false;
   document.getElementById('bulk-btn').disabled = false;
-  notifyBrowser('Bulk Check Selesai', `Total: ${lines.length} | Live: ${live} | 4K: ${fourk}`);
-  showToast(`Bulk Check Selesai: ${live} Live / ${lines.length}`);
+  notifyBrowser('Bulk Check Selesai', `Total: ${lines.length} | Live: ${live} | Hold: ${hold} | 4K: ${fourk}`);
+  showToast(`Bulk Check Selesai: ${live} Live, ${hold} Hold, ${dead} Dead`);
 }
 
 function stopBulk() {
@@ -1485,7 +1538,7 @@ function detectSingleCookieFormat() {
 // Bulk check row filter
 function setBulkFilter(filter) {
   bulkFilter = filter;
-  ['all', 'live', '4k', 'dead'].forEach(f => {
+  ['all', 'live', 'hold', '4k', 'dead'].forEach(f => {
     const el = document.getElementById(`btn-filter-${f}`);
     if (el) el.style.background = (filter.toLowerCase() === f) ? 'var(--bg-subtle)' : 'transparent';
   });
@@ -1496,10 +1549,13 @@ function renderBulkFilteredRows() {
   const tbody = document.getElementById('bulk-tbody');
   tbody.innerHTML = '';
   const filtered = bulkResults.filter(item => {
+    const isHold = (item.status === 'HOLD' || item.is_hold);
+    const isLive = (item.status === 'LIVE' || (item.live && !isHold));
     if (bulkFilter === 'ALL') return true;
-    if (bulkFilter === 'LIVE') return item.live;
-    if (bulkFilter === 'DEAD') return !item.live;
-    if (bulkFilter === '4K') return item.live && (item.plan && (item.plan.includes('4K') || item.plan.includes('ULTRA')));
+    if (bulkFilter === 'LIVE') return isLive;
+    if (bulkFilter === 'HOLD') return isHold;
+    if (bulkFilter === 'DEAD') return (!isLive && !isHold);
+    if (bulkFilter === '4K') return isLive && (item.plan && (item.plan.includes('4K') || item.plan.includes('ULTRA')));
     return true;
   });
   filtered.forEach(item => {
@@ -1516,14 +1572,21 @@ function createBulkRowElement(item) {
   const androidUrl = launch.android;
   const tvUrl = launch.tv;
 
+  const isHold = (item.status === 'HOLD' || item.is_hold);
+  const isLive = (item.status === 'LIVE' || (item.live && !isHold));
+
+  let badge = '<span class="tag-dead">✕ DEAD</span>';
+  if (isHold) badge = '<span class="tag-hold">⏸ HOLD</span>';
+  else if (isLive) badge = '<span class="tag-live">● LIVE</span>';
+
   tr.innerHTML = `
     <td>${item.index}</td>
-    <td><span class="${item.live ? 'tag-live' : 'tag-dead'}">${item.live ? '● LIVE' : '✕ DEAD'}</span></td>
+    <td>${badge}</td>
     <td style="${item.plan && (item.plan.includes('4K') || item.plan.includes('ULTRA')) ? 'color:var(--accent-4k); font-weight:700;' : ''}">${item.plan || '-'}</td>
-    <td>${item.billing || '-'}</td>
+    <td style="${isHold ? 'color:var(--hold);' : ''}">${item.billing || '-'}</td>
     <td>${item.country || '-'}</td>
     <td>
-      ${item.live ? `
+      ${(isLive || isHold) ? `
         <div style="display:flex; gap:4px; align-items:center;">
           ${browserUrl ? `<a href="${browserUrl}" target="_blank" class="btn-outline-sm" style="color:#38bdf8; text-decoration:none; padding:2px 6px; font-size:11px;">Browser</a>` : ''}
           ${androidUrl ? `<a href="${androidUrl}" target="_blank" class="btn-outline-sm" style="color:#4ade80; text-decoration:none; padding:2px 6px; font-size:11px;">Android</a>` : ''}
@@ -1537,11 +1600,13 @@ function createBulkRowElement(item) {
 }
 
 function appendBulkRow(item) {
-  // Check if item matches current filter
+  const isHold = (item.status === 'HOLD' || item.is_hold);
+  const isLive = (item.status === 'LIVE' || (item.live && !isHold));
   let visible = true;
-  if (bulkFilter === 'LIVE') visible = item.live;
-  else if (bulkFilter === 'DEAD') visible = !item.live;
-  else if (bulkFilter === '4K') visible = item.live && (item.plan && (item.plan.includes('4K') || item.plan.includes('ULTRA')));
+  if (bulkFilter === 'LIVE') visible = isLive;
+  else if (bulkFilter === 'HOLD') visible = isHold;
+  else if (bulkFilter === 'DEAD') visible = (!isLive && !isHold);
+  else if (bulkFilter === '4K') visible = isLive && (item.plan && (item.plan.includes('4K') || item.plan.includes('ULTRA')));
   
   if (visible) {
     const tbody = document.getElementById('bulk-tbody');
@@ -1550,16 +1615,26 @@ function appendBulkRow(item) {
   }
 }
 
-function exportBulk(type) {
-  const lives = bulkResults.filter(r => r.live);
-  if (lives.length === 0) { showToast('Belum ada akun LIVE untuk diexport'); return; }
+function exportBulk(type, targetStatus = 'LIVE') {
+  let list = [];
+  if (targetStatus === 'HOLD') {
+    list = bulkResults.filter(r => r.status === 'HOLD' || r.is_hold);
+  } else {
+    list = bulkResults.filter(r => r.status === 'LIVE' || (r.live && r.status !== 'HOLD' && !r.is_hold));
+  }
+
+  if (list.length === 0) {
+    showToast(`Belum ada akun ${targetStatus} untuk diexport`);
+    return;
+  }
 
   let blob, filename;
+  const prefix = targetStatus.toLowerCase();
   if (type === 'txt') {
-    const lines = lives.map((r, i) => {
+    const lines = list.map((r, i) => {
       const tok = r.token_data || {};
       const launch = buildLaunchLinks(tok.token || tok.url || tok.browser_url);
-      let block = `[${i+1}] Plan: ${r.plan || '-'} | Billing: ${r.billing || '-'} | Country: ${r.country || '-'}\n`;
+      let block = `[${i+1}] [${r.status || targetStatus}] Plan: ${r.plan || '-'} | Billing: ${r.billing || '-'} | Country: ${r.country || '-'}\n`;
       if (r.email && r.email !== 'Account Valid') block += `Email  : ${r.email}\n`;
       if (r.profiles && r.profiles.length) block += `Profile: ${r.profiles.join(', ')}\n`;
       if (launch.browser) block += `Browser: ${launch.browser}\n`;
@@ -1569,9 +1644,9 @@ function exportBulk(type) {
       return block;
     });
     blob = new Blob([lines.join('\n')], {type: 'text/plain;charset=utf-8'});
-    filename = `netflix_live_${Date.now()}.txt`;
+    filename = `netflix_${prefix}_${Date.now()}.txt`;
   } else {
-    const enriched = lives.map(r => {
+    const enriched = list.map(r => {
       const tok = r.token_data || {};
       const launch = buildLaunchLinks(tok.token || tok.url || tok.browser_url);
       return {
@@ -1580,7 +1655,7 @@ function exportBulk(type) {
       };
     });
     blob = new Blob([JSON.stringify(enriched, null, 2)], {type: 'application/json;charset=utf-8'});
-    filename = `netflix_live_${Date.now()}.json`;
+    filename = `netflix_${prefix}_${Date.now()}.json`;
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1661,7 +1736,7 @@ function renderHistoryTable(data) {
     <tr>
       <td style="color:var(--text-muted); font-family:'JetBrains Mono', monospace; font-size:11px;">${r.created_at}</td>
       <td style="font-weight:600;">${r.type.toUpperCase()}</td>
-      <td><span class="${r.status === 'LIVE' ? 'tag-live' : 'tag-dead'}">${r.status === 'LIVE' ? '● LIVE' : '✕ DEAD'}</span></td>
+      <td><span class="${r.status === 'LIVE' ? 'tag-live' : (r.status === 'HOLD' ? 'tag-hold' : 'tag-dead')}">${r.status === 'LIVE' ? '● LIVE' : (r.status === 'HOLD' ? '⏸ HOLD' : '✕ DEAD')}</span></td>
       <td style="${r.plan && r.plan.includes('4K') ? 'color:var(--accent-4k); font-weight:700;' : ''}">${r.plan || '-'}</td>
       <td>${r.billing || '-'}</td>
       <td>${r.country || '-'}</td>
@@ -1858,10 +1933,10 @@ async function loadAnalytics() {
   chartStatusObj = new Chart(ctxStatus, {
     type: 'doughnut',
     data: {
-      labels: ['LIVE', 'DEAD'],
+      labels: ['LIVE', 'HOLD', 'DEAD'],
       datasets: [{
-        data: [d.status_counts.LIVE || 0, d.status_counts.DEAD || 0],
-        backgroundColor: ['#10b981', '#f43f5e'],
+        data: [d.status_counts.LIVE || 0, d.status_counts.HOLD || 0, d.status_counts.DEAD || 0],
+        backgroundColor: ['#10b981', '#f59e0b', '#f43f5e'],
         borderWidth: 0
       }]
     },

@@ -264,7 +264,7 @@ def get_analytics():
         status_counts = dict(c.fetchall())
         c.execute('SELECT country, COUNT(*) FROM history WHERE country != "" AND country != "Unknown" GROUP BY country ORDER BY COUNT(*) DESC LIMIT 8')
         country_counts = dict(c.fetchall())
-        c.execute('SELECT plan, COUNT(*) FROM history WHERE status = "LIVE" AND plan != "" GROUP BY plan ORDER BY COUNT(*) DESC LIMIT 6')
+        c.execute('SELECT plan, COUNT(*) FROM history WHERE (status = "LIVE" OR status = "HOLD") AND plan != "" GROUP BY plan ORDER BY COUNT(*) DESC LIMIT 6')
         plan_counts = dict(c.fetchall())
         conn.close()
         return {"status_counts": status_counts, "country_counts": country_counts, "plan_counts": plan_counts}
@@ -585,9 +585,42 @@ def check_netflix_membership(cookie_text, use_proxy=True):
 
             if "login" in r.url.lower() or r.status_code in (401, 403) or 'data-uia="login-page"' in r.text:
                 save_history("checker", "DEAD", route=route, raw_cookie=cookie_text)
-                return {"live": False, "reason": "Cookie Expired / Terlempar ke Login.", "route": route}
+                return {"live": False, "status": "DEAD", "reason": "Cookie Expired / Terlempar ke Login.", "route": route}
 
             html = r.text
+
+            # 0. ON HOLD / MEMBERSHIP PAUSED DETECTION
+            is_hold = False
+            hold_reason = ""
+            if re.search(r'"isUserOnHold"\s*:\s*true', html, re.I):
+                is_hold = True
+                hold_reason = "isUserOnHold: true"
+            elif re.search(r'"hasFeatureOnlyHold"\s*:\s*true', html, re.I):
+                is_hold = True
+                hold_reason = "hasFeatureOnlyHold: true"
+            elif re.search(r'"serviceEndReason"\s*:\s*"SERVICE_END_[^"]+"', html, re.I):
+                is_hold = True
+                hold_reason = "serviceEndReason: NO_MOP / Paused"
+            elif re.search(r'"isPaused"\s*:\s*\{\s*"fieldType"\s*:\s*"Boolean"\s*,\s*"value"\s*:\s*true', html, re.I):
+                is_hold = True
+                hold_reason = "isPaused: true"
+            elif re.search(r'"isPendingPause"\s*:\s*\{\s*"fieldType"\s*:\s*"Boolean"\s*,\s*"value"\s*:\s*true', html, re.I):
+                is_hold = True
+                hold_reason = "isPendingPause: true"
+            elif re.search(r'"(?:membershipStatus|accountStatus|membership_status)"\s*:\s*"(?:PAUSED|ON_HOLD|HOLD|SUSPENDED|PAYMENT_HOLD)"', html, re.I):
+                is_hold = True
+                hold_reason = "Status enum: HOLD/PAUSED"
+            elif any(k in r.url.lower() for k in ('/simpleupdatepayment', '/updatepayment', '/orderstatus', 'hold', 'paused')):
+                is_hold = True
+                hold_reason = "Redirected to payment/hold URL"
+            elif re.search(r'(?:Your\s+membership\s+is\s+paused|membership\s+is\s+paused|Keanggotaan\s+Anda\s+dijeda|Your\s+account\s+is\s+on\s+hold|membership\s+is\s+on\s+hold|account\s+is\s+on\s+hold|Akun\s+Anda\s+ditangguhkan|Please\s+add\s+your\s+payment\s+information|Tambahkan\s+informasi\s+pembayaran)', html, re.I):
+                is_hold = True
+                hold_reason = "UI Text: Membership Paused / Payment Required"
+            elif re.search(r'data-uia="[^"]*(?:paused-membership|membership-paused|account-paused|membership-hold)[^"]*"', html, re.I):
+                is_hold = True
+                hold_reason = "data-uia: hold/paused marker"
+
+            status = "HOLD" if is_hold else "LIVE"
 
             # 1. PLAN DETECTION
             plan_detected = 'Standard'
@@ -671,7 +704,13 @@ def check_netflix_membership(cookie_text, use_proxy=True):
                     r'data-uia="account-membership-page\+payments-card\+title"[^>]*>Next payment</h3>[^<]*<p[^>]*data-uia="account-membership-page\+payments-card\+description"[^>]*>([^<]+?)</p>',
                     html, re.DOTALL | re.I
                 )
-                billing = date_dom_match.group(1).strip() if date_dom_match else 'Auto-renew active'
+                billing = date_dom_match.group(1).strip() if date_dom_match else ('Auto-renew active' if not is_hold else 'Membership Paused')
+
+            if is_hold:
+                if billing and billing != 'Auto-renew active' and 'HOLD' not in billing:
+                    billing = f"{billing} (HOLD)"
+                elif not billing or billing == 'Auto-renew active':
+                    billing = "Membership Paused"
 
             # 6. MEMBER SINCE
             member_since_match = re.search(r'"memberSince"\s*:\s*"([^"]+)"', html)
@@ -702,10 +741,13 @@ def check_netflix_membership(cookie_text, use_proxy=True):
             ]
 
             tok_link = (nftoken_data.get("url") if nftoken_data else "")
-            save_history("checker", "LIVE", plan=plan_detected, billing=billing, country=country, route=route, token_url=tok_link, raw_cookie=cookie_text)
+            save_history("checker", status, plan=plan_detected, billing=billing, country=country, route=route, token_url=tok_link, raw_cookie=cookie_text)
 
             return {
-                "live": True,
+                "live": not is_hold,
+                "status": status,
+                "is_hold": is_hold,
+                "hold_reason": hold_reason,
                 "email": email,
                 "phone": phone,
                 "plan": plan_detected,
@@ -724,7 +766,7 @@ def check_netflix_membership(cookie_text, use_proxy=True):
                 continue
 
     save_history("checker", "ERROR", route=route, raw_cookie=cookie_text)
-    return {"live": False, "reason": f"Request gagal setelah retry: {str(last_err)}", "route": route}
+    return {"live": False, "status": "ERROR", "reason": f"Request gagal setelah retry: {str(last_err)}", "route": route}
 
 # In-memory sliding window rate limiter
 rate_limit_lock = threading.Lock()
