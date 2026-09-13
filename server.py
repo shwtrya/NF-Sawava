@@ -17,11 +17,12 @@ from urllib3.exceptions import InsecureRequestWarning
 
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PORT = int(os.environ.get("PORT", 8080))
-PROXIES_FILE = "netflix_proxies.txt"
-DB_FILE = "netflix_suite.db"
-CONFIG_FILE = "suite_config.json"
-LOG_FILE = "suite.log"
+PROXIES_FILE = os.path.join(BASE_DIR, "netflix_proxies.txt")
+DB_FILE = os.path.join(BASE_DIR, "netflix_suite.db")
+CONFIG_FILE = os.path.join(BASE_DIR, "suite_config.json")
+LOG_FILE = os.path.join(BASE_DIR, "suite.log")
 API_URL = "https://ios.prod.ftl.netflix.com/iosui/user/15.48"
 
 # Setup logging
@@ -94,6 +95,77 @@ COUNTRY_CODE_NAMES = {
     'US': 'United States', 'VN': 'Vietnam',
 }
 
+def extract_cookie_values(text):
+    cookie_dict = {}
+    if not text:
+        return cookie_dict
+
+    text = str(text).strip()
+
+    json_match = re.search(r'\[\s*\{[\s\S]*?\}\s*\]', text)
+    if json_match:
+        try:
+            parsed = json.loads(json_match.group(0))
+            if isinstance(parsed, list):
+                for c in parsed:
+                    if isinstance(c, dict):
+                        n, v = c.get("name"), c.get("value")
+                        if n in COOKIE_KEYS and isinstance(v, str):
+                            cookie_dict[n] = urllib.parse.unquote(v) if "%" in v else v
+        except Exception:
+            pass
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or line.startswith("═") or line.startswith("█") or line.startswith("–"):
+            continue
+        parts = line.split("\t")
+        if len(parts) >= 7:
+            cookie_dict[parts[5]] = parts[6]
+
+    try:
+        data = json.loads(text)
+    except Exception:
+        data = None
+
+    if isinstance(data, list):
+        for c in data:
+            if isinstance(c, dict):
+                n, v = c.get("name"), c.get("value")
+                if n in COOKIE_KEYS and isinstance(v, str):
+                    cookie_dict[n] = urllib.parse.unquote(v) if "%" in v else v
+    elif isinstance(data, dict):
+        for k in COOKIE_KEYS:
+            v = data.get(k)
+            if isinstance(v, str):
+                cookie_dict[k] = urllib.parse.unquote(v) if "%" in v else v
+
+    for k in COOKIE_KEYS:
+        if k not in cookie_dict:
+            m = re.search(rf"(?:•\s*Cookie:\s*|[;\s]|^){re.escape(k)}=([^;,\r\n\s]+)", text)
+            if m:
+                v = m.group(1)
+                cookie_dict[k] = urllib.parse.unquote(v) if "%" in v else v
+
+    for k in list(cookie_dict.keys()):
+        if isinstance(cookie_dict[k], str):
+            cookie_dict[k] = cookie_dict[k].strip().rstrip('.')
+
+    return cookie_dict
+
+def get_cookie_fingerprint(text):
+    if not text:
+        return ""
+    ck = extract_cookie_values(text)
+    nid = ck.get("NetflixId", "")
+    if nid:
+        ct_m = re.search(r'ct=([^&]+)', nid)
+        if ct_m:
+            return f"ct:{ct_m.group(1)}"
+        return f"nid:{nid.strip()}"
+    cleaned = re.sub(r'\s+', '', str(text).strip())
+    return f"raw:{cleaned[:120]}"
+
 db_lock = threading.Lock()
 healthy_proxies = []
 all_tested_proxies = []
@@ -133,9 +205,15 @@ def init_db():
                 country TEXT,
                 route TEXT,
                 token_url TEXT,
-                raw_cookie TEXT
+                raw_cookie TEXT,
+                cookie_key TEXT
             )
         ''')
+        c.execute("PRAGMA table_info(history)")
+        cols = [r[1] for r in c.fetchall()]
+        if "cookie_key" not in cols:
+            c.execute("ALTER TABLE history ADD COLUMN cookie_key TEXT")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_history_cookie_key ON history(cookie_key)")
         conn.commit()
         conn.close()
 
@@ -144,23 +222,74 @@ def save_history(entry_type, status, plan='', billing='', country='', route='', 
         try:
             conn = get_db()
             c = conn.cursor()
-            c.execute('''
-                INSERT INTO history (created_at, type, status, plan, billing, country, route, token_url, raw_cookie)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                entry_type,
-                status,
-                plan,
-                billing,
-                country,
-                route,
-                token_url,
-                raw_cookie
-            ))
+            key = get_cookie_fingerprint(raw_cookie)
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            existing = None
+            if key:
+                c.execute('SELECT id, plan, billing, country, token_url FROM history WHERE cookie_key = ? ORDER BY id DESC LIMIT 1', (key,))
+                existing = c.fetchone()
+            if not existing and raw_cookie:
+                c.execute('SELECT id, plan, billing, country, token_url FROM history WHERE raw_cookie = ? ORDER BY id DESC LIMIT 1', (raw_cookie,))
+                existing = c.fetchone()
+
+            if existing:
+                existing_id, ex_plan, ex_billing, ex_country, ex_token = existing
+                # Preserve existing metadata if current check returns empty (e.g. account died)
+                final_plan = plan if plan else ex_plan
+                final_billing = billing if billing else (ex_billing if status != 'DEAD' else '')
+                final_country = country if country else ex_country
+                final_token = token_url if token_url else (ex_token if status in ('LIVE', 'HOLD') else '')
+
+                c.execute('''
+                    UPDATE history
+                    SET created_at = ?,
+                        type = ?,
+                        status = ?,
+                        plan = ?,
+                        billing = ?,
+                        country = ?,
+                        route = ?,
+                        token_url = ?,
+                        raw_cookie = ?,
+                        cookie_key = ?
+                    WHERE id = ?
+                ''', (
+                    now,
+                    entry_type,
+                    status,
+                    final_plan,
+                    final_billing,
+                    final_country,
+                    route,
+                    final_token,
+                    raw_cookie,
+                    key,
+                    existing_id
+                ))
+                if key:
+                    c.execute('DELETE FROM history WHERE cookie_key = ? AND id != ?', (key, existing_id))
+                logging.info(f"Update history [ID {existing_id}]: [{entry_type}] {status} - Plan: {final_plan} - Country: {final_country}")
+            else:
+                c.execute('''
+                    INSERT INTO history (created_at, type, status, plan, billing, country, route, token_url, raw_cookie, cookie_key)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    now,
+                    entry_type,
+                    status,
+                    plan,
+                    billing,
+                    country,
+                    route,
+                    token_url,
+                    raw_cookie,
+                    key
+                ))
+                logging.info(f"Save history: [{entry_type}] {status} - Plan: {plan} - Country: {country}")
+
             conn.commit()
             conn.close()
-            logging.info(f"Save history: [{entry_type}] {status} - Plan: {plan} - Country: {country}")
         except Exception as e:
             logging.error(f"Error saving history: {e}")
 
@@ -421,65 +550,6 @@ def get_random_proxy():
     choice = random.choice(valid_pool)
     lat_info = f" ({choice.get('latency', 0)}ms)" if choice.get("latency") else ""
     return {"http": choice["proxy"], "https": choice["proxy"]}, f"{choice['raw']}{lat_info}", choice["proxy"]
-
-def extract_cookie_values(text):
-    cookie_dict = {}
-    if not text:
-        return cookie_dict
-
-    text = str(text).strip()
-
-    # If text is a full detail block with embedded JSON (e.g. NETFLIX ACCOUNT DETAILS ... [ { "name": "NetflixId" ... } ])
-    json_match = re.search(r'\[\s*\{[\s\S]*?\}\s*\]', text)
-    if json_match:
-        try:
-            parsed = json.loads(json_match.group(0))
-            if isinstance(parsed, list):
-                for c in parsed:
-                    if isinstance(c, dict):
-                        n, v = c.get("name"), c.get("value")
-                        if n in COOKIE_KEYS and isinstance(v, str):
-                            cookie_dict[n] = urllib.parse.unquote(v) if "%" in v else v
-        except Exception:
-            pass
-
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or line.startswith("═") or line.startswith("█") or line.startswith("–"):
-            continue
-        parts = line.split("\t")
-        if len(parts) >= 7:
-            cookie_dict[parts[5]] = parts[6]
-
-    try:
-        data = json.loads(text)
-    except Exception:
-        data = None
-
-    if isinstance(data, list):
-        for c in data:
-            if isinstance(c, dict):
-                n, v = c.get("name"), c.get("value")
-                if n in COOKIE_KEYS and isinstance(v, str):
-                    cookie_dict[n] = urllib.parse.unquote(v) if "%" in v else v
-    elif isinstance(data, dict):
-        for k in COOKIE_KEYS:
-            v = data.get(k)
-            if isinstance(v, str):
-                cookie_dict[k] = urllib.parse.unquote(v) if "%" in v else v
-
-    for k in COOKIE_KEYS:
-        if k not in cookie_dict:
-            m = re.search(rf"(?:•\s*Cookie:\s*|[;\s]|^){re.escape(k)}=([^;,\r\n\s]+)", text)
-            if m:
-                v = m.group(1)
-                cookie_dict[k] = urllib.parse.unquote(v) if "%" in v else v
-
-    for k in list(cookie_dict.keys()):
-        if isinstance(cookie_dict[k], str):
-            cookie_dict[k] = cookie_dict[k].strip().rstrip('.')
-
-    return cookie_dict
 
 def normalize_country(code):
     if not code:
