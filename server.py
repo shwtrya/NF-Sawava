@@ -662,25 +662,22 @@ def check_netflix_membership(cookie_text, use_proxy=True):
             # 0. ON HOLD / MEMBERSHIP PAUSED DETECTION
             is_hold = False
             hold_reason = ""
-            if re.search(r'"isUserOnHold"\s*:\s*true', html, re.I):
-                is_hold = True
-                hold_reason = "isUserOnHold: true"
-            elif re.search(r'"hasFeatureOnlyHold"\s*:\s*true', html, re.I):
-                is_hold = True
-                hold_reason = "hasFeatureOnlyHold: true"
-            elif re.search(r'"serviceEndReason"\s*:\s*"SERVICE_END_[^"]+"', html, re.I):
-                is_hold = True
-                hold_reason = "serviceEndReason: NO_MOP / Paused"
-            elif re.search(r'"isPaused"\s*:\s*\{\s*"fieldType"\s*:\s*"Boolean"\s*,\s*"value"\s*:\s*true', html, re.I):
+            if re.search(r'"isPaused"\s*:\s*\{\s*"fieldType"\s*:\s*"Boolean"\s*,\s*"value"\s*:\s*true', html, re.I):
                 is_hold = True
                 hold_reason = "isPaused: true"
             elif re.search(r'"isPendingPause"\s*:\s*\{\s*"fieldType"\s*:\s*"Boolean"\s*,\s*"value"\s*:\s*true', html, re.I):
                 is_hold = True
                 hold_reason = "isPendingPause: true"
+            elif re.search(r'"isUserOnHold"\s*:\s*true', html, re.I):
+                is_hold = True
+                hold_reason = "isUserOnHold: true"
+            elif re.search(r'"serviceEndReason"\s*:\s*"SERVICE_END_(?:NO_MOP|MOP_FAILURE|PAYMENT_FAILURE|HOLD|PAUSED)"', html, re.I):
+                is_hold = True
+                hold_reason = "serviceEndReason: payment failure / hold"
             elif re.search(r'"(?:membershipStatus|accountStatus|membership_status)"\s*:\s*"(?:PAUSED|ON_HOLD|HOLD|SUSPENDED|PAYMENT_HOLD)"', html, re.I):
                 is_hold = True
                 hold_reason = "Status enum: HOLD/PAUSED"
-            elif any(k in r.url.lower() for k in ('/simpleupdatepayment', '/updatepayment', '/orderstatus', 'hold', 'paused')):
+            elif any(k in r.url.lower() for k in ('/simpleupdatepayment', '/updatepayment', '/orderstatus')):
                 is_hold = True
                 hold_reason = "Redirected to payment/hold URL"
             elif re.search(r'(?:Your\s+membership\s+is\s+paused|membership\s+is\s+paused|Keanggotaan\s+Anda\s+dijeda|Your\s+account\s+is\s+on\s+hold|membership\s+is\s+on\s+hold|account\s+is\s+on\s+hold|Akun\s+Anda\s+ditangguhkan|Please\s+add\s+your\s+payment\s+information|Tambahkan\s+informasi\s+pembayaran)', html, re.I):
@@ -774,7 +771,13 @@ def check_netflix_membership(cookie_text, use_proxy=True):
                     r'data-uia="account-membership-page\+payments-card\+title"[^>]*>Next payment</h3>[^<]*<p[^>]*data-uia="account-membership-page\+payments-card\+description"[^>]*>([^<]+?)</p>',
                     html, re.DOTALL | re.I
                 )
-                billing = date_dom_match.group(1).strip() if date_dom_match else ('Auto-renew active' if not is_hold else 'Membership Paused')
+                partner_match = re.search(r'Billed through\s+[^<\n"\']+', html, re.I)
+                if date_dom_match:
+                    billing = date_dom_match.group(1).strip()
+                elif partner_match and not is_hold:
+                    billing = partner_match.group(0).strip()
+                else:
+                    billing = 'Auto-renew active' if not is_hold else 'Membership Paused'
 
             if is_hold:
                 if billing and billing != 'Auto-renew active' and 'HOLD' not in billing:
