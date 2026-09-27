@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Netflix Suite Pro — Complete Suite</title>
+<title>NF-Sawava Suite — Netflix & Disney+ Suite</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -46,6 +46,95 @@
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 18px;
+
+  /* Disney+ theme overrides (activated via JS) */
+  --disney: #1ce783;
+  --disney-hover: #15b86a;
+  --disney-glow: rgba(28, 231, 131, 0.25);
+  --disney-gradient: rgba(28, 231, 131, 0.12);
+  --disney-dark: #0a7a42;
+}
+
+/* Disney+ theme class — applied to .container when Disney tab is active */
+.disney-theme {
+  --primary: #1ce783;
+  --primary-hover: #15b86a;
+  --primary-glow: rgba(28, 231, 131, 0.25);
+  --border-focus: #1ce783;
+}
+
+.disney-theme .brand-icon {
+  background: linear-gradient(135deg, #1ce783 0%, #0a7a42 100%) !important;
+}
+
+.disney-theme .tab-btn.active {
+  border-color: rgba(28, 231, 131, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(28, 231, 131, 0.15) !important;
+}
+
+.disney-theme .control-ribbon {
+  border-color: rgba(28, 231, 131, 0.15);
+}
+
+.disney-theme input[type="checkbox"]:checked {
+  accent-color: #1ce783;
+}
+
+.disney-theme .btn-primary {
+  background: #1ce783;
+  color: #000;
+  box-shadow: 0 4px 14px rgba(28, 231, 131, 0.25);
+}
+
+.disney-theme .btn-primary:hover {
+  background: #15b86a;
+}
+
+body.disney-body {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(28, 231, 131, 0.12), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.01) 0%, transparent 100%);
+}
+
+/* Crunchyroll theme (orange) */
+.crunchyroll-theme {
+  --primary: #f47521;
+  --primary-hover: #d4631a;
+  --primary-glow: rgba(244, 117, 33, 0.25);
+  --border-focus: #f47521;
+}
+
+.crunchyroll-theme .brand-icon {
+  background: linear-gradient(135deg, #f47521 0%, #a34d10 100%) !important;
+}
+
+.crunchyroll-theme .tab-btn.active {
+  border-color: rgba(244, 117, 33, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(244, 117, 33, 0.15) !important;
+}
+
+.crunchyroll-theme .control-ribbon {
+  border-color: rgba(244, 117, 33, 0.15);
+}
+
+.crunchyroll-theme input[type="checkbox"]:checked {
+  accent-color: #f47521;
+}
+
+.crunchyroll-theme .btn-primary {
+  background: #f47521;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(244, 117, 33, 0.25);
+}
+
+.crunchyroll-theme .btn-primary:hover {
+  background: #d4631a;
+}
+
+body.crunchyroll-body {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(244, 117, 33, 0.12), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.01) 0%, transparent 100%);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -804,6 +893,8 @@ tbody tr:hover {
   <!-- Navigation Tabs -->
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('single')">Single Check</button>
+    <button class="tab-btn" onclick="switchTab('disney')">Disney+</button>
+    <button class="tab-btn" onclick="switchTab('crunchyroll')">Crunchyroll</button>
     <button class="tab-btn" onclick="switchTab('bulk')">Concurrent Bulk</button>
     <button class="tab-btn" onclick="switchTab('history')">History DB</button>
     <button class="tab-btn" onclick="switchTab('proxies')">Proxy Manager</button>
@@ -838,6 +929,111 @@ tbody tr:hover {
       <span id="single-btn-text">Check & Generate All Launch Links</span>
     </button>
     <div id="single-out" class="card-out"></div>
+  </div>
+
+  <!-- PANEL: DISNEY+ CHECKER -->
+  <div id="panel-disney" class="section-panel">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <div style="font-size:20px;">🏰</div>
+      <div>
+        <div style="font-weight:700; font-size:16px; color:var(--primary);">Disney+ Account Checker</div>
+        <div style="font-size:11px; color:var(--text-muted);">Check Disney+ accounts via BAMTech API. Format: email:password</div>
+      </div>
+    </div>
+
+    <!-- Single Disney+ Check -->
+    <div class="card" style="padding:16px; margin-bottom:14px;">
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Single Account Check</label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="disney-email" placeholder="email@example.com" style="flex:1;">
+        <input type="password" id="disney-password" placeholder="password" style="flex:1;">
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+        <div class="toggle-wrap" onclick="document.getElementById('disney-proxy-toggle').click()" style="margin:0;">
+          <input type="checkbox" id="disney-proxy-toggle" onclick="event.stopPropagation()">
+          <span style="font-size:11px;">Pakai Proxy (butuh residential)</span>
+        </div>
+        <span style="font-size:10px; color:var(--text-dim);">⚠️ Datacenter proxy diblock Disney+</span>
+      </div>
+      <button id="disney-single-btn" class="btn-primary" onclick="runDisneySingle()" style="margin-top:8px;">
+        <span id="disney-single-btn-text">Check Disney+ Account</span>
+      </button>
+      <div id="disney-single-out" class="card-out"></div>
+    </div>
+
+    <!-- Bulk Disney+ Check -->
+    <div class="card" style="padding:16px;">
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Combo Check</label>
+      <textarea id="disney-bulk-input" placeholder="Paste combo list (email:password per baris)..." style="height:120px;"></textarea>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button id="disney-bulk-btn" class="btn-primary" style="flex:2;" onclick="runDisneyBulk()">Mulai Bulk Check</button>
+        <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopDisneyBulk()">Stop</button>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+        <div id="disney-bulk-stats" style="font-size:12px; font-weight:600; color:var(--text-muted);"></div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="exportDisneyHits()">Export Hits</button>
+        </div>
+      </div>
+      <div id="disney-bulk-progress" style="margin-top:8px; display:none;">
+        <div style="background:var(--bg-subtle); border-radius:6px; height:6px; overflow:hidden;">
+          <div id="disney-progress-bar" style="background:var(--primary); height:100%; width:0%; transition:width 0.3s;"></div>
+        </div>
+      </div>
+      <div id="disney-bulk-out" style="max-height:400px; overflow-y:auto; margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- PANEL: CRUNCHYROLL CHECKER -->
+  <div id="panel-crunchyroll" class="section-panel">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <div style="font-size:20px;">🍥</div>
+      <div>
+        <div style="font-weight:700; font-size:16px; color:var(--primary);">Crunchyroll Account Checker</div>
+        <div style="font-size:11px; color:var(--text-muted);">Check Crunchyroll accounts via Android API. Format: email:password</div>
+      </div>
+    </div>
+
+    <!-- Single Crunchyroll Check -->
+    <div class="card" style="padding:16px; margin-bottom:14px;">
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Single Account Check</label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="cr-email" placeholder="email@example.com" style="flex:1;">
+        <input type="password" id="cr-password" placeholder="password" style="flex:1;">
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+        <div class="toggle-wrap" onclick="document.getElementById('cr-proxy-toggle').click()" style="margin:0;">
+          <input type="checkbox" id="cr-proxy-toggle" onclick="event.stopPropagation()">
+          <span style="font-size:11px;">Pakai Proxy</span>
+        </div>
+      </div>
+      <button id="cr-single-btn" class="btn-primary" onclick="runCrSingle()" style="margin-top:8px;">
+        <span id="cr-single-btn-text">Check Crunchyroll Account</span>
+      </button>
+      <div id="cr-single-out" class="card-out"></div>
+    </div>
+
+    <!-- Bulk Crunchyroll Check -->
+    <div class="card" style="padding:16px;">
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Combo Check</label>
+      <textarea id="cr-bulk-input" placeholder="Paste combo list (email:password per baris)..." style="height:120px;"></textarea>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button id="cr-bulk-btn" class="btn-primary" style="flex:2;" onclick="runCrBulk()">Mulai Bulk Check</button>
+        <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopCrBulk()">Stop</button>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+        <div id="cr-bulk-stats" style="font-size:12px; font-weight:600; color:var(--text-muted);"></div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="exportCrHits()">Export Hits</button>
+        </div>
+      </div>
+      <div id="cr-bulk-progress" style="margin-top:8px; display:none;">
+        <div style="background:var(--bg-subtle); border-radius:6px; height:6px; overflow:hidden;">
+          <div id="cr-progress-bar" style="background:var(--primary); height:100%; width:0%; transition:width 0.3s;"></div>
+        </div>
+      </div>
+      <div id="cr-bulk-out" style="max-height:400px; overflow-y:auto; margin-top:12px;"></div>
+    </div>
   </div>
 
   <!-- PANEL 2: BULK -->
@@ -916,12 +1112,20 @@ tbody tr:hover {
   <!-- PANEL 3: HISTORY -->
   <div id="panel-history" class="section-panel">
     <div class="filter-row">
-      <input type="text" id="hist-search" placeholder="Cari negara / billing / plan..." oninput="onSearchInput()" style="flex:2; margin-bottom:0;">
+      <input type="text" id="hist-search" placeholder="Cari email / negara / plan..." oninput="onSearchInput()" style="flex:2; margin-bottom:0;">
+      <select id="hist-filter-type" onchange="resetPageAndLoad()" style="flex:1; margin-bottom:0;">
+        <option value="">Semua Service</option>
+        <option value="checker">🔴 Netflix</option>
+        <option value="disney">🟢 Disney+</option>
+        <option value="crunchyroll">🟠 Crunchyroll</option>
+      </select>
       <select id="hist-filter-status" onchange="resetPageAndLoad()" style="flex:1; margin-bottom:0;">
         <option value="">Semua Status</option>
         <option value="LIVE">Hanya LIVE</option>
         <option value="HOLD">Hanya HOLD</option>
+        <option value="FREE">Hanya FREE</option>
         <option value="DEAD">Hanya DEAD</option>
+        <option value="BAD">Hanya BAD</option>
       </select>
       <select id="hist-filter-plan" onchange="resetPageAndLoad()" style="flex:1; margin-bottom:0;">
         <option value="">Semua Plan</option>
@@ -938,7 +1142,7 @@ tbody tr:hover {
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Waktu</th><th>Tipe</th><th>Status</th><th>Plan</th><th>Billing</th><th>Country</th><th>Aksi</th></tr>
+          <tr><th>Waktu</th><th>Service</th><th>Status</th><th>Email / Cookie</th><th>Plan</th><th>Country</th><th>Aksi</th></tr>
         </thead>
         <tbody id="history-tbody"></tbody>
       </table>
@@ -1153,11 +1357,27 @@ document.addEventListener('keydown', (e) => {
 });
 
 function switchTab(tab) {
-  const tabs = ['single', 'bulk', 'history', 'proxies', 'analytics'];
-  tabs.forEach((t, i) => {
-    document.querySelectorAll('.tab-btn')[i].classList.toggle('active', t === tab);
-    document.getElementById(`panel-${t}`).classList.toggle('active', t === tab);
+  const tabs = ['single', 'disney', 'crunchyroll', 'bulk', 'history', 'proxies', 'analytics'];
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', tabs[i] === tab);
   });
+  tabs.forEach(t => {
+    const el = document.getElementById(`panel-${t}`);
+    if (el) el.classList.toggle('active', t === tab);
+  });
+
+  // Theme switching
+  const container = document.querySelector('.container');
+  container.classList.remove('disney-theme', 'crunchyroll-theme');
+  document.body.classList.remove('disney-body', 'crunchyroll-body');
+  if (tab === 'disney') {
+    container.classList.add('disney-theme');
+    document.body.classList.add('disney-body');
+  } else if (tab === 'crunchyroll') {
+    container.classList.add('crunchyroll-theme');
+    document.body.classList.add('crunchyroll-body');
+  }
+
   if (tab === 'history') loadHistory();
   if (tab === 'proxies') loadProxiesManager();
   if (tab === 'analytics') loadAnalytics();
@@ -1212,6 +1432,8 @@ async function runSingle() {
       body: JSON.stringify({cookie, use_proxy})
     });
     const d = await res.json();
+    window.currentSingleCheckResult = d;
+    window.currentSingleCookieRaw = cookie;
 
     if (!d.live && d.status !== 'HOLD' && !d.is_hold) throw new Error(d.reason || 'Akun Dead / Tidak Valid');
     const isHold = (d.status === 'HOLD' || d.is_hold);
@@ -1306,10 +1528,11 @@ async function runSingle() {
       ` : ''}
 
       <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
-        <button class="btn-secondary" onclick="copyJson(${JSON.stringify(d.cookies).replace(/"/g, '&quot;')})">Salin Cookie JSON</button>
-        ${tokUrl ? `<button class="btn-secondary" onclick="copyText('${tokUrl}')">Salin Browser URL</button>` : ''}
-        ${androidUrl ? `<button class="btn-secondary" onclick="copyText('${androidUrl}')">Salin Android URL</button>` : ''}
-        ${tvUrl ? `<button class="btn-secondary" onclick="copyText('${tvUrl}')">Salin TV URL</button>` : ''}
+        <button class="btn-secondary" onclick="copySingleCookieJson()">Salin Cookie JSON</button>
+        <button class="btn-secondary" onclick="copySingleRawCookie()">Salin Cookie Asli</button>
+        ${tokUrl ? `<button class="btn-secondary" onclick="copyText('${tokUrl}', 'Browser Link disalin!')">Salin Browser URL</button>` : ''}
+        ${androidUrl ? `<button class="btn-secondary" onclick="copyText('${androidUrl}', 'Android Link disalin!')">Salin Android URL</button>` : ''}
+        ${tvUrl ? `<button class="btn-secondary" onclick="copyText('${tvUrl}', 'TV Link disalin!')">Salin TV URL</button>` : ''}
       </div>
     `;
     out.style.display = 'block';
@@ -1591,6 +1814,7 @@ function createBulkRowElement(item) {
           ${browserUrl ? `<a href="${browserUrl}" target="_blank" class="btn-outline-sm" style="color:#38bdf8; text-decoration:none; padding:2px 6px; font-size:11px;">Browser</a>` : ''}
           ${androidUrl ? `<a href="${androidUrl}" target="_blank" class="btn-outline-sm" style="color:#4ade80; text-decoration:none; padding:2px 6px; font-size:11px;">Android</a>` : ''}
           ${tvUrl ? `<a href="${tvUrl}" target="_blank" class="btn-outline-sm" style="color:#a855f7; text-decoration:none; padding:2px 6px; font-size:11px;">TV</a>` : ''}
+          ${item.raw ? `<button class="btn-outline-sm" style="color:#f1f5f9; padding:2px 6px; font-size:11px;" onclick="copyBulkCookie(${item.index})">Cookie</button>` : ''}
         </div>
       ` : '-'}
     </td>
@@ -1696,6 +1920,7 @@ async function loadHistory() {
   const q = document.getElementById('hist-search').value.trim();
   const st = document.getElementById('hist-filter-status').value;
   const pl = document.getElementById('hist-filter-plan').value;
+  const tp = document.getElementById('hist-filter-type').value;
   const offset = (curPage - 1) * pageSize;
 
   try {
@@ -1704,7 +1929,8 @@ async function loadHistory() {
       offset: offset,
       search: q,
       status: st,
-      plan: pl
+      plan: pl,
+      type: tp
     });
     const res = await fetch(`/api/history?${params.toString()}`, {
       headers: getAuthHeaders()
@@ -1720,6 +1946,7 @@ function renderHistoryTable(data) {
   const tbody = document.getElementById('history-tbody');
   const rows = data.items || [];
   const total = data.total || 0;
+  window.currentHistoryRows = rows;
 
   if (rows.length === 0) {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:20px;">Tidak ada data riwayat.</td></tr>';
@@ -1732,17 +1959,28 @@ function renderHistoryTable(data) {
   }
 
   tbody.innerHTML = rows.map(r => {
+    const svcBadge = r.type === 'disney' ? '<span style="color:#1ce783;">🟢 Disney+</span>'
+      : r.type === 'crunchyroll' ? '<span style="color:#f47521;">🟠 Crunchyroll</span>'
+      : '<span style="color:#e50914;">🔴 Netflix</span>';
+    const statusTag = r.status === 'LIVE' ? '<span class="tag-live">● LIVE</span>'
+      : r.status === 'HOLD' ? '<span class="tag-hold">⏸ HOLD</span>'
+      : r.status === 'FREE' ? '<span style="color:#38bdf8; background:rgba(56,189,248,0.1); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700;">🆓 FREE</span>'
+      : r.status === 'BAD' ? '<span class="tag-dead">✕ BAD</span>'
+      : r.status === 'DEAD' ? '<span class="tag-dead">✕ DEAD</span>'
+      : `<span class="tag-dead">⚠ ${r.status}</span>`;
+    const identifier = r.email || (r.raw_cookie ? r.raw_cookie.split(':')[0] : '-');
+    const copyLabel = r.type === 'checker' ? 'Salin Cookie' : 'Salin Combo';
     return `
     <tr>
       <td style="color:var(--text-muted); font-family:'JetBrains Mono', monospace; font-size:11px;">${r.created_at}</td>
-      <td style="font-weight:600;">${r.type.toUpperCase()}</td>
-      <td><span class="${r.status === 'LIVE' ? 'tag-live' : (r.status === 'HOLD' ? 'tag-hold' : 'tag-dead')}">${r.status === 'LIVE' ? '● LIVE' : (r.status === 'HOLD' ? '⏸ HOLD' : '✕ DEAD')}</span></td>
+      <td style="font-weight:600; font-size:12px;">${svcBadge}</td>
+      <td>${statusTag}</td>
+      <td style="font-size:12px; color:var(--text-muted);">${identifier}</td>
       <td style="${r.plan && r.plan.includes('4K') ? 'color:var(--accent-4k); font-weight:700;' : ''}">${r.plan || '-'}</td>
-      <td>${r.billing || '-'}</td>
       <td>${r.country || '-'}</td>
       <td>
         <div style="display:flex; gap:6px; align-items:center;">
-          ${r.raw_cookie ? `<button class="copy-btn-sm" onclick="copyText('${escapeAttr(r.raw_cookie)}')">Salin Cookie</button>` : '-'}
+          ${r.raw_cookie ? `<button class="copy-btn-sm" onclick="copyHistoryCookie(${r.id})">${copyLabel}</button>` : '-'}
         </div>
       </td>
     </tr>
@@ -1999,19 +2237,510 @@ async function loadAnalytics() {
   });
 }
 
-function copyText(str) {
-  navigator.clipboard.writeText(str);
-  showToast('Teks disalin ke clipboard');
+function copyText(str, msg = 'Teks disalin ke clipboard') {
+  if (!str) {
+    showToast('Tidak ada teks untuk disalin');
+    return;
+  }
+
+  // 1. Coba Clipboard API modern jika Secure Context (HTTPS / localhost)
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(str).then(() => {
+      showToast(msg);
+    }).catch(() => {
+      fallbackCopyText(str, msg);
+    });
+    return;
+  }
+
+  // 2. Fallback untuk HTTP / LAN IP (misal http://192.168.x.x) / mobile browser
+  fallbackCopyText(str, msg);
 }
 
-function copyJson(obj) {
-  navigator.clipboard.writeText(JSON.stringify(obj, null, 2));
-  showToast('Cookie JSON disalin');
+function fallbackCopyText(str, msg) {
+  let success = false;
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = str;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '-9999px';
+    ta.style.opacity = '0';
+    ta.setAttribute('readonly', '');
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    success = document.execCommand('copy');
+    document.body.removeChild(ta);
+  } catch(e) {
+    success = false;
+  }
+
+  if (success) {
+    showToast(msg);
+  } else {
+    window.prompt('Salin manual dengan Ctrl+C / Cmd+C:', str);
+  }
+}
+
+function copyJson(obj, msg = 'Cookie JSON disalin') {
+  if (!obj) {
+    showToast('Data JSON tidak tersedia');
+    return;
+  }
+  const jsonStr = (typeof obj === 'string') ? obj : JSON.stringify(obj, null, 2);
+  copyText(jsonStr, msg);
+}
+
+function copyHistoryCookie(id) {
+  const item = (window.currentHistoryRows || []).find(x => x.id === id);
+  if (item && item.raw_cookie) {
+    copyText(item.raw_cookie, 'Cookie disalin ke clipboard');
+  } else {
+    showToast('Cookie tidak tersedia');
+  }
+}
+
+function copyBulkCookie(idx) {
+  const item = (bulkResults || []).find(x => x.index === idx);
+  if (item && item.raw) {
+    copyText(item.raw, 'Cookie disalin ke clipboard');
+  } else {
+    showToast('Cookie tidak tersedia');
+  }
+}
+
+function copySingleCookieJson() {
+  if (window.currentSingleCheckResult && window.currentSingleCheckResult.cookies) {
+    copyJson(window.currentSingleCheckResult.cookies, 'Cookie JSON disalin');
+  } else {
+    showToast('Data cookie JSON tidak tersedia');
+  }
+}
+
+function copySingleRawCookie() {
+  const cookie = window.currentSingleCookieRaw || document.getElementById('single-cookie')?.value?.trim();
+  if (cookie) {
+    copyText(cookie, 'Cookie asli disalin');
+  } else {
+    showToast('Cookie tidak tersedia');
+  }
 }
 
 fetchStats();
 checkPinStatus();
 loadProxiesManager();
+
+// ═══════════════════════════════════════════════════════════════════
+// Country code helper (JS mirror of Python normalize_country)
+// ═══════════════════════════════════════════════════════════════════
+const COUNTRY_NAMES_JS = {
+  'AR':'Argentina','AU':'Australia','BR':'Brazil','CA':'Canada','DE':'Germany',
+  'ES':'Spain','FR':'France','GB':'United Kingdom','ID':'Indonesia','IN':'India',
+  'IT':'Italy','JP':'Japan','KR':'South Korea','MY':'Malaysia','MX':'Mexico',
+  'NL':'Netherlands','PH':'Philippines','SG':'Singapore','TH':'Thailand',
+  'TR':'Turkey','US':'United States','VN':'Vietnam','CL':'Chile','CO':'Colombia',
+  'PE':'Peru','SE':'Sweden','NO':'Norway','DK':'Denmark','FI':'Finland',
+  'PL':'Poland','PT':'Portugal','RO':'Romania','CZ':'Czech Republic',
+  'HU':'Hungary','IE':'Ireland','NZ':'New Zealand','ZA':'South Africa',
+  'AE':'UAE','SA':'Saudi Arabia','EG':'Egypt','TW':'Taiwan','HK':'Hong Kong'
+};
+function normalize_country_js(code) {
+  if (!code) return 'Unknown';
+  const c = String(code).trim().toUpperCase();
+  if (c.length === 2 && /^[A-Z]{2}$/.test(c)) {
+    return `${COUNTRY_NAMES_JS[c] || c} (${c})`;
+  }
+  return c;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Disney+ Account Checker Functions
+// ═══════════════════════════════════════════════════════════════════
+
+let disneyBulkRunning = false;
+let disneyBulkAbort = false;
+let disneyBulkResults = [];
+
+function disneyStatusColor(status) {
+  const m = { LIVE: '#10b981', BAD: '#f43f5e', DEAD: '#f43f5e', HOLD: '#f59e0b', ERROR: '#f59e0b' };
+  return m[status] || 'var(--text-muted)';
+}
+
+function disneyStatusBg(status) {
+  const m = { LIVE: 'rgba(16,185,129,0.1)', BAD: 'rgba(244,63,94,0.1)', DEAD: 'rgba(244,63,94,0.1)', HOLD: 'rgba(245,158,11,0.1)', ERROR: 'rgba(245,158,11,0.1)' };
+  return m[status] || 'rgba(132,139,159,0.1)';
+}
+
+function renderDisneyResult(data, mode = 'single') {
+  const color = disneyStatusColor(data.status);
+  const statusIcon = { LIVE: '✅', BAD: '❌', DEAD: '💀', HOLD: '⏸', ERROR: '⚠️' }[data.status] || '❓';
+  const comboText = data.combo || `${data.email || ''}:${data._password || '***'}`;
+
+  if (data.status === 'LIVE' || data.status === 'HOLD') {
+    const isHold = data.status === 'HOLD';
+    const cardClass = isHold ? 'card-out hold' : 'card-out live';
+    const statusLabel = isHold ? 'Account On Hold' : 'Account Live';
+
+    return `<div class="${mode === 'bulk' ? '' : cardClass}" style="${mode === 'bulk' ? `padding:16px; border-left:4px solid ${color}; background:${disneyStatusBg(data.status)}; margin-bottom:10px; border-radius:var(--radius-lg);` : ''}">
+      <div class="card-header-status" style="color:${color};">
+        <span>${statusIcon}</span> <span>${statusLabel}</span>
+        <span style="margin-left:auto; font-size:11px; color:var(--text-muted); font-weight:500;">via ${data.route || 'Direct'}</span>
+      </div>
+
+      ${isHold ? `
+      <div style="background:rgba(245, 158, 11, 0.12); border:1px solid rgba(245, 158, 11, 0.3); color:#fcd34d; padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:12px; font-size:12px; display:flex; align-items:center; gap:8px;">
+        <span>⚠️</span> <span><strong>Subscription Inactive:</strong> Akun ini dalam status hold / lapsed. Perlu renewal untuk melanjutkan streaming.</span>
+      </div>
+      ` : ''}
+
+      <div class="grid-meta">
+        <div class="meta-box"><span>Email</span><strong>${data.email || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Plan</span><strong style="color:var(--disney, #1ce783);">${data.plan || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Country</span><strong>${data.country || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Renewal Date</span><strong style="${isHold ? 'color:var(--hold)' : ''}">${data.renewal_date || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Subscriber Status</span><strong>${data.subscriber_status || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Email Verified</span><strong>${data.email_verified === 'true' || data.email_verified === true ? '✅ Yes' : '❌ No'}</strong></div>
+        <div class="meta-box"><span>Free Trial</span><strong>${data.free_trial ? '🎁 Yes' : 'No'}</strong></div>
+        <div class="meta-box"><span>Has Active Plan</span><strong style="color:${data.has_plan ? 'var(--live)' : 'var(--dead)'};">${data.has_plan ? '✓ Active' : '✕ Inactive'}</strong></div>
+      </div>
+
+      <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="copyText('${escapeAttr(comboText)}', 'Combo disalin!')">📋 Copy Combo</button>
+        <button class="btn-secondary" onclick="copyText('${escapeAttr(data.email || '')}', 'Email disalin!')">📧 Copy Email</button>
+      </div>
+    </div>`;
+  }
+
+  // BAD / DEAD / ERROR
+  return `<div class="${mode === 'bulk' ? '' : 'card-out dead'}" style="${mode === 'bulk' ? `padding:10px; border-left:3px solid ${color}; background:${disneyStatusBg(data.status)}; margin-bottom:6px; border-radius:var(--radius-sm);` : ''}">
+    <div class="card-header-status" style="color:${color};">
+      <span>${statusIcon}</span> <span>${data.status === 'BAD' ? 'Wrong Credentials' : data.status}</span>
+    </div>
+    <div style="color:var(--text-muted); font-size:12px;">${data.reason || data.email || 'Akun tidak valid'}</div>
+  </div>`;
+}
+
+async function runDisneySingle() {
+  const email = document.getElementById('disney-email').value.trim();
+  const password = document.getElementById('disney-password').value.trim();
+  if (!email || !password) return showToast('Email dan password wajib diisi');
+
+  const btn = document.getElementById('disney-single-btn');
+  const btnText = document.getElementById('disney-single-btn-text');
+  const outEl = document.getElementById('disney-single-out');
+  const useProxy = document.getElementById('disney-proxy-toggle')?.checked ?? false;
+
+  btn.disabled = true;
+  btnText.textContent = 'Checking...';
+  outEl.style.display = 'none';
+  outEl.className = 'card-out';
+  outEl.innerHTML = '';
+
+  try {
+    const res = await fetch('/api/disney/check', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ email, password, use_proxy: useProxy })
+    });
+    const data = await res.json();
+    const mergedData = { ...data, _password: password, combo: `${email}:${password}` };
+
+    outEl.innerHTML = renderDisneyResult(mergedData, 'single');
+    outEl.style.display = 'block';
+
+    if (data.status === 'LIVE') playAlert('live');
+    else if (data.status === 'HOLD') playAlert('hold');
+  } catch(e) {
+    outEl.className = 'card-out dead';
+    outEl.innerHTML = `
+      <div class="card-header-status" style="color:var(--dead);">
+        <span>✕</span> <span>Request Gagal</span>
+      </div>
+      <div style="color:var(--text-muted);">${e.message}</div>
+    `;
+    outEl.style.display = 'block';
+  }
+
+  btn.disabled = false;
+  btnText.textContent = 'Check Disney+ Account';
+}
+
+async function runDisneyBulk() {
+  const raw = document.getElementById('disney-bulk-input').value.trim();
+  if (!raw) return showToast('Paste combo list dulu');
+  if (disneyBulkRunning) return;
+
+  const lines = raw.split('\n').map(l => l.trim()).filter(l => l && l.includes(':'));
+  if (!lines.length) return showToast('Tidak ada combo valid');
+
+  disneyBulkRunning = true;
+  disneyBulkAbort = false;
+  disneyBulkResults = [];
+
+  const outEl = document.getElementById('disney-bulk-out');
+  const statsEl = document.getElementById('disney-bulk-stats');
+  const progressEl = document.getElementById('disney-bulk-progress');
+  const barEl = document.getElementById('disney-progress-bar');
+  const useProxy = document.getElementById('disney-proxy-toggle')?.checked ?? false;
+
+  outEl.innerHTML = '';
+  progressEl.style.display = 'block';
+  barEl.style.width = '0%';
+
+  let done = 0, live = 0, bad = 0, errors = 0;
+  const total = lines.length;
+
+  for (const combo of lines) {
+    if (disneyBulkAbort) break;
+
+    const [email, ...pwParts] = combo.split(' | ')[0].trim().split(':');
+    const password = pwParts.join(':');
+
+    let retries = 0;
+    let success = false;
+    while (retries < 3 && !success) {
+      try {
+        const res = await fetch('/api/disney/check', {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ email: email.trim(), password: password.trim(), use_proxy: useProxy })
+        });
+
+        if (res.status === 401) {
+          outEl.innerHTML += `<div style="padding:10px; color:#f43f5e; font-weight:600;">🔒 PIN tidak valid</div>`;
+          disneyBulkAbort = true;
+          break;
+        }
+
+        if (res.status === 429) {
+          retries++;
+          await new Promise(r => setTimeout(r, 3000 * retries));
+          continue;
+        }
+
+        const data = await res.json();
+        data.combo = combo;
+        disneyBulkResults.push(data);
+        success = true;
+
+        if (data.status === 'LIVE') live++;
+        else if (data.status === 'BAD' || data.status === 'DEAD') bad++;
+        else errors++;
+
+        outEl.innerHTML += renderDisneyResult({ ...data, email: email.trim(), _password: password.trim(), combo: combo.split(' | ')[0].trim() }, 'bulk');
+        outEl.scrollTop = outEl.scrollHeight;
+        if (data.status === 'LIVE') playAlert('live');
+        else if (data.status === 'HOLD') playAlert('hold');
+      } catch(e) {
+        retries++;
+        if (retries >= 3) {
+          errors++;
+          outEl.innerHTML += `<div style="padding:6px; font-size:11px; color:#f59e0b;">⚠️ ${email}: ${e.message}</div>`;
+          success = true;
+        } else {
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+    }
+
+    await new Promise(r => setTimeout(r, 1200));
+
+    done++;
+    barEl.style.width = `${(done / total * 100).toFixed(1)}%`;
+    statsEl.innerHTML = `<span style="color:#10b981;">${live} LIVE</span> · <span style="color:#f43f5e;">${bad} BAD</span> · <span style="color:#f59e0b;">${errors} ERR</span> · ${done}/${total}`;
+  }
+
+  disneyBulkRunning = false;
+  if (disneyBulkAbort) statsEl.innerHTML += ' · <span style="color:#f59e0b;">STOPPED</span>';
+  else statsEl.innerHTML += ' · <span style="color:#10b981;">DONE</span>';
+}
+
+function stopDisneyBulk() {
+  disneyBulkAbort = true;
+}
+
+function exportDisneyHits() {
+  const hits = disneyBulkResults.filter(r => r.status === 'LIVE');
+  if (!hits.length) return showToast('Belum ada hits untuk diexport');
+  const text = hits.map(h => `${h.combo} | Plan: ${h.plan || 'N/A'} | Country: ${h.country || 'N/A'} | Renewal: ${h.renewal_date || 'N/A'}`).join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `disney_hits_${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  showToast(`${hits.length} hits exported`);
+}
+
+// Disney+ keyboard shortcut (Enter to check)
+document.getElementById('disney-password')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') runDisneySingle();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Crunchyroll Account Checker Functions
+// ═══════════════════════════════════════════════════════════════════
+
+let crBulkRunning = false;
+let crBulkAbort = false;
+let crBulkResults = [];
+
+function renderCrResult(data, mode = 'single') {
+  const statusMap = { LIVE: ['✅','#10b981','rgba(16,185,129,0.1)'], BAD: ['❌','#f43f5e','rgba(244,63,94,0.1)'], FREE: ['🆓','#38bdf8','rgba(56,189,248,0.1)'], ERROR: ['⚠️','#f59e0b','rgba(245,158,11,0.1)'] };
+  const [icon, color, bg] = statusMap[data.status] || ['❓','var(--text-muted)','rgba(132,139,159,0.1)'];
+  const comboText = data.combo || `${data.email || ''}:${data._password || '***'}`;
+
+  if (data.status === 'LIVE' || data.status === 'FREE') {
+    const cardClass = data.status === 'LIVE' ? 'card-out live' : 'card-out live';
+    const label = data.status === 'LIVE' ? 'Premium Account' : 'Free Account';
+
+    return `<div class="${mode === 'bulk' ? '' : cardClass}" style="${mode === 'bulk' ? `padding:16px; border-left:4px solid ${color}; background:${bg}; margin-bottom:10px; border-radius:var(--radius-lg);` : ''}">
+      <div class="card-header-status" style="color:${color};">
+        <span>${icon}</span> <span>${label}</span>
+        <span style="margin-left:auto; font-size:11px; color:var(--text-muted); font-weight:500;">via ${data.route || 'Direct'}</span>
+      </div>
+
+      <div class="grid-meta">
+        <div class="meta-box"><span>Email</span><strong>${data.email || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Subscription</span><strong style="color:${color};">${data.subscription || 'Free'}</strong></div>
+        <div class="meta-box"><span>Username</span><strong>${data.username || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Country</span><strong>${data.country ? normalize_country_js(data.country) : 'N/A'}</strong></div>
+        <div class="meta-box"><span>Profiles</span><strong>${data.profiles || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Email Verified</span><strong>${data.email_verified ? '✅ Yes' : '❌ No'}</strong></div>
+        <div class="meta-box"><span>External ID</span><strong style="font-size:11px; font-family:'JetBrains Mono', monospace;">${data.external_id || 'N/A'}</strong></div>
+      </div>
+
+      <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="copyText('${escapeAttr(comboText)}', 'Combo disalin!')">📋 Copy Combo</button>
+        <button class="btn-secondary" onclick="copyText('${escapeAttr(data.email || '')}', 'Email disalin!')">📧 Copy Email</button>
+      </div>
+    </div>`;
+  }
+
+  // BAD / ERROR
+  return `<div class="${mode === 'bulk' ? '' : 'card-out dead'}" style="${mode === 'bulk' ? `padding:10px; border-left:3px solid ${color}; background:${bg}; margin-bottom:6px; border-radius:var(--radius-sm);` : ''}">
+    <div class="card-header-status" style="color:${color};">
+      <span>${icon}</span> <span>${data.status === 'BAD' ? 'Wrong Credentials' : data.status}</span>
+    </div>
+    <div style="color:var(--text-muted); font-size:12px;">${data.reason || data.email || 'Akun tidak valid'}</div>
+  </div>`;
+}
+
+async function runCrSingle() {
+  const email = document.getElementById('cr-email').value.trim();
+  const password = document.getElementById('cr-password').value.trim();
+  if (!email || !password) return showToast('Email dan password wajib diisi');
+  const btn = document.getElementById('cr-single-btn');
+  const btnText = document.getElementById('cr-single-btn-text');
+  const outEl = document.getElementById('cr-single-out');
+  const useProxy = document.getElementById('cr-proxy-toggle')?.checked ?? false;
+  btn.disabled = true;
+  btnText.textContent = 'Checking...';
+  outEl.style.display = 'none';
+  outEl.className = 'card-out';
+  outEl.innerHTML = '';
+
+  try {
+    const res = await fetch('/api/crunchyroll/check', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ email, password, use_proxy: useProxy })
+    });
+    const data = await res.json();
+    const mergedData = { ...data, _password: password, combo: `${email}:${password}` };
+
+    outEl.innerHTML = renderCrResult(mergedData, 'single');
+    outEl.style.display = 'block';
+
+    if (data.status === 'LIVE') playAlert('live');
+    else if (data.status === 'FREE') playAlert('hold');
+  } catch(e) {
+    outEl.className = 'card-out dead';
+    outEl.innerHTML = `
+      <div class="card-header-status" style="color:var(--dead);">
+        <span>✕</span> <span>Request Gagal</span>
+      </div>
+      <div style="color:var(--text-muted);">${e.message}</div>
+    `;
+    outEl.style.display = 'block';
+  }
+  btn.disabled = false;
+  btnText.textContent = 'Check Crunchyroll Account';
+}
+
+async function runCrBulk() {
+  const raw = document.getElementById('cr-bulk-input').value.trim();
+  if (!raw) return showToast('Paste combo list dulu');
+  if (crBulkRunning) return;
+  const lines = raw.split('\n').map(l => l.trim()).filter(l => l && l.includes(':'));
+  if (!lines.length) return showToast('Tidak ada combo valid');
+  crBulkRunning = true; crBulkAbort = false; crBulkResults = [];
+  const outEl = document.getElementById('cr-bulk-out');
+  const statsEl = document.getElementById('cr-bulk-stats');
+  const progressEl = document.getElementById('cr-bulk-progress');
+  const barEl = document.getElementById('cr-progress-bar');
+  const useProxy = document.getElementById('cr-proxy-toggle')?.checked ?? false;
+  outEl.innerHTML = ''; progressEl.style.display = 'block'; barEl.style.width = '0%';
+  let done = 0, live = 0, bad = 0, free = 0, errors = 0;
+  const total = lines.length;
+
+  for (const combo of lines) {
+    if (crBulkAbort) break;
+    const [email, ...pwParts] = combo.split(' | ')[0].trim().split(':');
+    const password = pwParts.join(':');
+    let retries = 0, success = false;
+    while (retries < 3 && !success) {
+      try {
+        const res = await fetch('/api/crunchyroll/check', {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ email: email.trim(), password: password.trim(), use_proxy: useProxy })
+        });
+        if (res.status === 401) { outEl.innerHTML += `<div style="padding:10px; color:#f43f5e; font-weight:600;">🔒 PIN tidak valid</div>`; crBulkAbort = true; break; }
+        if (res.status === 429) { retries++; await new Promise(r => setTimeout(r, 3000 * retries)); continue; }
+        const data = await res.json(); data.combo = combo; crBulkResults.push(data);
+        success = true;
+        if (data.status === 'LIVE') live++;
+        else if (data.status === 'BAD' || data.status === 'DEAD') bad++;
+        else if (data.status === 'FREE') free++;
+        else errors++;
+        outEl.innerHTML += renderCrResult({ ...data, email: email.trim(), _password: password.trim(), combo: combo.split(' | ')[0].trim() }, 'bulk');
+        outEl.scrollTop = outEl.scrollHeight;
+        if (data.status === 'LIVE') playAlert('live');
+        else if (data.status === 'FREE') playAlert('hold');
+      } catch(e) {
+        retries++;
+        if (retries >= 3) { errors++; outEl.innerHTML += `<div style="padding:6px; font-size:11px; color:#f59e0b;">⚠️ ${email}: ${e.message}</div>`; success = true; }
+        else { await new Promise(r => setTimeout(r, 2000)); }
+      }
+    }
+    await new Promise(r => setTimeout(r, 1200));
+    done++;
+    barEl.style.width = `${(done / total * 100).toFixed(1)}%`;
+    statsEl.innerHTML = `<span style="color:#10b981;">${live} LIVE</span> · <span style="color:#38bdf8;">${free} FREE</span> · <span style="color:#f43f5e;">${bad} BAD</span> · <span style="color:#f59e0b;">${errors} ERR</span> · ${done}/${total}`;
+  }
+  crBulkRunning = false;
+  if (crBulkAbort) statsEl.innerHTML += ' · <span style="color:#f59e0b;">STOPPED</span>';
+  else statsEl.innerHTML += ' · <span style="color:#10b981;">DONE</span>';
+}
+
+function stopCrBulk() { crBulkAbort = true; }
+
+function exportCrHits() {
+  const hits = crBulkResults.filter(r => r.status === 'LIVE');
+  if (!hits.length) return showToast('Belum ada hits untuk diexport');
+  const text = hits.map(h => `${h.combo} | Sub: ${h.subscription || 'N/A'} | Country: ${h.country || 'N/A'} | Profiles: ${h.profiles || 'N/A'}`).join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `crunchyroll_hits_${new Date().toISOString().slice(0,10)}.txt`;
+  a.click(); showToast(`${hits.length} hits exported`);
+}
+
+document.getElementById('cr-password')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') runCrSingle();
+});
+
 </script>
 </body>
 </html>
