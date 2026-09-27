@@ -2696,13 +2696,19 @@ function renderCrResult(data, mode = 'single') {
 
       <div class="grid-meta">
         <div class="meta-box"><span>Email</span><strong>${data.email || 'N/A'}</strong></div>
-        <div class="meta-box"><span>Subscription</span><strong style="color:${color};">${data.subscription || 'Free'}</strong></div>
+        <div class="meta-box"><span>Subscription</span><strong style="color:${color};">${data.subscription || 'Free'}${data.is_cancelled ? ' <span style=\"color:var(--dead); font-size:10px;\">⛔ Cancelled</span>' : ''}${data.active_free_trial ? ' <span style=\"color:#38bdf8; font-size:10px;\">🎁 Trial</span>' : ''}</strong></div>
         <div class="meta-box"><span>Profile Name</span><strong>${data.username || 'N/A'}</strong></div>
-        <div class="meta-box"><span>Country</span><strong>${data.country ? normalize_country_js(data.country) : 'N/A'}</strong></div>
+        <div class="meta-box"><span>Country</span><strong>${(() => { const c = data.sub_country || data.country; return c ? normalize_country_js(c) : 'N/A'; })()}</strong></div>
+        <div class="meta-box"><span>Billing Cycle</span><strong>${data.sub_cycle || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Source</span><strong>${data.sub_source ? data.sub_source.replace(/-/g,' ').replace(/\b\w/g,l=>l.toUpperCase()) : 'N/A'}</strong></div>
+        <div class="meta-box"><span>Streams</span><strong>${data.concurrent_streams || 1} concurrent</strong></div>
+        <div class="meta-box"><span>Ads</span><strong style="color:${data.has_ads ? 'var(--dead)' : 'var(--live)'};">${data.has_ads ? '⛔ Has Ads' : '✅ No Ads'}</strong></div>
+        <div class="meta-box"><span>Offline</span><strong style="color:${data.offline_viewing ? 'var(--live)' : 'var(--text-muted)'};">${data.offline_viewing ? '✅ Yes' : '❌ No'}</strong></div>
         <div class="meta-box"><span>Profiles</span><strong>${data.profiles || 'N/A'}</strong></div>
         <div class="meta-box"><span>Email Verified</span><strong>${data.email_verified ? '✅ Yes' : '❌ No'}</strong></div>
+        <div class="meta-box"><span>Active Since</span><strong>${data.sub_effective_date ? new Date(data.sub_effective_date).toLocaleDateString('id-ID', {day:'numeric',month:'short',year:'numeric'}) : 'N/A'}</strong></div>
+        <div class="meta-box"><span>Account Created</span><strong>${data.created ? new Date(data.created).toLocaleDateString('id-ID', {day:'numeric',month:'short',year:'numeric'}) : 'N/A'}</strong></div>
         <div class="meta-box"><span>External ID</span><strong style="font-size:11px; font-family:'JetBrains Mono', monospace;">${data.external_id || 'N/A'}</strong></div>
-        <div class="meta-box"><span>Created</span><strong>${data.created ? new Date(data.created).toLocaleDateString('id-ID', {day:'numeric',month:'short',year:'numeric'}) : 'N/A'}</strong></div>
       </div>
 
       <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">

@@ -1336,8 +1336,19 @@ def check_crunchyroll_account(email, password, use_proxy=True):
     except Exception:
         pass
 
-    # Step 4: Check subscription
+    # Step 4: Check subscription (benefits + products for full detail)
     subscription = "Free"
+    sub_source = ""
+    sub_country = ""
+    sub_benefits = []
+    concurrent_streams = 1
+    has_ads = True
+    offline_viewing = False
+    sub_product_name = ""
+    sub_cycle = ""
+    sub_effective_date = ""
+    is_cancelled = False
+    active_free_trial = False
     try:
         if external_id:
             r = session.get(f"https://www.crunchyroll.com/subs/v1/subscriptions/{external_id}/benefits", timeout=15)
@@ -1345,20 +1356,57 @@ def check_crunchyroll_account(email, password, use_proxy=True):
                 data = r.json()
                 items = data.get("items", [])
                 total_items = data.get("total", 0)
+                sub_country = data.get("subscription_country", "")
+                sub_benefits = [item.get("benefit", "") for item in items]
+                if items:
+                    sub_source = items[0].get("source", "")
+
+                # Parse concurrent streams
+                for b in sub_benefits:
+                    if b.startswith("concurrent_streams."):
+                        try: concurrent_streams = int(b.split(".")[-1])
+                        except: pass
+                has_ads = "no_ads" not in sub_benefits
+                offline_viewing = "offline_viewing" in sub_benefits
+
                 if total_items > 0:
-                    benefits = [item.get("benefit", "") for item in items]
-                    if "cr_mega_pack" in benefits:
+                    if "cr_mega_pack" in sub_benefits:
                         subscription = "Mega Pack"
-                    elif "cr_fan_pack" in benefits:
+                    elif "cr_fan_pack" in sub_benefits:
                         subscription = "Fan Pack"
-                    elif "cr_premium" in benefits:
+                    elif "cr_premium" in sub_benefits:
                         subscription = "Premium"
+                    elif "catalog" in sub_benefits:
+                        subscription = "Basic"
                     else:
                         subscription = "Unknown Premium"
                 else:
                     subscription = "Free"
             elif r.status_code == 404:
                 subscription = "Free"
+
+            # Get product details (billing cycle, cancel status, trial)
+            try:
+                r2 = session.get(f"https://www.crunchyroll.com/subs/v1/subscriptions/{external_id}/products", timeout=15)
+                if r2.status_code == 200:
+                    prod_data = r2.json()
+                    prod_items = prod_data.get("items", [])
+                    if prod_items:
+                        prod = prod_items[0]
+                        is_cancelled = prod.get("is_cancelled", False)
+                        active_free_trial = prod.get("active_free_trial", False)
+                        sub_effective_date = prod.get("effective_date", "")
+                        product_info = prod.get("product", {})
+                        sub_product_name = product_info.get("sku", "")
+                        cycle_raw = product_info.get("cycle_duration", "")
+                        # Parse ISO 8601 duration: P1M = Monthly, P1Y = Yearly, P7D = Weekly
+                        if cycle_raw == "P1M": sub_cycle = "Monthly"
+                        elif cycle_raw == "P3M": sub_cycle = "Quarterly"
+                        elif cycle_raw == "P1Y" or cycle_raw == "P12M": sub_cycle = "Yearly"
+                        elif cycle_raw == "P7D": sub_cycle = "Weekly"
+                        else: sub_cycle = cycle_raw
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -1377,6 +1425,17 @@ def check_crunchyroll_account(email, password, use_proxy=True):
         "external_id": external_id,
         "created": created,
         "route": route,
+        # Subscription details
+        "sub_country": sub_country,
+        "sub_source": sub_source,
+        "sub_cycle": sub_cycle,
+        "concurrent_streams": concurrent_streams,
+        "has_ads": has_ads,
+        "offline_viewing": offline_viewing,
+        "is_cancelled": is_cancelled,
+        "active_free_trial": active_free_trial,
+        "sub_effective_date": sub_effective_date,
+        "avatar": avatar,
     }
 
     # Save to history
