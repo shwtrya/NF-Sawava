@@ -961,6 +961,50 @@ tbody tr:hover {
       <div id="disney-single-out" class="card-out"></div>
     </div>
 
+    <!-- Disney+ Stats Dashboard -->
+    <div id="disney-stats-dashboard" class="card" style="padding:16px; margin-bottom:14px; display:none;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <div style="font-weight:700; font-size:13px; color:var(--primary);">📊 Session Stats</div>
+        <button class="btn-secondary" style="padding:3px 10px; font-size:10px;" onclick="resetDisneyStats()">Reset</button>
+      </div>
+      <div style="display:flex; gap:16px; align-items:center;">
+        <div style="position:relative; width:100px; height:100px; flex-shrink:0;">
+          <canvas id="disney-donut-chart" width="100" height="100"></canvas>
+          <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none;">
+            <span id="disney-donut-total" style="font-size:20px; font-weight:800; color:var(--text-primary);">0</span>
+            <span style="font-size:9px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px;">Total</span>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; flex:1;">
+          <div style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#6ee7b7; text-transform:uppercase; letter-spacing:0.5px;">Live</div>
+            <div id="disney-stat-live" style="font-size:22px; font-weight:800; color:#10b981;">0</div>
+          </div>
+          <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#fcd34d; text-transform:uppercase; letter-spacing:0.5px;">Hold</div>
+            <div id="disney-stat-hold" style="font-size:22px; font-weight:800; color:#f59e0b;">0</div>
+          </div>
+          <div style="background:rgba(244,63,94,0.1); border:1px solid rgba(244,63,94,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#fda4af; text-transform:uppercase; letter-spacing:0.5px;">Bad</div>
+            <div id="disney-stat-bad" style="font-size:22px; font-weight:800; color:#f43f5e;">0</div>
+          </div>
+          <div style="background:rgba(132,139,159,0.1); border:1px solid rgba(132,139,159,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px;">Error</div>
+            <div id="disney-stat-error" style="font-size:22px; font-weight:800; color:#94a3b8;">0</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+          <span style="color:var(--text-muted);">Hit Rate</span>
+          <span id="disney-hit-rate" style="font-weight:700; color:var(--primary);">0%</span>
+        </div>
+        <div style="background:var(--bg-subtle); border-radius:6px; height:6px; overflow:hidden;">
+          <div id="disney-hit-rate-bar" style="height:100%; width:0%; border-radius:6px; transition:width 0.4s; background:linear-gradient(90deg, #10b981, #6366f1);"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Bulk Disney+ Check -->
     <div class="card" style="padding:16px;">
       <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Combo Check</label>
@@ -1011,6 +1055,53 @@ tbody tr:hover {
         <span id="cr-single-btn-text">Check Crunchyroll Account</span>
       </button>
       <div id="cr-single-out" class="card-out"></div>
+    </div>
+
+    <!-- Crunchyroll Stats Dashboard -->
+    <div id="cr-stats-dashboard" class="card" style="padding:16px; margin-bottom:14px; display:none;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <div style="font-weight:700; font-size:13px; color:var(--primary);">📊 Session Stats</div>
+        <button class="btn-secondary" style="padding:3px 10px; font-size:10px;" onclick="resetCrStats()">Reset</button>
+      </div>
+      <div style="display:flex; gap:16px; align-items:center;">
+        <!-- Donut Chart -->
+        <div style="position:relative; width:100px; height:100px; flex-shrink:0;">
+          <canvas id="cr-donut-chart" width="100" height="100"></canvas>
+          <div id="cr-donut-center" style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none;">
+            <span id="cr-donut-total" style="font-size:20px; font-weight:800; color:var(--text-primary);">0</span>
+            <span style="font-size:9px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px;">Total</span>
+          </div>
+        </div>
+        <!-- Stats Grid -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; flex:1;">
+          <div class="cr-stat-box" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#6ee7b7; text-transform:uppercase; letter-spacing:0.5px;">Premium</div>
+            <div id="cr-stat-live" style="font-size:22px; font-weight:800; color:#10b981;">0</div>
+          </div>
+          <div class="cr-stat-box" style="background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#7dd3fc; text-transform:uppercase; letter-spacing:0.5px;">Free</div>
+            <div id="cr-stat-free" style="font-size:22px; font-weight:800; color:#38bdf8;">0</div>
+          </div>
+          <div class="cr-stat-box" style="background:rgba(244,63,94,0.1); border:1px solid rgba(244,63,94,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#fda4af; text-transform:uppercase; letter-spacing:0.5px;">Bad</div>
+            <div id="cr-stat-bad" style="font-size:22px; font-weight:800; color:#f43f5e;">0</div>
+          </div>
+          <div class="cr-stat-box" style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#fcd34d; text-transform:uppercase; letter-spacing:0.5px;">Error</div>
+            <div id="cr-stat-error" style="font-size:22px; font-weight:800; color:#f59e0b;">0</div>
+          </div>
+        </div>
+      </div>
+      <!-- Hit Rate Bar -->
+      <div style="margin-top:12px;">
+        <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+          <span style="color:var(--text-muted);">Hit Rate</span>
+          <span id="cr-hit-rate" style="font-weight:700; color:var(--primary);">0%</span>
+        </div>
+        <div style="background:var(--bg-subtle); border-radius:6px; height:6px; overflow:hidden;">
+          <div id="cr-hit-rate-bar" style="height:100%; width:0%; border-radius:6px; transition:width 0.4s; background:linear-gradient(90deg, #10b981, #38bdf8);"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Bulk Crunchyroll Check -->
@@ -2449,6 +2540,7 @@ async function runDisneySingle() {
 
     outEl.innerHTML = renderDisneyResult(mergedData, 'single');
     outEl.style.display = 'block';
+    updateDisneyStats(data.status);
 
     if (data.status === 'LIVE') playAlert('live');
     else if (data.status === 'HOLD') playAlert('hold');
@@ -2531,6 +2623,7 @@ async function runDisneyBulk() {
 
         outEl.innerHTML += renderDisneyResult({ ...data, email: email.trim(), _password: password.trim(), combo: combo.split(' | ')[0].trim() }, 'bulk');
         outEl.scrollTop = outEl.scrollHeight;
+        updateDisneyStats(data.status);
         if (data.status === 'LIVE') playAlert('live');
         else if (data.status === 'HOLD') playAlert('hold');
       } catch(e) {
@@ -2653,6 +2746,7 @@ async function runCrSingle() {
 
     outEl.innerHTML = renderCrResult(mergedData, 'single');
     outEl.style.display = 'block';
+    updateCrStats(data.status);
 
     if (data.status === 'LIVE') playAlert('live');
     else if (data.status === 'FREE') playAlert('hold');
@@ -2708,6 +2802,7 @@ async function runCrBulk() {
         else errors++;
         outEl.innerHTML += renderCrResult({ ...data, email: email.trim(), _password: password.trim(), combo: combo.split(' | ')[0].trim() }, 'bulk');
         outEl.scrollTop = outEl.scrollHeight;
+        updateCrStats(data.status);
         if (data.status === 'LIVE') playAlert('live');
         else if (data.status === 'FREE') playAlert('hold');
       } catch(e) {
@@ -2741,6 +2836,130 @@ function exportCrHits() {
 document.getElementById('cr-password')?.addEventListener('keydown', e => {
   if (e.key === 'Enter') runCrSingle();
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// Crunchyroll Session Stats & Donut Chart
+// ═══════════════════════════════════════════════════════════════════
+const crStats = { live: 0, free: 0, bad: 0, error: 0 };
+
+function updateCrStats(status) {
+  if (status === 'LIVE') crStats.live++;
+  else if (status === 'FREE') crStats.free++;
+  else if (status === 'BAD' || status === 'DEAD') crStats.bad++;
+  else crStats.error++;
+
+  const dashboard = document.getElementById('cr-stats-dashboard');
+  if (dashboard) dashboard.style.display = 'block';
+
+  document.getElementById('cr-stat-live').textContent = crStats.live;
+  document.getElementById('cr-stat-free').textContent = crStats.free;
+  document.getElementById('cr-stat-bad').textContent = crStats.bad;
+  document.getElementById('cr-stat-error').textContent = crStats.error;
+
+  const total = crStats.live + crStats.free + crStats.bad + crStats.error;
+  document.getElementById('cr-donut-total').textContent = total;
+
+  const hitRate = total > 0 ? ((crStats.live + crStats.free) / total * 100) : 0;
+  document.getElementById('cr-hit-rate').textContent = hitRate.toFixed(1) + '%';
+  document.getElementById('cr-hit-rate-bar').style.width = hitRate + '%';
+
+  drawDonutChart('cr-donut-chart', [
+    { val: crStats.live,  color: '#10b981' },
+    { val: crStats.free,  color: '#38bdf8' },
+    { val: crStats.bad,   color: '#f43f5e' },
+    { val: crStats.error, color: '#f59e0b' },
+  ]);
+}
+
+function resetCrStats() {
+  crStats.live = 0; crStats.free = 0; crStats.bad = 0; crStats.error = 0;
+  ['cr-stat-live','cr-stat-free','cr-stat-bad','cr-stat-error'].forEach(id => document.getElementById(id).textContent = '0');
+  document.getElementById('cr-donut-total').textContent = '0';
+  document.getElementById('cr-hit-rate').textContent = '0%';
+  document.getElementById('cr-hit-rate-bar').style.width = '0%';
+  drawDonutChart('cr-donut-chart', []);
+  showToast('Stats direset');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Disney+ Session Stats & Donut Chart
+// ═══════════════════════════════════════════════════════════════════
+const disneyStats = { live: 0, hold: 0, bad: 0, error: 0 };
+
+function updateDisneyStats(status) {
+  if (status === 'LIVE') disneyStats.live++;
+  else if (status === 'HOLD') disneyStats.hold++;
+  else if (status === 'BAD' || status === 'DEAD') disneyStats.bad++;
+  else disneyStats.error++;
+
+  const dashboard = document.getElementById('disney-stats-dashboard');
+  if (dashboard) dashboard.style.display = 'block';
+
+  document.getElementById('disney-stat-live').textContent = disneyStats.live;
+  document.getElementById('disney-stat-hold').textContent = disneyStats.hold;
+  document.getElementById('disney-stat-bad').textContent = disneyStats.bad;
+  document.getElementById('disney-stat-error').textContent = disneyStats.error;
+
+  const total = disneyStats.live + disneyStats.hold + disneyStats.bad + disneyStats.error;
+  document.getElementById('disney-donut-total').textContent = total;
+
+  const hitRate = total > 0 ? ((disneyStats.live + disneyStats.hold) / total * 100) : 0;
+  document.getElementById('disney-hit-rate').textContent = hitRate.toFixed(1) + '%';
+  document.getElementById('disney-hit-rate-bar').style.width = hitRate + '%';
+
+  drawDonutChart('disney-donut-chart', [
+    { val: disneyStats.live,  color: '#10b981' },
+    { val: disneyStats.hold,  color: '#f59e0b' },
+    { val: disneyStats.bad,   color: '#f43f5e' },
+    { val: disneyStats.error, color: '#94a3b8' },
+  ]);
+}
+
+function resetDisneyStats() {
+  disneyStats.live = 0; disneyStats.hold = 0; disneyStats.bad = 0; disneyStats.error = 0;
+  ['disney-stat-live','disney-stat-hold','disney-stat-bad','disney-stat-error'].forEach(id => document.getElementById(id).textContent = '0');
+  document.getElementById('disney-donut-total').textContent = '0';
+  document.getElementById('disney-hit-rate').textContent = '0%';
+  document.getElementById('disney-hit-rate-bar').style.width = '0%';
+  drawDonutChart('disney-donut-chart', []);
+  showToast('Stats direset');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Shared Donut Chart Renderer (Canvas 2D)
+// ═══════════════════════════════════════════════════════════════════
+function drawDonutChart(canvasId, segments) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const cx = w / 2, cy = h / 2, r = 42, lineW = 10;
+
+  ctx.clearRect(0, 0, w, h);
+
+  const total = segments.reduce((s, seg) => s + seg.val, 0);
+  if (total === 0) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(132,139,159,0.2)';
+    ctx.lineWidth = lineW;
+    ctx.stroke();
+    return;
+  }
+
+  let angle = -Math.PI / 2;
+  segments.forEach(seg => {
+    if (seg.val === 0) return;
+    const slice = (seg.val / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, angle, angle + slice);
+    ctx.strokeStyle = seg.color;
+    ctx.lineWidth = lineW;
+    ctx.lineCap = 'butt';
+    ctx.stroke();
+    angle += slice;
+  });
+}
 
 </script>
 </body>
