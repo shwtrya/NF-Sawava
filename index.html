@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NF-Sawava Suite — Netflix & Disney+ Suite</title>
+<title>NF-Sawava Suite — Netflix, Disney+, Crunchyroll, ExpressVPN & HBO Max Suite</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -131,9 +131,91 @@ body.disney-body {
   background: #d4631a;
 }
 
+/* ExpressVPN theme (green) */
+.expressvpn-theme {
+  --primary: #da3940;
+  --primary-hover: #b72f35;
+  --primary-glow: rgba(218, 57, 64, 0.25);
+  --border-focus: #da3940;
+}
+
+.expressvpn-theme .brand-icon {
+  background: linear-gradient(135deg, #da3940 0%, #8b1a1f 100%) !important;
+}
+
+.expressvpn-theme .tab-btn.active {
+  border-color: rgba(218, 57, 64, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(218, 57, 64, 0.15) !important;
+}
+
+.expressvpn-theme .control-ribbon {
+  border-color: rgba(218, 57, 64, 0.15);
+}
+
+.expressvpn-theme input[type="checkbox"]:checked {
+  accent-color: #da3940;
+}
+
+.expressvpn-theme .btn-primary {
+  background: #da3940;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(218, 57, 64, 0.25);
+}
+
+.expressvpn-theme .btn-primary:hover {
+  background: #b72f35;
+}
+
+body.expressvpn-body {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(218, 57, 64, 0.12), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.01) 0%, transparent 100%);
+}
+
 body.crunchyroll-body {
   background-image:
     radial-gradient(ellipse 80% 50% at 50% -20%, rgba(244, 117, 33, 0.12), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.01) 0%, transparent 100%);
+}
+
+/* HBO Max theme (purple) */
+.hbomax-theme {
+  --primary: #b01bef;
+  --primary-hover: #8e15c0;
+  --primary-glow: rgba(176, 27, 239, 0.25);
+  --border-focus: #b01bef;
+}
+
+.hbomax-theme .brand-icon {
+  background: linear-gradient(135deg, #b01bef 0%, #6b0f91 100%) !important;
+}
+
+.hbomax-theme .tab-btn.active {
+  border-color: rgba(176, 27, 239, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(176, 27, 239, 0.15) !important;
+}
+
+.hbomax-theme .control-ribbon {
+  border-color: rgba(176, 27, 239, 0.15);
+}
+
+.hbomax-theme input[type="checkbox"]:checked {
+  accent-color: #b01bef;
+}
+
+.hbomax-theme .btn-primary {
+  background: #b01bef;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(176, 27, 239, 0.25);
+}
+
+.hbomax-theme .btn-primary:hover {
+  background: #8e15c0;
+}
+
+body.hbomax-body {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(176, 27, 239, 0.12), transparent 70%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.01) 0%, transparent 100%);
 }
 
@@ -247,7 +329,7 @@ body {
 /* Tabs */
 .tabs {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 6px;
   background: var(--bg-input);
   padding: 5px;
@@ -895,6 +977,8 @@ tbody tr:hover {
     <button class="tab-btn active" onclick="switchTab('single')">Single Check</button>
     <button class="tab-btn" onclick="switchTab('disney')">Disney+</button>
     <button class="tab-btn" onclick="switchTab('crunchyroll')">Crunchyroll</button>
+    <button class="tab-btn" onclick="switchTab('expressvpn')">ExpressVPN</button>
+    <button class="tab-btn" onclick="switchTab('hbomax')">HBO Max</button>
     <button class="tab-btn" onclick="switchTab('bulk')">Concurrent Bulk</button>
     <button class="tab-btn" onclick="switchTab('history')">History DB</button>
     <button class="tab-btn" onclick="switchTab('proxies')">Proxy Manager</button>
@@ -1127,6 +1211,198 @@ tbody tr:hover {
     </div>
   </div>
 
+  <!-- PANEL: EXPRESSVPN CHECKER -->
+  <div id="panel-expressvpn" class="section-panel">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <div style="font-size:20px;">🔐</div>
+      <div>
+        <div style="font-weight:700; font-size:16px; color:var(--primary);">ExpressVPN Account Checker</div>
+        <div style="font-size:11px; color:var(--text-muted);">Check ExpressVPN accounts via iOS API. Format: email:password</div>
+      </div>
+    </div>
+
+    <!-- Single ExpressVPN Check -->
+    <div class="card" style="padding:16px; margin-bottom:14px;">
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Single Account Check</label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="evpn-email" placeholder="email@example.com" style="flex:1;">
+        <input type="password" id="evpn-password" placeholder="password" style="flex:1;">
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+        <div class="toggle-wrap" onclick="document.getElementById('evpn-proxy-toggle').click()" style="margin:0;">
+          <input type="checkbox" id="evpn-proxy-toggle" onclick="event.stopPropagation()">
+          <span style="font-size:11px;">Pakai Proxy</span>
+        </div>
+      </div>
+      <button id="evpn-single-btn" class="btn-primary" onclick="runEvpnSingle()" style="margin-top:8px;">
+        <span id="evpn-single-btn-text">Check ExpressVPN Account</span>
+      </button>
+      <div id="evpn-single-out" class="card-out"></div>
+    </div>
+
+    <!-- ExpressVPN Stats Dashboard -->
+    <div id="evpn-stats-dashboard" class="card" style="padding:16px; margin-bottom:14px; display:none;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <div style="font-weight:700; font-size:13px; color:var(--primary);">📊 Session Stats</div>
+        <button class="btn-secondary" style="padding:3px 10px; font-size:10px;" onclick="resetEvpnStats()">Reset</button>
+      </div>
+      <div style="display:flex; gap:16px; align-items:center;">
+        <div style="position:relative; width:100px; height:100px; flex-shrink:0;">
+          <canvas id="evpn-donut-chart" width="100" height="100"></canvas>
+          <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none;">
+            <span id="evpn-donut-total" style="font-size:20px; font-weight:800; color:var(--text-primary);">0</span>
+            <span style="font-size:9px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px;">Total</span>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; flex:1;">
+          <div style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#6ee7b7; text-transform:uppercase; letter-spacing:0.5px;">Premium</div>
+            <div id="evpn-stat-premium" style="font-size:22px; font-weight:800; color:#10b981;">0</div>
+          </div>
+          <div style="background:rgba(168,85,247,0.1); border:1px solid rgba(168,85,247,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#c4b5fd; text-transform:uppercase; letter-spacing:0.5px;">Trial</div>
+            <div id="evpn-stat-trial" style="font-size:22px; font-weight:800; color:#a855f7;">0</div>
+          </div>
+          <div style="background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#7dd3fc; text-transform:uppercase; letter-spacing:0.5px;">Free</div>
+            <div id="evpn-stat-free" style="font-size:22px; font-weight:800; color:#38bdf8;">0</div>
+          </div>
+          <div style="background:rgba(244,63,94,0.1); border:1px solid rgba(244,63,94,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#fda4af; text-transform:uppercase; letter-spacing:0.5px;">Bad/Error</div>
+            <div id="evpn-stat-bad" style="font-size:22px; font-weight:800; color:#f43f5e;">0</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+          <span style="color:var(--text-muted);">Hit Rate</span>
+          <span id="evpn-hit-rate" style="font-weight:700; color:var(--primary);">0%</span>
+        </div>
+        <div style="background:var(--bg-subtle); border-radius:6px; height:6px; overflow:hidden;">
+          <div id="evpn-hit-rate-bar" style="height:100%; width:0%; border-radius:6px; transition:width 0.4s; background:linear-gradient(90deg, #10b981, #a855f7);"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bulk ExpressVPN Check -->
+    <div class="card" style="padding:16px;">
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Combo Check</label>
+      <textarea id="evpn-bulk-input" placeholder="Paste combo list (email:password per baris)..." style="height:120px;"></textarea>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button id="evpn-bulk-btn" class="btn-primary" style="flex:2;" onclick="runEvpnBulk()">Mulai Bulk Check</button>
+        <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopEvpnBulk()">Stop</button>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+        <div id="evpn-bulk-stats" style="font-size:12px; font-weight:600; color:var(--text-muted);"></div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="exportEvpnHits()">Export Hits</button>
+        </div>
+      </div>
+      <div id="evpn-bulk-progress" style="margin-top:8px; display:none;">
+        <div style="background:var(--bg-subtle); border-radius:6px; height:6px; overflow:hidden;">
+          <div id="evpn-progress-bar" style="background:var(--primary); height:100%; width:0%; transition:width 0.3s;"></div>
+        </div>
+      </div>
+      <div id="evpn-bulk-out" style="max-height:400px; overflow-y:auto; margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- PANEL: HBO MAX CHECKER -->
+  <div id="panel-hbomax" class="section-panel">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <div style="font-size:20px;">🎬</div>
+      <div>
+        <div style="font-weight:700; font-size:16px; color:var(--primary);">HBO Max Account Checker</div>
+        <div style="font-size:11px; color:var(--text-muted);">Check HBO Max / Max accounts via Comet API. Format: email:password</div>
+      </div>
+    </div>
+
+    <!-- Single HBO Max Check -->
+    <div class="card" style="padding:16px; margin-bottom:14px;">
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Single Account Check</label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="hbo-email" placeholder="email@example.com" style="flex:1;">
+        <input type="password" id="hbo-password" placeholder="password" style="flex:1;">
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+        <div class="toggle-wrap" onclick="document.getElementById('hbo-proxy-toggle').click()" style="margin:0;">
+          <input type="checkbox" id="hbo-proxy-toggle" onclick="event.stopPropagation()">
+          <span style="font-size:11px;">Pakai Proxy</span>
+        </div>
+      </div>
+      <button id="hbo-single-btn" class="btn-primary" onclick="runHboSingle()" style="margin-top:8px;">
+        <span id="hbo-single-btn-text">Check HBO Max Account</span>
+      </button>
+      <div id="hbo-single-out" class="card-out"></div>
+    </div>
+
+    <!-- HBO Max Stats Dashboard -->
+    <div id="hbo-stats-dashboard" class="card" style="padding:16px; margin-bottom:14px; display:none;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <div style="font-weight:700; font-size:13px; color:var(--primary);">📊 Session Stats</div>
+        <button class="btn-secondary" style="padding:3px 10px; font-size:10px;" onclick="resetHboStats()">Reset</button>
+      </div>
+      <div style="display:flex; gap:16px; align-items:center;">
+        <div style="position:relative; width:100px; height:100px; flex-shrink:0;">
+          <canvas id="hbo-donut-chart" width="100" height="100"></canvas>
+          <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none;">
+            <span id="hbo-donut-total" style="font-size:20px; font-weight:800; color:var(--text-primary);">0</span>
+            <span style="font-size:9px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px;">Total</span>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; flex:1;">
+          <div style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#6ee7b7; text-transform:uppercase; letter-spacing:0.5px;">Live</div>
+            <div id="hbo-stat-live" style="font-size:22px; font-weight:800; color:#10b981;">0</div>
+          </div>
+          <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#fcd34d; text-transform:uppercase; letter-spacing:0.5px;">Hold</div>
+            <div id="hbo-stat-hold" style="font-size:22px; font-weight:800; color:#f59e0b;">0</div>
+          </div>
+          <div style="background:rgba(244,63,94,0.1); border:1px solid rgba(244,63,94,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#fda4af; text-transform:uppercase; letter-spacing:0.5px;">Bad</div>
+            <div id="hbo-stat-bad" style="font-size:22px; font-weight:800; color:#f43f5e;">0</div>
+          </div>
+          <div style="background:rgba(132,139,159,0.1); border:1px solid rgba(132,139,159,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px;">Error</div>
+            <div id="hbo-stat-error" style="font-size:22px; font-weight:800; color:#94a3b8;">0</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+          <span style="color:var(--text-muted);">Hit Rate</span>
+          <span id="hbo-hit-rate" style="font-weight:700; color:var(--primary);">0%</span>
+        </div>
+        <div style="background:var(--bg-subtle); border-radius:6px; height:6px; overflow:hidden;">
+          <div id="hbo-hit-rate-bar" style="height:100%; width:0%; border-radius:6px; transition:width 0.4s; background:linear-gradient(90deg, #10b981, #b01bef);"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bulk HBO Max Check -->
+    <div class="card" style="padding:16px;">
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Combo Check</label>
+      <textarea id="hbo-bulk-input" placeholder="Paste combo list (email:password per baris)..." style="height:120px;"></textarea>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button id="hbo-bulk-btn" class="btn-primary" style="flex:2;" onclick="runHboBulk()">Mulai Bulk Check</button>
+        <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopHboBulk()">Stop</button>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+        <div id="hbo-bulk-stats" style="font-size:12px; font-weight:600; color:var(--text-muted);"></div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="exportHboHits()">Export Hits</button>
+        </div>
+      </div>
+      <div id="hbo-bulk-progress" style="margin-top:8px; display:none;">
+        <div style="background:var(--bg-subtle); border-radius:6px; height:6px; overflow:hidden;">
+          <div id="hbo-progress-bar" style="background:var(--primary); height:100%; width:0%; transition:width 0.3s;"></div>
+        </div>
+      </div>
+      <div id="hbo-bulk-out" style="max-height:400px; overflow-y:auto; margin-top:12px;"></div>
+    </div>
+  </div>
+
   <!-- PANEL 2: BULK -->
   <div id="panel-bulk" class="section-panel">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
@@ -1209,6 +1485,8 @@ tbody tr:hover {
         <option value="checker">🔴 Netflix</option>
         <option value="disney">🟢 Disney+</option>
         <option value="crunchyroll">🟠 Crunchyroll</option>
+        <option value="expressvpn">🟢 ExpressVPN</option>
+        <option value="hbomax">🟣 HBO Max</option>
       </select>
       <select id="hist-filter-status" onchange="resetPageAndLoad()" style="flex:1; margin-bottom:0;">
         <option value="">Semua Status</option>
@@ -1217,6 +1495,8 @@ tbody tr:hover {
         <option value="FREE">Hanya FREE</option>
         <option value="DEAD">Hanya DEAD</option>
         <option value="BAD">Hanya BAD</option>
+        <option value="PREMIUM">Hanya PREMIUM</option>
+        <option value="TRIAL">Hanya TRIAL</option>
       </select>
       <select id="hist-filter-plan" onchange="resetPageAndLoad()" style="flex:1; margin-bottom:0;">
         <option value="">Semua Plan</option>
@@ -1227,7 +1507,7 @@ tbody tr:hover {
       </select>
       <button class="btn-secondary" onclick="exportCsvWithAuth()">Export CSV</button>
       <button class="btn-secondary" onclick="loadHistory()">Refresh</button>
-      <button class="btn-secondary" style="color:#f59e0b; border-color:rgba(245,158,11,0.3);" onclick="clearDbHistory(true)">Hapus DEAD Saja</button>
+      <button class="btn-secondary" style="color:#f59e0b; border-color:rgba(245,158,11,0.3);" onclick="clearDbHistory(true)">Hapus DEAD/BAD</button>
       <button class="btn-secondary" style="color:var(--dead); border-color:var(--dead-border);" onclick="clearDbHistory(false)">Hapus Semua</button>
     </div>
     <div class="table-wrap">
@@ -1448,7 +1728,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 function switchTab(tab) {
-  const tabs = ['single', 'disney', 'crunchyroll', 'bulk', 'history', 'proxies', 'analytics'];
+  const tabs = ['single', 'disney', 'crunchyroll', 'expressvpn', 'hbomax', 'bulk', 'history', 'proxies', 'analytics'];
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
     btn.classList.toggle('active', tabs[i] === tab);
   });
@@ -1459,14 +1739,20 @@ function switchTab(tab) {
 
   // Theme switching
   const container = document.querySelector('.container');
-  container.classList.remove('disney-theme', 'crunchyroll-theme');
-  document.body.classList.remove('disney-body', 'crunchyroll-body');
+  container.classList.remove('disney-theme', 'crunchyroll-theme', 'expressvpn-theme', 'hbomax-theme');
+  document.body.classList.remove('disney-body', 'crunchyroll-body', 'expressvpn-body', 'hbomax-body');
   if (tab === 'disney') {
     container.classList.add('disney-theme');
     document.body.classList.add('disney-body');
   } else if (tab === 'crunchyroll') {
     container.classList.add('crunchyroll-theme');
     document.body.classList.add('crunchyroll-body');
+  } else if (tab === 'expressvpn') {
+    container.classList.add('expressvpn-theme');
+    document.body.classList.add('expressvpn-body');
+  } else if (tab === 'hbomax') {
+    container.classList.add('hbomax-theme');
+    document.body.classList.add('hbomax-body');
   }
 
   if (tab === 'history') loadHistory();
@@ -2052,10 +2338,14 @@ function renderHistoryTable(data) {
   tbody.innerHTML = rows.map(r => {
     const svcBadge = r.type === 'disney' ? '<span style="color:#1ce783;">🟢 Disney+</span>'
       : r.type === 'crunchyroll' ? '<span style="color:#f47521;">🟠 Crunchyroll</span>'
+      : r.type === 'expressvpn' ? '<span style="color:#44b556;">🟢 ExpressVPN</span>'
+      : r.type === 'hbomax' ? '<span style="color:#b01bef;">🟣 HBO Max</span>'
       : '<span style="color:#e50914;">🔴 Netflix</span>';
     const statusTag = r.status === 'LIVE' ? '<span class="tag-live">● LIVE</span>'
       : r.status === 'HOLD' ? '<span class="tag-hold">⏸ HOLD</span>'
       : r.status === 'FREE' ? '<span style="color:#38bdf8; background:rgba(56,189,248,0.1); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700;">🆓 FREE</span>'
+      : r.status === 'PREMIUM' ? '<span style="color:#fbbf24; background:rgba(251,191,36,0.1); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700;">👑 PREMIUM</span>'
+      : r.status === 'TRIAL' ? '<span style="color:#a78bfa; background:rgba(167,139,250,0.1); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700;">🧪 TRIAL</span>'
       : r.status === 'BAD' ? '<span class="tag-dead">✕ BAD</span>'
       : r.status === 'DEAD' ? '<span class="tag-dead">✕ DEAD</span>'
       : `<span class="tag-dead">⚠ ${r.status}</span>`;
@@ -2966,6 +3256,440 @@ function drawDonutChart(canvasId, segments) {
     angle += slice;
   });
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// ExpressVPN Account Checker
+// ═══════════════════════════════════════════════════════════════════
+let evpnBulkRunning = false;
+let evpnBulkAbort = false;
+let evpnBulkResults = [];
+
+const evpnStats = { premium: 0, trial: 0, free: 0, bad: 0 };
+
+function renderEvpnResult(data, mode = 'single') {
+  const statusMap = {
+    PREMIUM: ['✅','#10b981','rgba(16,185,129,0.1)'],
+    TRIAL: ['🎁','#a855f7','rgba(168,85,247,0.1)'],
+    FREE: ['🆓','#38bdf8','rgba(56,189,248,0.1)'],
+    BAD: ['❌','#f43f5e','rgba(244,63,94,0.1)'],
+    ERROR: ['⚠️','#f59e0b','rgba(245,158,11,0.1)']
+  };
+  const [icon, color, bg] = statusMap[data.status] || ['❓','var(--text-muted)','rgba(132,139,159,0.1)'];
+  const comboText = data.combo || `${data.email || ''}:${data._password || '***'}`;
+
+  if (data.status === 'PREMIUM' || data.status === 'TRIAL' || data.status === 'FREE') {
+    const label = data.status === 'PREMIUM' ? 'Premium Account' : data.status === 'TRIAL' ? 'Trial Account' : 'Free Account';
+    const cardClass = 'card-out live';
+
+    return `<div class="${mode === 'bulk' ? '' : cardClass}" style="${mode === 'bulk' ? `padding:16px; border-left:4px solid ${color}; background:${bg}; margin-bottom:10px; border-radius:var(--radius-lg);` : ''}">
+      <div class="card-header-status" style="color:${color};">
+        <span>${icon}</span> <span>${label}</span>
+        <span style="margin-left:auto; font-size:11px; color:var(--text-muted); font-weight:500;">via ${data.route || 'Direct'}</span>
+      </div>
+
+      <div class="grid-meta">
+        <div class="meta-box"><span>Email</span><strong>${data.email || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Status</span><strong style="color:${color};">${data.status}</strong></div>
+        <div class="meta-box"><span>Plan</span><strong>${data.plan || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Expire Date</span><strong>${data.expire_date || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Days Left</span><strong style="color:${(data.days_left||0) > 30 ? '#10b981' : (data.days_left||0) > 7 ? '#f59e0b' : '#f43f5e'};">${data.days_left != null ? data.days_left + ' days' : 'N/A'}</strong></div>
+        <div class="meta-box"><span>Auto Renew</span><strong style="color:${data.auto_renew ? 'var(--live)' : 'var(--dead)'};">${data.auto_renew ? '✅ Yes' : '❌ No'}</strong></div>
+        <div class="meta-box"><span>Payment</span><strong>${data.payment_method || 'N/A'}</strong></div>
+        ${data.ovpn_username ? `<div class="meta-box"><span>OVPN User</span><strong style="font-family:'JetBrains Mono',monospace; font-size:11px;">${data.ovpn_username}</strong></div>` : ''}
+        ${data.ovpn_password ? `<div class="meta-box"><span>OVPN Pass</span><strong style="font-family:'JetBrains Mono',monospace; font-size:11px;">${data.ovpn_password}</strong></div>` : ''}
+      </div>
+
+      <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="copyText('${escapeAttr(comboText)}', 'Combo disalin!')">📋 Copy Combo</button>
+        <button class="btn-secondary" onclick="copyText('${escapeAttr(data.email || '')}', 'Email disalin!')">📧 Copy Email</button>
+        ${data.ovpn_username ? `<button class="btn-secondary" onclick="copyText('${escapeAttr(data.ovpn_username + ':' + (data.ovpn_password||''))}', 'OVPN creds disalin!')">🔑 Copy OVPN</button>` : ''}
+      </div>
+    </div>`;
+  }
+
+  // BAD / ERROR
+  return `<div class="${mode === 'bulk' ? '' : 'card-out dead'}" style="${mode === 'bulk' ? `padding:10px; border-left:3px solid ${color}; background:${bg}; margin-bottom:6px; border-radius:var(--radius-sm);` : ''}">
+    <div class="card-header-status" style="color:${color};">
+      <span>${icon}</span> <span>${data.status === 'BAD' ? 'Wrong Credentials' : data.status}</span>
+    </div>
+    <div style="color:var(--text-muted); font-size:12px;">${data.reason || data.email || 'Akun tidak valid'}</div>
+  </div>`;
+}
+
+function updateEvpnStats(status) {
+  if (status === 'PREMIUM') evpnStats.premium++;
+  else if (status === 'TRIAL') evpnStats.trial++;
+  else if (status === 'FREE') evpnStats.free++;
+  else evpnStats.bad++;
+
+  const dashboard = document.getElementById('evpn-stats-dashboard');
+  if (dashboard) dashboard.style.display = 'block';
+
+  document.getElementById('evpn-stat-premium').textContent = evpnStats.premium;
+  document.getElementById('evpn-stat-trial').textContent = evpnStats.trial;
+  document.getElementById('evpn-stat-free').textContent = evpnStats.free;
+  document.getElementById('evpn-stat-bad').textContent = evpnStats.bad;
+
+  const total = evpnStats.premium + evpnStats.trial + evpnStats.free + evpnStats.bad;
+  document.getElementById('evpn-donut-total').textContent = total;
+
+  const hitRate = total > 0 ? ((evpnStats.premium + evpnStats.trial) / total * 100) : 0;
+  document.getElementById('evpn-hit-rate').textContent = hitRate.toFixed(1) + '%';
+  document.getElementById('evpn-hit-rate-bar').style.width = hitRate + '%';
+
+  drawDonutChart('evpn-donut-chart', [
+    { val: evpnStats.premium, color: '#10b981' },
+    { val: evpnStats.trial,   color: '#a855f7' },
+    { val: evpnStats.free,    color: '#38bdf8' },
+    { val: evpnStats.bad,     color: '#f43f5e' },
+  ]);
+}
+
+function resetEvpnStats() {
+  evpnStats.premium = 0; evpnStats.trial = 0; evpnStats.free = 0; evpnStats.bad = 0;
+  ['evpn-stat-premium','evpn-stat-trial','evpn-stat-free','evpn-stat-bad'].forEach(id => document.getElementById(id).textContent = '0');
+  document.getElementById('evpn-donut-total').textContent = '0';
+  document.getElementById('evpn-hit-rate').textContent = '0%';
+  document.getElementById('evpn-hit-rate-bar').style.width = '0%';
+  drawDonutChart('evpn-donut-chart', []);
+  showToast('Stats direset');
+}
+
+async function runEvpnSingle() {
+  const email = document.getElementById('evpn-email').value.trim();
+  const password = document.getElementById('evpn-password').value.trim();
+  if (!email || !password) return showToast('Email dan password wajib diisi');
+  const btn = document.getElementById('evpn-single-btn');
+  const btnText = document.getElementById('evpn-single-btn-text');
+  const outEl = document.getElementById('evpn-single-out');
+  const useProxy = document.getElementById('evpn-proxy-toggle')?.checked ?? false;
+  btn.disabled = true;
+  btnText.textContent = 'Checking...';
+  outEl.style.display = 'none';
+  outEl.className = 'card-out';
+  outEl.innerHTML = '';
+
+  try {
+    const res = await fetch('/api/expressvpn/check', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ email, password, use_proxy: useProxy })
+    });
+    const data = await res.json();
+    const mergedData = { ...data, _password: password, combo: `${email}:${password}` };
+
+    outEl.innerHTML = renderEvpnResult(mergedData, 'single');
+    outEl.style.display = 'block';
+    updateEvpnStats(data.status);
+
+    if (data.status === 'PREMIUM') playAlert('4k');
+    else if (data.status === 'TRIAL') playAlert('live');
+    else if (data.status === 'FREE') playAlert('hold');
+  } catch(e) {
+    outEl.className = 'card-out dead';
+    outEl.innerHTML = `
+      <div class="card-header-status" style="color:var(--dead);">
+        <span>✕</span> <span>Request Gagal</span>
+      </div>
+      <div style="color:var(--text-muted);">${e.message}</div>
+    `;
+    outEl.style.display = 'block';
+  }
+  btn.disabled = false;
+  btnText.textContent = 'Check ExpressVPN Account';
+}
+
+async function runEvpnBulk() {
+  const raw = document.getElementById('evpn-bulk-input').value.trim();
+  if (!raw) return showToast('Paste combo list dulu');
+  if (evpnBulkRunning) return;
+  const lines = raw.split('\n').map(l => l.trim()).filter(l => l && l.includes(':'));
+  if (!lines.length) return showToast('Tidak ada combo valid');
+  evpnBulkRunning = true; evpnBulkAbort = false; evpnBulkResults = [];
+  const outEl = document.getElementById('evpn-bulk-out');
+  const statsEl = document.getElementById('evpn-bulk-stats');
+  const progressEl = document.getElementById('evpn-bulk-progress');
+  const barEl = document.getElementById('evpn-progress-bar');
+  const useProxy = document.getElementById('evpn-proxy-toggle')?.checked ?? false;
+  outEl.innerHTML = ''; progressEl.style.display = 'block'; barEl.style.width = '0%';
+  let done = 0, premium = 0, trial = 0, free = 0, bad = 0, errors = 0;
+  const total = lines.length;
+
+  for (const combo of lines) {
+    if (evpnBulkAbort) break;
+    const [email, ...pwParts] = combo.split(' | ')[0].trim().split(':');
+    const password = pwParts.join(':');
+    let retries = 0, success = false;
+    while (retries < 3 && !success) {
+      try {
+        const res = await fetch('/api/expressvpn/check', {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ email: email.trim(), password: password.trim(), use_proxy: useProxy })
+        });
+        if (res.status === 401) { outEl.innerHTML += `<div style="padding:10px; color:#f43f5e; font-weight:600;">🔒 PIN tidak valid</div>`; evpnBulkAbort = true; break; }
+        if (res.status === 429) { retries++; await new Promise(r => setTimeout(r, 3000 * retries)); continue; }
+        const data = await res.json(); data.combo = combo; evpnBulkResults.push(data);
+        success = true;
+        if (data.status === 'PREMIUM') premium++;
+        else if (data.status === 'TRIAL') trial++;
+        else if (data.status === 'FREE') free++;
+        else if (data.status === 'BAD' || data.status === 'DEAD') bad++;
+        else errors++;
+        outEl.innerHTML += renderEvpnResult({ ...data, email: email.trim(), _password: password.trim(), combo: combo.split(' | ')[0].trim() }, 'bulk');
+        outEl.scrollTop = outEl.scrollHeight;
+        updateEvpnStats(data.status);
+        if (data.status === 'PREMIUM') playAlert('4k');
+        else if (data.status === 'TRIAL') playAlert('live');
+        else if (data.status === 'FREE') playAlert('hold');
+      } catch(e) {
+        retries++;
+        if (retries >= 3) { errors++; outEl.innerHTML += `<div style="padding:6px; font-size:11px; color:#f59e0b;">⚠️ ${email}: ${e.message}</div>`; success = true; }
+        else { await new Promise(r => setTimeout(r, 2000)); }
+      }
+    }
+    await new Promise(r => setTimeout(r, 1200));
+    done++;
+    barEl.style.width = `${(done / total * 100).toFixed(1)}%`;
+    statsEl.innerHTML = `<span style="color:#10b981;">${premium} PREMIUM</span> · <span style="color:#a855f7;">${trial} TRIAL</span> · <span style="color:#38bdf8;">${free} FREE</span> · <span style="color:#f43f5e;">${bad} BAD</span> · <span style="color:#f59e0b;">${errors} ERR</span> · ${done}/${total}`;
+  }
+  evpnBulkRunning = false;
+  if (evpnBulkAbort) statsEl.innerHTML += ' · <span style="color:#f59e0b;">STOPPED</span>';
+  else statsEl.innerHTML += ' · <span style="color:#10b981;">DONE</span>';
+}
+
+function stopEvpnBulk() { evpnBulkAbort = true; }
+
+function exportEvpnHits() {
+  const hits = evpnBulkResults.filter(r => r.status === 'PREMIUM' || r.status === 'TRIAL');
+  if (!hits.length) return showToast('Belum ada hits untuk diexport');
+  const text = hits.map(h => `${h.combo || h.email+':***'} | Status: ${h.status} | Plan: ${h.plan || 'N/A'} | Expire: ${h.expire_date || 'N/A'} | Days: ${h.days_left ?? 'N/A'} | OVPN: ${h.ovpn_username || 'N/A'}/${h.ovpn_password || 'N/A'} | Payment: ${h.payment_method || 'N/A'}`).join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `expressvpn_hits_${new Date().toISOString().slice(0,10)}.txt`;
+  a.click(); showToast(`${hits.length} hits exported`);
+}
+
+document.getElementById('evpn-password')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') runEvpnSingle();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// HBO Max Account Checker Functions
+// ═══════════════════════════════════════════════════════════════════
+
+let hboBulkRunning = false;
+let hboBulkAbort = false;
+let hboBulkResults = [];
+
+const hboStats = { live: 0, hold: 0, bad: 0, error: 0 };
+
+function renderHboResult(data, mode = 'single') {
+  const statusMap = {
+    LIVE: ['✅','#10b981','rgba(16,185,129,0.1)'],
+    HOLD: ['⏸','#f59e0b','rgba(245,158,11,0.1)'],
+    BAD: ['❌','#f43f5e','rgba(244,63,94,0.1)'],
+    ERROR: ['⚠️','#f59e0b','rgba(245,158,11,0.1)']
+  };
+  const [icon, color, bg] = statusMap[data.status] || ['❓','var(--text-muted)','rgba(132,139,159,0.1)'];
+  const comboText = data.combo || `${data.email || ''}:${data._password || '***'}`;
+
+  if (data.status === 'LIVE' || data.status === 'HOLD') {
+    const isHold = data.status === 'HOLD';
+    const cardClass = isHold ? 'card-out hold' : 'card-out live';
+    const label = isHold ? 'Account On Hold' : 'Account Live';
+
+    return `<div class="${mode === 'bulk' ? '' : cardClass}" style="${mode === 'bulk' ? `padding:16px; border-left:4px solid ${color}; background:${bg}; margin-bottom:10px; border-radius:var(--radius-lg);` : ''}">
+      <div class="card-header-status" style="color:${color};">
+        <span>${icon}</span> <span>${label}</span>
+        <span style="margin-left:auto; font-size:11px; color:var(--text-muted); font-weight:500;">via ${data.route || 'Direct'}</span>
+      </div>
+
+      ${isHold ? `
+      <div style="background:rgba(245, 158, 11, 0.12); border:1px solid rgba(245, 158, 11, 0.3); color:#fcd34d; padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:12px; font-size:12px; display:flex; align-items:center; gap:8px;">
+        <span>⚠️</span> <span><strong>Subscription Inactive:</strong> Akun ini dalam status hold / lapsed.</span>
+      </div>
+      ` : ''}
+
+      <div class="grid-meta">
+        <div class="meta-box"><span>Email</span><strong>${data.email || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Plan</span><strong style="color:#b01bef;">${data.plan || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Country</span><strong>${data.country || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Tier</span><strong>${data.tier || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Token Expiry</span><strong>${data.token_expiry || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Has Refresh Token</span><strong style="color:${data.has_refresh_token ? 'var(--live)' : 'var(--dead)'};">${data.has_refresh_token ? '✅ Yes' : '❌ No'}</strong></div>
+      </div>
+
+      <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="copyText('${escapeAttr(comboText)}', 'Combo disalin!')">📋 Copy Combo</button>
+        <button class="btn-secondary" onclick="copyText('${escapeAttr(data.email || '')}', 'Email disalin!')">📧 Copy Email</button>
+      </div>
+    </div>`;
+  }
+
+  // BAD / ERROR
+  return `<div class="${mode === 'bulk' ? '' : 'card-out dead'}" style="${mode === 'bulk' ? `padding:10px; border-left:3px solid ${color}; background:${bg}; margin-bottom:6px; border-radius:var(--radius-sm);` : ''}">
+    <div class="card-header-status" style="color:${color};">
+      <span>${icon}</span> <span>${data.status === 'BAD' ? 'Wrong Credentials' : data.status}</span>
+    </div>
+    <div style="color:var(--text-muted); font-size:12px;">${data.reason || data.email || 'Akun tidak valid'}</div>
+  </div>`;
+}
+
+async function runHboSingle() {
+  const email = document.getElementById('hbo-email').value.trim();
+  const password = document.getElementById('hbo-password').value.trim();
+  if (!email || !password) return showToast('Email dan password wajib diisi');
+  const btn = document.getElementById('hbo-single-btn');
+  const btnText = document.getElementById('hbo-single-btn-text');
+  const outEl = document.getElementById('hbo-single-out');
+  const useProxy = document.getElementById('hbo-proxy-toggle')?.checked ?? false;
+  btn.disabled = true;
+  btnText.textContent = 'Checking...';
+  outEl.style.display = 'none';
+  outEl.className = 'card-out';
+  outEl.innerHTML = '';
+
+  try {
+    const res = await fetch('/api/hbomax/check', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ email, password, use_proxy: useProxy })
+    });
+    const data = await res.json();
+    const mergedData = { ...data, _password: password, combo: `${email}:${password}` };
+
+    outEl.innerHTML = renderHboResult(mergedData, 'single');
+    outEl.style.display = 'block';
+    updateHboStats(data.status);
+
+    if (data.status === 'LIVE') playAlert('live');
+    else if (data.status === 'HOLD') playAlert('hold');
+  } catch(e) {
+    outEl.className = 'card-out dead';
+    outEl.innerHTML = `
+      <div class="card-header-status" style="color:var(--dead);">
+        <span>✕</span> <span>Request Gagal</span>
+      </div>
+      <div style="color:var(--text-muted);">${e.message}</div>
+    `;
+    outEl.style.display = 'block';
+  }
+  btn.disabled = false;
+  btnText.textContent = 'Check HBO Max Account';
+}
+
+async function runHboBulk() {
+  const raw = document.getElementById('hbo-bulk-input').value.trim();
+  if (!raw) return showToast('Paste combo list dulu');
+  if (hboBulkRunning) return;
+  const lines = raw.split('\n').map(l => l.trim()).filter(l => l && l.includes(':'));
+  if (!lines.length) return showToast('Tidak ada combo valid');
+  hboBulkRunning = true; hboBulkAbort = false; hboBulkResults = [];
+  const outEl = document.getElementById('hbo-bulk-out');
+  const statsEl = document.getElementById('hbo-bulk-stats');
+  const progressEl = document.getElementById('hbo-bulk-progress');
+  const barEl = document.getElementById('hbo-progress-bar');
+  const useProxy = document.getElementById('hbo-proxy-toggle')?.checked ?? false;
+  outEl.innerHTML = ''; progressEl.style.display = 'block'; barEl.style.width = '0%';
+  let done = 0, live = 0, hold = 0, bad = 0, errors = 0;
+  const total = lines.length;
+
+  for (const combo of lines) {
+    if (hboBulkAbort) break;
+    const [email, ...pwParts] = combo.split(' | ')[0].trim().split(':');
+    const password = pwParts.join(':');
+    let retries = 0, success = false;
+    while (retries < 3 && !success) {
+      try {
+        const res = await fetch('/api/hbomax/check', {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ email: email.trim(), password: password.trim(), use_proxy: useProxy })
+        });
+        if (res.status === 401) { outEl.innerHTML += `<div style="padding:10px; color:#f43f5e; font-weight:600;">🔒 PIN tidak valid</div>`; hboBulkAbort = true; break; }
+        if (res.status === 429) { retries++; await new Promise(r => setTimeout(r, 3000 * retries)); continue; }
+        const data = await res.json(); data.combo = combo; hboBulkResults.push(data);
+        success = true;
+        if (data.status === 'LIVE') live++;
+        else if (data.status === 'HOLD') hold++;
+        else if (data.status === 'BAD' || data.status === 'DEAD') bad++;
+        else errors++;
+        outEl.innerHTML += renderHboResult({ ...data, email: email.trim(), _password: password.trim(), combo: combo.split(' | ')[0].trim() }, 'bulk');
+        outEl.scrollTop = outEl.scrollHeight;
+        updateHboStats(data.status);
+        if (data.status === 'LIVE') playAlert('live');
+        else if (data.status === 'HOLD') playAlert('hold');
+      } catch(e) {
+        retries++;
+        if (retries >= 3) { errors++; outEl.innerHTML += `<div style="padding:6px; font-size:11px; color:#f59e0b;">⚠️ ${email}: ${e.message}</div>`; success = true; }
+        else { await new Promise(r => setTimeout(r, 2000)); }
+      }
+    }
+    await new Promise(r => setTimeout(r, 1200));
+    done++;
+    barEl.style.width = `${(done / total * 100).toFixed(1)}%`;
+    statsEl.innerHTML = `<span style="color:#10b981;">${live} LIVE</span> · <span style="color:#f59e0b;">${hold} HOLD</span> · <span style="color:#f43f5e;">${bad} BAD</span> · <span style="color:#94a3b8;">${errors} ERR</span> · ${done}/${total}`;
+  }
+  hboBulkRunning = false;
+  if (hboBulkAbort) statsEl.innerHTML += ' · <span style="color:#f59e0b;">STOPPED</span>';
+  else statsEl.innerHTML += ' · <span style="color:#10b981;">DONE</span>';
+}
+
+function stopHboBulk() { hboBulkAbort = true; }
+
+function exportHboHits() {
+  const hits = hboBulkResults.filter(r => r.status === 'LIVE');
+  if (!hits.length) return showToast('Belum ada hits untuk diexport');
+  const text = hits.map(h => `${h.combo} | Plan: ${h.plan || 'N/A'} | Country: ${h.country || 'N/A'} | Tier: ${h.tier || 'N/A'}`).join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `hbomax_hits_${new Date().toISOString().slice(0,10)}.txt`;
+  a.click(); showToast(`${hits.length} hits exported`);
+}
+
+function updateHboStats(status) {
+  if (status === 'LIVE') hboStats.live++;
+  else if (status === 'HOLD') hboStats.hold++;
+  else if (status === 'BAD' || status === 'DEAD') hboStats.bad++;
+  else hboStats.error++;
+
+  const dashboard = document.getElementById('hbo-stats-dashboard');
+  if (dashboard) dashboard.style.display = 'block';
+
+  document.getElementById('hbo-stat-live').textContent = hboStats.live;
+  document.getElementById('hbo-stat-hold').textContent = hboStats.hold;
+  document.getElementById('hbo-stat-bad').textContent = hboStats.bad;
+  document.getElementById('hbo-stat-error').textContent = hboStats.error;
+
+  const total = hboStats.live + hboStats.hold + hboStats.bad + hboStats.error;
+  document.getElementById('hbo-donut-total').textContent = total;
+
+  const hitRate = total > 0 ? ((hboStats.live + hboStats.hold) / total * 100) : 0;
+  document.getElementById('hbo-hit-rate').textContent = hitRate.toFixed(1) + '%';
+  document.getElementById('hbo-hit-rate-bar').style.width = hitRate + '%';
+
+  drawDonutChart('hbo-donut-chart', [
+    { val: hboStats.live,  color: '#10b981' },
+    { val: hboStats.hold,  color: '#f59e0b' },
+    { val: hboStats.bad,   color: '#f43f5e' },
+    { val: hboStats.error, color: '#94a3b8' },
+  ]);
+}
+
+function resetHboStats() {
+  hboStats.live = 0; hboStats.hold = 0; hboStats.bad = 0; hboStats.error = 0;
+  ['hbo-stat-live','hbo-stat-hold','hbo-stat-bad','hbo-stat-error'].forEach(id => document.getElementById(id).textContent = '0');
+  document.getElementById('hbo-donut-total').textContent = '0';
+  document.getElementById('hbo-hit-rate').textContent = '0%';
+  document.getElementById('hbo-hit-rate-bar').style.width = '0%';
+  drawDonutChart('hbo-donut-chart', []);
+  showToast('Stats direset');
+}
+
+document.getElementById('hbo-password')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') runHboSingle();
+});
 
 </script>
 </body>

