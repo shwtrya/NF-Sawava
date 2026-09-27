@@ -1288,13 +1288,15 @@ def check_crunchyroll_account(email, password, use_proxy=True):
         save_history("crunchyroll", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
         return {"status": "ERROR", "reason": f"Login request failed: {str(e)[:100]}", "route": route}
 
-    # Step 2: Get account info (external_id, username, email, country)
+    # Step 2: Get account info (external_id, email, country)
     external_id = None
     username = ""
     cr_email = email
     email_verified = False
     country = ""
     created = ""
+    avatar = ""
+    preferred_lang = ""
     try:
         r = session.get("https://www.crunchyroll.com/accounts/v1/me", timeout=15)
         if r.status_code == 200:
@@ -1302,7 +1304,6 @@ def check_crunchyroll_account(email, password, use_proxy=True):
             external_id = me.get("external_id")
             cr_email = me.get("email", email)
             email_verified = me.get("email_verified", False)
-            username = me.get("username", "")
             created = me.get("created", "")
         else:
             save_history("crunchyroll", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
@@ -1311,21 +1312,27 @@ def check_crunchyroll_account(email, password, use_proxy=True):
         save_history("crunchyroll", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
         return {"status": "ERROR", "reason": f"Account info failed: {str(e)[:100]}", "route": route}
 
-    # Step 3: Get profile info + country from maturity rating
+    # Step 2b: Get profile (profile_name, avatar, country from maturity_rating)
+    try:
+        r = session.get("https://www.crunchyroll.com/accounts/v1/me/profile", timeout=15)
+        if r.status_code == 200:
+            prof = r.json()
+            username = prof.get("profile_name", "") or prof.get("username", "")
+            avatar = prof.get("avatar", "")
+            preferred_lang = prof.get("preferred_content_subtitle_language", "") or prof.get("preferred_content_audio_language", "")
+            ext_ratings = prof.get("extended_maturity_rating", {})
+            if ext_ratings:
+                country = next(iter(ext_ratings.keys()), "")
+    except Exception:
+        pass
+
+    # Step 3: Get multiprofile count
     num_profiles = 1
     try:
         r = session.get("https://www.crunchyroll.com/accounts/v1/me/multiprofile", timeout=15)
         if r.status_code == 200:
             profiles = r.json().get("profiles", [])
             num_profiles = len(profiles)
-            if profiles:
-                first = profiles[0]
-                # Fallback username from profile if /me didn't have one
-                if not username:
-                    username = first.get("username", "")
-                # Country from extended_maturity_rating keys (e.g. {"US": {...}})
-                ext_ratings = first.get("extended_maturity_rating", {})
-                country = next(iter(ext_ratings.keys()), "") if ext_ratings else ""
     except Exception:
         pass
 
