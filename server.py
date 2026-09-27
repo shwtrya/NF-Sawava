@@ -1288,14 +1288,22 @@ def check_crunchyroll_account(email, password, use_proxy=True):
         save_history("crunchyroll", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
         return {"status": "ERROR", "reason": f"Login request failed: {str(e)[:100]}", "route": route}
 
-    # Step 2: Get external_id
+    # Step 2: Get account info (external_id, username, email, country)
     external_id = None
+    username = ""
+    cr_email = email
+    email_verified = False
+    country = ""
+    created = ""
     try:
         r = session.get("https://www.crunchyroll.com/accounts/v1/me", timeout=15)
         if r.status_code == 200:
-            external_id = r.json().get("external_id")
-            cr_email = r.json().get("email", email)
-            email_verified = r.json().get("email_verified", False)
+            me = r.json()
+            external_id = me.get("external_id")
+            cr_email = me.get("email", email)
+            email_verified = me.get("email_verified", False)
+            username = me.get("username", "")
+            created = me.get("created", "")
         else:
             save_history("crunchyroll", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
             return {"status": "ERROR", "reason": f"Failed to get account info ({r.status_code})", "route": route}
@@ -1303,10 +1311,8 @@ def check_crunchyroll_account(email, password, use_proxy=True):
         save_history("crunchyroll", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
         return {"status": "ERROR", "reason": f"Account info failed: {str(e)[:100]}", "route": route}
 
-    # Step 3: Get profile info
+    # Step 3: Get profile info + country from maturity rating
     num_profiles = 1
-    username = ""
-    country = ""
     try:
         r = session.get("https://www.crunchyroll.com/accounts/v1/me/multiprofile", timeout=15)
         if r.status_code == 200:
@@ -1314,7 +1320,10 @@ def check_crunchyroll_account(email, password, use_proxy=True):
             num_profiles = len(profiles)
             if profiles:
                 first = profiles[0]
-                username = first.get("username", "")
+                # Fallback username from profile if /me didn't have one
+                if not username:
+                    username = first.get("username", "")
+                # Country from extended_maturity_rating keys (e.g. {"US": {...}})
                 ext_ratings = first.get("extended_maturity_rating", {})
                 country = next(iter(ext_ratings.keys()), "") if ext_ratings else ""
     except Exception:
@@ -1352,13 +1361,14 @@ def check_crunchyroll_account(email, password, use_proxy=True):
 
     result = {
         "status": status,
-        "email": cr_email if 'cr_email' in dir() else email,
-        "email_verified": email_verified if 'email_verified' in dir() else False,
+        "email": cr_email,
+        "email_verified": email_verified,
         "username": username,
         "country": country.upper() if country else "",
         "subscription": subscription,
         "profiles": num_profiles,
         "external_id": external_id,
+        "created": created,
         "route": route,
     }
 
