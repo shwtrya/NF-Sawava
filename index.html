@@ -3562,6 +3562,8 @@ document.addEventListener('DOMContentLoaded', () => {
         badge.innerHTML = '<span style="color:#10b981;">✓ JWT Access Token</span>';
       } else if (val.includes('access_token=') || val.includes('refresh_token=')) {
         badge.innerHTML = '<span style="color:#38bdf8;">✓ Key=Value pairs</span>';
+      } else if (val.includes('\t') && (val.includes('.hbomax.com') || val.includes('hbomax.com'))) {
+        badge.innerHTML = '<span style="color:#b01bef;">✓ Netscape Cookie Jar (HBO Max)</span>';
       } else if (val.length > 20) {
         badge.innerHTML = '<span style="color:#f59e0b;">⚡ Refresh Token (akan di-exchange)</span>';
       } else {
@@ -3654,8 +3656,12 @@ function renderHboResult(data, mode = 'single') {
         <div class="meta-box"><span>Has Refresh Token</span><strong style="color:${data.has_refresh_token ? 'var(--live)' : 'var(--dead)'};">${data.has_refresh_token ? '✅ Yes' : '❌ No'}</strong></div>
         ${data.mode === 'token' ? `
         <div class="meta-box"><span>User ID</span><strong style="font-size:10px;">${data.user_id || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Profile ID</span><strong style="font-size:10px;">${data.profile_id || 'N/A'}</strong></div>
         <div class="meta-box"><span>Profiles</span><strong>${data.profiles || 'N/A'}</strong></div>
         <div class="meta-box"><span>Service</span><strong>${data.service || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Region</span><strong>${data.subdivision || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Session Exp</span><strong>${data.session_expires || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Format</span><strong style="color:var(--primary);">${(data.input_format || '').replace('_', ' ').toUpperCase() || 'N/A'}</strong></div>
         ` : ''}
       </div>
 

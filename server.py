@@ -1487,8 +1487,8 @@ def _hbo_decode_jwt(token):
 
 
 def check_hbomax_token(token_text, use_proxy=True):
-    """Check an HBO Max / Max account via access_token or refresh_token (cookie mode).
-    Accepts: raw JWT access_token, refresh_token, or 'access_token=...' / 'refresh_token=...' format."""
+    """Check an HBO Max / Max account via access_token, refresh_token, or Netscape cookie jar.
+    Accepts: raw JWT access_token, refresh_token, 'access_token=...' format, or Netscape cookie format."""
     proxy_url = None
     proxy_label = "Direct"
     if use_proxy:
@@ -1500,31 +1500,90 @@ def check_hbomax_token(token_text, use_proxy=True):
     route = f"Proxy ({proxy_label})" if use_proxy and proxy_label != "Direct" else "Direct"
     proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
 
-    # Parse token input: could be raw JWT, refresh_token=xxx, access_token=xxx, or key=value pairs
     token_text = token_text.strip()
+    # Strip comment lines ($ prefixed lines from dump files)
+    cleaned_lines = [l for l in token_text.split("\n") if l.strip() and not l.strip().startswith("$") and not l.strip().startswith("#") and l.strip() != "=" * len(l.strip())]
+    cleaned_text = "\n".join(cleaned_lines).strip()
+
     access_token = ""
     refresh_token = ""
+    cookie_profile_id = ""
+    cookie_country = ""
+    cookie_session_info = ""
+    input_format = "unknown"
 
-    # Try key=value parsing
-    for line in token_text.replace(";", "\n").replace("&", "\n").split("\n"):
-        line = line.strip()
-        if "=" in line:
-            k, v = line.split("=", 1)
-            k = k.strip().lower()
-            v = v.strip()
-            if k == "access_token":
-                access_token = v
-            elif k == "refresh_token":
-                refresh_token = v
+    # --- Detect Netscape cookie format (tab-separated, domain starts with . or hostname) ---
+    is_netscape = False
+    netscape_cookies = {}
+    for line in cleaned_lines:
+        parts = line.strip().split("\t")
+        if len(parts) >= 7:
+            is_netscape = True
+            domain = parts[0].strip()
+            name = parts[5].strip()
+            value = parts[6].strip()
+            netscape_cookies[name] = value
 
-    # If no key=value found, check if it's a raw JWT (has 2 dots) or plain token
-    if not access_token and not refresh_token:
-        if token_text.count(".") == 2:
-            # Looks like a JWT access_token
-            access_token = token_text
-        else:
-            # Assume it's a refresh_token
-            refresh_token = token_text
+    if is_netscape and netscape_cookies:
+        input_format = "netscape_cookies"
+        # Extract the st cookie (JWT access token from FPA issuer)
+        st_token = netscape_cookies.get("st", "")
+        if st_token and st_token.count(".") == 2:
+            access_token = st_token
+
+        # Extract useful metadata from cookies
+        cookie_country = netscape_cookies.get("countryCode", "") or netscape_cookies.get("usr_country", "")
+
+        # Extract profileId from wbd-profile-context cookie
+        wbd_ctx = netscape_cookies.get("wbd-profile-context", "")
+        if wbd_ctx:
+            try:
+                ctx_data = json.loads(wbd_ctx)
+                cookie_profile_id = ctx_data.get("profileId", "")
+            except Exception:
+                pass
+
+        # Extract session info
+        session_ck = netscape_cookies.get("session", "")
+        if session_ck:
+            try:
+                sess_data = json.loads(session_ck)
+                if sess_data.get("expires"):
+                    from datetime import datetime as _dt
+                    cookie_session_info = _dt.fromtimestamp(sess_data["expires"] / 1000).strftime("%Y-%m-%d %H:%M:%S") if sess_data["expires"] > 1e10 else _dt.fromtimestamp(sess_data["expires"]).strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                pass
+
+        if not access_token:
+            # No st cookie — look for any JWT in cookie values
+            for ck_name, ck_val in netscape_cookies.items():
+                if ck_val.startswith("eyJ") and ck_val.count(".") == 2:
+                    access_token = ck_val
+                    break
+
+    if not is_netscape:
+        # --- Try key=value parsing ---
+        for line in cleaned_text.replace(";", "\n").replace("&", "\n").split("\n"):
+            line = line.strip()
+            if "=" in line:
+                k, v = line.split("=", 1)
+                k = k.strip().lower()
+                v = v.strip()
+                if k == "access_token":
+                    access_token = v
+                    input_format = "key_value"
+                elif k == "refresh_token":
+                    refresh_token = v
+                    input_format = "key_value"
+
+        # If no key=value found, check if it's a raw JWT or plain token
+        if not access_token and not refresh_token:
+            if cleaned_text.count(".") == 2 and cleaned_text.startswith("eyJ"):
+                access_token = cleaned_text
+                input_format = "jwt"
+            elif len(cleaned_text) > 20:
+                refresh_token = cleaned_text
+                input_format = "refresh_token"
 
     # If we have a refresh_token but no access_token, exchange it
     if refresh_token and not access_token:
@@ -1535,7 +1594,6 @@ def check_hbomax_token(token_text, use_proxy=True):
             if proxies:
                 session.proxies = proxies
 
-            # First get a client token
             device_serial = str(_uuid_mod.uuid4())
             step1_body = {
                 "client_id": HBO_CLIENT_ID,
@@ -1548,10 +1606,9 @@ def check_hbomax_token(token_text, use_proxy=True):
             r1 = session.post(HBO_TOKEN_URL, json=step1_body, timeout=20)
             if r1.status_code != 200:
                 save_history("hbomax", "ERROR", route=route, raw_cookie=token_text[:200])
-                return {"status": "ERROR", "reason": f"Client auth failed ({r1.status_code})", "route": route, "mode": "token"}
+                return {"status": "ERROR", "reason": f"Client auth failed ({r1.status_code})", "route": route, "mode": "token", "input_format": input_format}
             client_token = r1.json().get("access_token", "")
 
-            # Now exchange refresh_token
             session.headers["Authorization"] = f"Bearer {client_token}"
             refresh_body = {
                 "grant_type": "refresh_token",
@@ -1563,26 +1620,26 @@ def check_hbomax_token(token_text, use_proxy=True):
 
             if r2.status_code == 403 or "geo" in r2_text:
                 save_history("hbomax", "ERROR", route=route, raw_cookie=token_text[:200])
-                return {"status": "ERROR", "reason": "Geo-blocked / IP blocked by HBO", "route": route, "mode": "token"}
+                return {"status": "ERROR", "reason": "Geo-blocked / IP blocked by HBO", "route": route, "mode": "token", "input_format": input_format}
 
             if r2.status_code in (401, 400) or "invalid" in r2_text or "expired" in r2_text:
                 save_history("hbomax", "DEAD", route=route, raw_cookie=token_text[:200])
-                return {"status": "DEAD", "reason": "Token expired atau tidak valid", "route": route, "mode": "token"}
+                return {"status": "DEAD", "reason": "Token expired atau tidak valid", "route": route, "mode": "token", "input_format": input_format}
 
             r2_data = r2.json()
             access_token = r2_data.get("access_token", "")
             if not access_token:
                 save_history("hbomax", "DEAD", route=route, raw_cookie=token_text[:200])
-                return {"status": "DEAD", "reason": "Refresh gagal — tidak ada access_token baru", "route": route, "mode": "token"}
+                return {"status": "DEAD", "reason": "Refresh gagal — tidak ada access_token baru", "route": route, "mode": "token", "input_format": input_format}
 
             session.close()
         except requests.exceptions.RequestException as e:
             save_history("hbomax", "ERROR", route=route, raw_cookie=token_text[:200])
-            return {"status": "ERROR", "reason": f"Refresh request gagal: {str(e)[:100]}", "route": route, "mode": "token"}
+            return {"status": "ERROR", "reason": f"Refresh request gagal: {str(e)[:100]}", "route": route, "mode": "token", "input_format": input_format}
 
     if not access_token:
         save_history("hbomax", "ERROR", route=route, raw_cookie=token_text[:200])
-        return {"status": "ERROR", "reason": "Tidak ada access_token atau refresh_token yang valid", "route": route, "mode": "token"}
+        return {"status": "ERROR", "reason": "Tidak ada access_token, st cookie, atau refresh_token yang valid", "route": route, "mode": "token", "input_format": input_format}
 
     # Decode JWT payload
     jwt_payload = _hbo_decode_jwt(access_token)
@@ -1591,46 +1648,133 @@ def check_hbomax_token(token_text, use_proxy=True):
     exp_ts = jwt_payload.get("exp", 0)
     import time as _time_mod
     if exp_ts and exp_ts < _time_mod.time():
-        # Token expired — if we had a refresh_token we already tried, so it's dead
         if not refresh_token:
             save_history("hbomax", "DEAD", route=route, raw_cookie=token_text[:200])
-            return {"status": "DEAD", "reason": "Access token sudah expired. Paste refresh_token untuk renew.", "route": route, "mode": "token"}
+            return {"status": "DEAD", "reason": "Access token sudah expired. Paste refresh_token untuk renew.", "route": route, "mode": "token", "input_format": input_format}
 
     # Extract subscription info from JWT
-    email = jwt_payload.get("email", "") or jwt_payload.get("sub", "") or ""
+    jwt_sub = jwt_payload.get("sub", "")
+    email = jwt_payload.get("email", "") or ""
+    # Parse USERID from sub field (e.g., "USERID:bolt:e27c1e8d-...")
+    user_id = ""
+    if jwt_sub.startswith("USERID:"):
+        user_id = jwt_sub.split(":", 2)[-1] if jwt_sub.count(":") >= 2 else jwt_sub
+    else:
+        user_id = jwt_payload.get("userId", "") or jwt_payload.get("profileId", "") or jwt_sub
+
     sub_tier = jwt_payload.get("subscriptionTier", "") or jwt_payload.get("tier", "") or ""
-    country = jwt_payload.get("territory", "") or jwt_payload.get("country", "") or ""
+    country = jwt_payload.get("territory", "") or jwt_payload.get("country", "") or cookie_country or ""
     entitlements = jwt_payload.get("entitlements", []) or []
-    permissions = jwt_payload.get("permissions", []) or []
     service_code = jwt_payload.get("serviceCode", "") or ""
     product_code = jwt_payload.get("productCode", "") or ""
-    user_id = jwt_payload.get("userId", "") or jwt_payload.get("profileId", "") or ""
+    token_type = jwt_payload.get("type", "") or ""
+    subdivision = jwt_payload.get("subdivision", "") or ""
+    device_id = jwt_payload.get("deviceId", "") or ""
+    is_anonymous = jwt_payload.get("anonymous", True)
+    profile_id = cookie_profile_id or jwt_payload.get("profileId", "") or ""
 
-    # Determine plan
-    plan = "Max (Free)"
-    if sub_tier:
-        tier_lower = sub_tier.lower()
-        if "ultimate" in tier_lower or "platinum" in tier_lower:
-            plan = "Max Ultimate Ad-Free"
-        elif "ad_free" in tier_lower or "adfree" in tier_lower or "premium" in tier_lower:
-            plan = "Max Ad-Free"
-        elif "ads" in tier_lower or "with_ads" in tier_lower or "basic" in tier_lower:
-            plan = "Max With Ads"
+    # Determine plan — try API call first for FPA tokens (they don't carry subscription info in JWT)
+    plan = ""
+    profiles_count = 0
+    api_subscription = {}
+
+    # Use st token to query comet API for actual subscription/entitlements
+    try:
+        val_session = requests.Session()
+        val_session.verify = False
+        val_session.headers.update(HBO_BASE_HDRS)
+        val_session.headers["Authorization"] = f"Bearer {access_token}"
+        if proxies:
+            val_session.proxies = proxies
+
+        # Try to get user & subscription info from sessions/active endpoint
+        # This uses the comet API to check entitlements
+        sessions_url = "https://comet.api.hbo.com/sessions"
+        sr = val_session.get(sessions_url, timeout=15)
+        if sr.status_code == 200:
+            sr_data = sr.json()
+            # Extract subscription details from session response
+            if isinstance(sr_data, dict):
+                for key in ("subscriptionTier", "tier", "package", "productCode"):
+                    if sr_data.get(key):
+                        sub_tier = sub_tier or str(sr_data[key])
+                # Check for entitlements array
+                ent = sr_data.get("entitlements", [])
+                if ent:
+                    entitlements = ent
+
+        # Try profiles endpoint
+        pr = val_session.get("https://profiles.api.hbo.com/profiles", timeout=10)
+        if pr.status_code == 200:
+            pr_data = pr.json()
+            if isinstance(pr_data, list):
+                profiles_count = len(pr_data)
+                # Try to find email from profile
+                for p in pr_data:
+                    if isinstance(p, dict):
+                        em = p.get("email", "") or p.get("emailAddress", "")
+                        if em:
+                            email = email or em
+                            break
+            elif isinstance(pr_data, dict):
+                profiles_list = pr_data.get("profiles", pr_data.get("items", []))
+                profiles_count = len(profiles_list)
+                for p in profiles_list:
+                    if isinstance(p, dict):
+                        em = p.get("email", "") or p.get("emailAddress", "")
+                        if em:
+                            email = email or em
+                            break
+        elif pr.status_code in (401, 403):
+            pass  # Token might be FPA-scoped, doesn't mean it's dead
+
+        # Try express-content to check if user has entitlements
+        ent_url = "https://comet.api.hbo.com/express-content/urn:hbo:page:home?device-code=desktop&product-code=hboMax&api-version=v9.0&signed-in=true"
+        er = val_session.get(ent_url, timeout=10)
+        if er.status_code == 200:
+            er_data = er.json()
+            # If we get content back, user has valid access
+            if isinstance(er_data, (list, dict)):
+                if not sub_tier:
+                    sub_tier = "active"
+
+        val_session.close()
+    except Exception:
+        pass
+
+    # Determine plan from collected info
+    if not plan:
+        if sub_tier:
+            tier_lower = sub_tier.lower()
+            if "ultimate" in tier_lower or "platinum" in tier_lower:
+                plan = "Max Ultimate Ad-Free"
+            elif "ad_free" in tier_lower or "adfree" in tier_lower or "premium" in tier_lower:
+                plan = "Max Ad-Free"
+            elif "ads" in tier_lower or "with_ads" in tier_lower or "basic" in tier_lower:
+                plan = "Max With Ads"
+            elif tier_lower == "active":
+                plan = "Max (Active Subscription)"
+            else:
+                plan = f"Max {sub_tier.replace('_', ' ').title()}"
+        elif entitlements:
+            ent_str = " ".join(str(e) for e in entitlements).lower()
+            if "hbo" in ent_str or "max" in ent_str:
+                plan = "Max (Active)"
+            else:
+                plan = "Max (Entitlements Found)"
         else:
-            plan = f"Max {sub_tier.replace('_', ' ').title()}"
-    elif entitlements:
-        ent_str = " ".join(str(e) for e in entitlements).lower()
-        if "hbo" in ent_str or "max" in ent_str:
-            plan = "Max (Active)"
+            plan = "Max (Free / No Subscription)"
 
     # Determine status
-    has_sub = bool(sub_tier) or bool(entitlements) or "HBO" in service_code.upper()
-    if has_sub:
+    has_sub = bool(sub_tier) or bool(entitlements)
+    if has_sub and not is_anonymous:
         status = "LIVE"
-    elif jwt_payload.get("isUserLoggedIn") or user_id:
-        status = "HOLD"  # Logged in but no active subscription
-    else:
+    elif not is_anonymous and (user_id or profile_id):
+        status = "HOLD"
+    elif is_anonymous:
         status = "DEAD"
+    else:
+        status = "HOLD"
 
     # Format expiry
     exp_date = ""
@@ -1643,48 +1787,28 @@ def check_hbomax_token(token_text, use_proxy=True):
 
     country_name = normalize_country(country) if country and len(country) == 2 else (country or "N/A")
 
-    # Validate token against API if possible (optional — try to fetch profiles)
-    profiles_count = 0
-    try:
-        val_session = requests.Session()
-        val_session.verify = False
-        val_session.headers.update(HBO_BASE_HDRS)
-        val_session.headers["Authorization"] = f"Bearer {access_token}"
-        if proxies:
-            val_session.proxies = proxies
-        # Try profiles endpoint
-        pr = val_session.get("https://profiles.api.hbo.com/profiles", timeout=10)
-        if pr.status_code == 200:
-            pr_data = pr.json()
-            if isinstance(pr_data, list):
-                profiles_count = len(pr_data)
-            elif isinstance(pr_data, dict):
-                profiles_count = len(pr_data.get("profiles", pr_data.get("items", [])))
-        elif pr.status_code in (401, 403):
-            if status == "LIVE":
-                status = "DEAD"
-                plan = "Token Invalid / Expired"
-        val_session.close()
-    except Exception:
-        pass
-
     save_history("hbomax", status, plan=plan, billing=exp_date,
                  country=country_name, route=route,
                  raw_cookie=token_text[:200], email=email)
 
     return {
         "status": status,
-        "email": email,
+        "email": email or "N/A",
         "plan": plan,
         "country": country_name,
-        "tier": sub_tier,
+        "tier": sub_tier or "N/A",
         "token_expiry": exp_date,
-        "user_id": user_id,
+        "user_id": user_id or "N/A",
+        "profile_id": profile_id or "N/A",
         "profiles": profiles_count if profiles_count else "N/A",
-        "service": service_code or product_code or "N/A",
+        "service": service_code or product_code or token_type or "N/A",
+        "subdivision": subdivision or "N/A",
+        "device_id": device_id or "N/A",
+        "session_expires": cookie_session_info or "N/A",
         "has_refresh_token": bool(refresh_token),
         "route": route,
         "mode": "token",
+        "input_format": input_format,
     }
 
 
