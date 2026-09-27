@@ -181,9 +181,19 @@ body.crunchyroll-body {
 /* HBO Max theme (purple) */
 .hbomax-theme {
   --primary: #b01bef;
-  --primary-hover: #8e15c0;
+  --primary-hover: #8d15bf;
   --primary-glow: rgba(176, 27, 239, 0.25);
   --border-focus: #b01bef;
+}
+
+.hbo-mode-btn {
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.hbo-mode-btn.active {
+  background: var(--primary) !important;
+  color: #fff !important;
+  border-color: var(--primary) !important;
 }
 
 .hbomax-theme .brand-icon {
@@ -1313,13 +1323,19 @@ tbody tr:hover {
       <div style="font-size:20px;">🎬</div>
       <div>
         <div style="font-weight:700; font-size:16px; color:var(--primary);">HBO Max Account Checker</div>
-        <div style="font-size:11px; color:var(--text-muted);">Check HBO Max / Max accounts via Comet API. Format: email:password</div>
+        <div style="font-size:11px; color:var(--text-muted);">Check HBO Max / Max accounts via Comet API. Supports email:password & token/cookie mode</div>
       </div>
     </div>
 
-    <!-- Single HBO Max Check -->
-    <div class="card" style="padding:16px; margin-bottom:14px;">
-      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Single Account Check</label>
+    <!-- Mode Switcher -->
+    <div style="display:flex; gap:6px; margin-bottom:12px;">
+      <button class="btn-secondary hbo-mode-btn active" id="hbo-mode-cred" onclick="switchHboMode('credentials')" style="flex:1; justify-content:center; font-size:12px; padding:8px 0;">🔑 Credentials (email:pass)</button>
+      <button class="btn-secondary hbo-mode-btn" id="hbo-mode-token" onclick="switchHboMode('token')" style="flex:1; justify-content:center; font-size:12px; padding:8px 0;">🍪 Token / Cookie</button>
+    </div>
+
+    <!-- Single HBO Max Check: Credentials Mode -->
+    <div id="hbo-cred-panel" class="card" style="padding:16px; margin-bottom:14px;">
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Single Account Check (Email:Password)</label>
       <div style="display:flex; gap:8px;">
         <input type="text" id="hbo-email" placeholder="email@example.com" style="flex:1;">
         <input type="password" id="hbo-password" placeholder="password" style="flex:1;">
@@ -1334,6 +1350,30 @@ tbody tr:hover {
         <span id="hbo-single-btn-text">Check HBO Max Account</span>
       </button>
       <div id="hbo-single-out" class="card-out"></div>
+    </div>
+
+    <!-- Single HBO Max Check: Token/Cookie Mode -->
+    <div id="hbo-token-panel" class="card" style="padding:16px; margin-bottom:14px; display:none;">
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Token / Cookie Check</label>
+      <div style="font-size:10px; color:var(--text-dim); margin-bottom:8px; line-height:1.5;">
+        Paste salah satu format:<br>
+        • Raw JWT access_token (eyJ...)<br>
+        • refresh_token string<br>
+        • access_token=eyJ...&refresh_token=xxx<br>
+        • Key=value pairs (satu per baris)
+      </div>
+      <textarea id="hbo-token-input" placeholder="Paste access_token / refresh_token di sini..." style="height:100px; font-family:'JetBrains Mono',monospace; font-size:11px;"></textarea>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+        <div class="toggle-wrap" onclick="document.getElementById('hbo-token-proxy-toggle').click()" style="margin:0;">
+          <input type="checkbox" id="hbo-token-proxy-toggle" onclick="event.stopPropagation()">
+          <span style="font-size:11px;">Pakai Proxy</span>
+        </div>
+        <span id="hbo-token-format-badge" style="font-size:10px; font-weight:600; color:var(--text-dim);">Format: Belum ada input</span>
+      </div>
+      <button id="hbo-token-btn" class="btn-primary" onclick="runHboTokenSingle()" style="margin-top:8px;">
+        <span id="hbo-token-btn-text">Check HBO Max Token</span>
+      </button>
+      <div id="hbo-token-out" class="card-out"></div>
     </div>
 
     <!-- HBO Max Stats Dashboard -->
@@ -3476,6 +3516,99 @@ document.getElementById('evpn-password')?.addEventListener('keydown', e => {
 
 // ═══════════════════════════════════════════════════════════════════
 // HBO Max Account Checker Functions
+let hboCurrentMode = 'credentials';
+
+function switchHboMode(mode) {
+  hboCurrentMode = mode;
+  const credPanel = document.getElementById('hbo-cred-panel');
+  const tokenPanel = document.getElementById('hbo-token-panel');
+  const credBtn = document.getElementById('hbo-mode-cred');
+  const tokenBtn = document.getElementById('hbo-mode-token');
+
+  if (mode === 'token') {
+    credPanel.style.display = 'none';
+    tokenPanel.style.display = 'block';
+    credBtn.classList.remove('active');
+    tokenBtn.classList.add('active');
+    tokenBtn.style.background = 'var(--primary)';
+    tokenBtn.style.color = '#fff';
+    tokenBtn.style.borderColor = 'var(--primary)';
+    credBtn.style.background = '';
+    credBtn.style.color = '';
+    credBtn.style.borderColor = '';
+  } else {
+    credPanel.style.display = 'block';
+    tokenPanel.style.display = 'none';
+    tokenBtn.classList.remove('active');
+    credBtn.classList.add('active');
+    credBtn.style.background = 'var(--primary)';
+    credBtn.style.color = '#fff';
+    credBtn.style.borderColor = 'var(--primary)';
+    tokenBtn.style.background = '';
+    tokenBtn.style.color = '';
+    tokenBtn.style.borderColor = '';
+  }
+}
+
+// Auto-detect token format
+document.addEventListener('DOMContentLoaded', () => {
+  const tokenInput = document.getElementById('hbo-token-input');
+  if (tokenInput) {
+    tokenInput.addEventListener('input', () => {
+      const badge = document.getElementById('hbo-token-format-badge');
+      const val = tokenInput.value.trim();
+      if (!val) { badge.textContent = 'Format: Belum ada input'; return; }
+      if (val.startsWith('eyJ') && val.split('.').length === 3) {
+        badge.innerHTML = '<span style="color:#10b981;">✓ JWT Access Token</span>';
+      } else if (val.includes('access_token=') || val.includes('refresh_token=')) {
+        badge.innerHTML = '<span style="color:#38bdf8;">✓ Key=Value pairs</span>';
+      } else if (val.length > 20) {
+        badge.innerHTML = '<span style="color:#f59e0b;">⚡ Refresh Token (akan di-exchange)</span>';
+      } else {
+        badge.innerHTML = '<span style="color:var(--text-dim);">? Format tidak dikenali</span>';
+      }
+    });
+  }
+});
+
+async function runHboTokenSingle() {
+  const token = document.getElementById('hbo-token-input').value.trim();
+  if (!token) return showToast('Paste token / cookie dulu');
+  const btn = document.getElementById('hbo-token-btn');
+  const btnText = document.getElementById('hbo-token-btn-text');
+  const outEl = document.getElementById('hbo-token-out');
+  const useProxy = document.getElementById('hbo-token-proxy-toggle')?.checked ?? false;
+  btn.disabled = true;
+  btnText.textContent = 'Checking...';
+  outEl.style.display = 'none';
+  outEl.className = 'card-out';
+  outEl.innerHTML = '';
+
+  try {
+    const res = await fetch('/api/hbomax/token', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ token, use_proxy: useProxy })
+    });
+    const data = await res.json();
+    outEl.innerHTML = renderHboResult({ ...data, mode: 'token' }, 'single');
+    outEl.style.display = 'block';
+    updateHboStats(data.status);
+    if (data.status === 'LIVE') playAlert('live');
+    else if (data.status === 'HOLD') playAlert('hold');
+  } catch(e) {
+    outEl.className = 'card-out dead';
+    outEl.innerHTML = `
+      <div class="card-header-status" style="color:var(--dead);">
+        <span>✕</span> <span>Request Gagal</span>
+      </div>
+      <div style="color:var(--text-muted);">${e.message}</div>
+    `;
+    outEl.style.display = 'block';
+  }
+  btn.disabled = false;
+  btnText.textContent = 'Check HBO Max Token';
+}
 // ═══════════════════════════════════════════════════════════════════
 
 let hboBulkRunning = false;
@@ -3488,6 +3621,7 @@ function renderHboResult(data, mode = 'single') {
   const statusMap = {
     LIVE: ['✅','#10b981','rgba(16,185,129,0.1)'],
     HOLD: ['⏸','#f59e0b','rgba(245,158,11,0.1)'],
+    DEAD: ['💀','#f43f5e','rgba(244,63,94,0.1)'],
     BAD: ['❌','#f43f5e','rgba(244,63,94,0.1)'],
     ERROR: ['⚠️','#f59e0b','rgba(245,158,11,0.1)']
   };
@@ -3518,6 +3652,11 @@ function renderHboResult(data, mode = 'single') {
         <div class="meta-box"><span>Tier</span><strong>${data.tier || 'N/A'}</strong></div>
         <div class="meta-box"><span>Token Expiry</span><strong>${data.token_expiry || 'N/A'}</strong></div>
         <div class="meta-box"><span>Has Refresh Token</span><strong style="color:${data.has_refresh_token ? 'var(--live)' : 'var(--dead)'};">${data.has_refresh_token ? '✅ Yes' : '❌ No'}</strong></div>
+        ${data.mode === 'token' ? `
+        <div class="meta-box"><span>User ID</span><strong style="font-size:10px;">${data.user_id || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Profiles</span><strong>${data.profiles || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Service</span><strong>${data.service || 'N/A'}</strong></div>
+        ` : ''}
       </div>
 
       <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
@@ -3527,10 +3666,10 @@ function renderHboResult(data, mode = 'single') {
     </div>`;
   }
 
-  // BAD / ERROR
+  // BAD / DEAD / ERROR
   return `<div class="${mode === 'bulk' ? '' : 'card-out dead'}" style="${mode === 'bulk' ? `padding:10px; border-left:3px solid ${color}; background:${bg}; margin-bottom:6px; border-radius:var(--radius-sm);` : ''}">
     <div class="card-header-status" style="color:${color};">
-      <span>${icon}</span> <span>${data.status === 'BAD' ? 'Wrong Credentials' : data.status}</span>
+      <span>${icon}</span> <span>${data.status === 'BAD' ? 'Wrong Credentials' : data.status === 'DEAD' ? 'Token Expired / Dead' : data.status}</span>
     </div>
     <div style="color:var(--text-muted); font-size:12px;">${data.reason || data.email || 'Akun tidak valid'}</div>
   </div>`;
