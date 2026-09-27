@@ -1317,7 +1317,7 @@ def check_crunchyroll_account(email, password, use_proxy=True):
         r = session.get("https://www.crunchyroll.com/accounts/v1/me/profile", timeout=15)
         if r.status_code == 200:
             prof = r.json()
-            username = prof.get("profile_name", "") or prof.get("username", "")
+            username = prof.get("username", "") or prof.get("profile_name", "")
             avatar = prof.get("avatar", "")
             preferred_lang = prof.get("preferred_content_subtitle_language", "") or prof.get("preferred_content_audio_language", "")
             ext_ratings = prof.get("extended_maturity_rating", {})
