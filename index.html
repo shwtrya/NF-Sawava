@@ -2389,14 +2389,33 @@ function renderHistoryTable(data) {
       : r.status === 'BAD' ? '<span class="tag-dead">✕ BAD</span>'
       : r.status === 'DEAD' ? '<span class="tag-dead">✕ DEAD</span>'
       : `<span class="tag-dead">⚠ ${r.status}</span>`;
-    const identifier = r.email || (r.raw_cookie ? r.raw_cookie.split(':')[0] : '-');
+    let identifier = r.email || '-';
+    if (!r.email && r.raw_cookie) {
+      if (r.type === 'spotify') {
+        // Extract sp_dc value from Netscape cookie or raw string
+        const spMatch = r.raw_cookie.match(/sp_dc\t([^\t\n]+)/);
+        if (spMatch) {
+          identifier = 'sp_dc:' + spMatch[1].substring(0, 20) + '…';
+        } else {
+          identifier = r.raw_cookie.substring(0, 30) + '…';
+        }
+      } else if (r.type === 'checker') {
+        // Netflix cookie — show first 30 chars
+        identifier = r.raw_cookie.substring(0, 30) + (r.raw_cookie.length > 30 ? '…' : '');
+      } else {
+        // Disney/CR/EVPN combos — show email part
+        identifier = r.raw_cookie.split(':')[0];
+      }
+    }
+    // Truncate any long identifier
+    if (identifier.length > 40) identifier = identifier.substring(0, 38) + '…';
     const copyLabel = (r.type === 'checker' || r.type === 'spotify') ? 'Salin Cookie' : 'Salin Combo';
     return `
     <tr>
       <td style="color:var(--text-muted); font-family:'JetBrains Mono', monospace; font-size:11px;">${r.created_at}</td>
       <td style="font-weight:600; font-size:12px;">${svcBadge}</td>
       <td>${statusTag}</td>
-      <td style="font-size:12px; color:var(--text-muted);">${identifier}</td>
+      <td style="font-size:12px; color:var(--text-muted); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${(r.email || '').replace(/"/g, '&quot;')}">${identifier}</td>
       <td style="${r.plan && r.plan.includes('4K') ? 'color:var(--accent-4k); font-weight:700;' : ''}">${r.plan || '-'}</td>
       <td style="font-size:12px; color:var(--text-muted);">${r.billing || '-'}</td>
       <td>${r.country || '-'}</td>
