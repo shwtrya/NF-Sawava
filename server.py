@@ -312,6 +312,18 @@ def get_history(limit=50, offset=0, search='', status='', plan='', entry_type=''
                 query += ' AND (plan LIKE "%BASIC%" OR plan LIKE "%DASAR%")'
             elif p_upper == 'MOBILE':
                 query += ' AND (plan LIKE "%MOBILE%" OR plan LIKE "%PONSEL%")'
+            elif p_upper == 'SPOTIFY':
+                query += ' AND (plan LIKE "%Spotify%")'
+            elif p_upper == 'DISNEY':
+                query += ' AND (plan LIKE "%Disney%")'
+            elif p_upper == 'CRUNCHYROLL':
+                query += ' AND (plan LIKE "%Crunchyroll%")'
+            elif p_upper == 'EXPRESSVPN':
+                query += ' AND (plan LIKE "%ExpressVPN%")'
+            elif p_upper == 'FAMILY':
+                query += ' AND (plan LIKE "%Family%" OR plan LIKE "%Duo%")'
+            elif p_upper == 'STUDENT':
+                query += ' AND (plan LIKE "%Student%")'
             else:
                 query += ' AND plan LIKE ?'
                 params.append(f'%{plan}%')
@@ -342,11 +354,11 @@ def export_history_csv(search='', status='', plan=''):
     with db_lock:
         conn = get_db()
         c = conn.cursor()
-        query = 'SELECT id, created_at, type, status, plan, billing, country, route, token_url, raw_cookie FROM history WHERE 1=1'
+        query = 'SELECT id, created_at, type, status, plan, billing, country, route, token_url, raw_cookie, email FROM history WHERE 1=1'
         params = []
         if search:
-            query += ' AND (country LIKE ? OR billing LIKE ? OR plan LIKE ? OR raw_cookie LIKE ?)'
-            params.extend([f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%'])
+            query += ' AND (country LIKE ? OR billing LIKE ? OR plan LIKE ? OR raw_cookie LIKE ? OR email LIKE ?)'
+            params.extend([f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%'])
         if status:
             query += ' AND status = ?'
             params.append(status)
@@ -360,6 +372,18 @@ def export_history_csv(search='', status='', plan=''):
                 query += ' AND (plan LIKE "%BASIC%" OR plan LIKE "%DASAR%")'
             elif p_upper == 'MOBILE':
                 query += ' AND (plan LIKE "%MOBILE%" OR plan LIKE "%PONSEL%")'
+            elif p_upper == 'SPOTIFY':
+                query += ' AND (plan LIKE "%Spotify%")'
+            elif p_upper == 'DISNEY':
+                query += ' AND (plan LIKE "%Disney%")'
+            elif p_upper == 'CRUNCHYROLL':
+                query += ' AND (plan LIKE "%Crunchyroll%")'
+            elif p_upper == 'EXPRESSVPN':
+                query += ' AND (plan LIKE "%ExpressVPN%")'
+            elif p_upper == 'FAMILY':
+                query += ' AND (plan LIKE "%Family%" OR plan LIKE "%Duo%")'
+            elif p_upper == 'STUDENT':
+                query += ' AND (plan LIKE "%Student%")'
             else:
                 query += ' AND plan LIKE ?'
                 params.append(f'%{plan}%')
@@ -370,7 +394,7 @@ def export_history_csv(search='', status='', plan=''):
 
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["ID", "Waktu", "Tipe", "Status", "Plan", "Billing", "Negara", "Route", "Token URL", "Raw Cookie"])
+        writer.writerow(["ID", "Waktu", "Service", "Status", "Plan", "Billing", "Negara", "Route", "Token URL", "Raw Cookie", "Email"])
         for r in rows:
             safe_row = []
             for cell in r:
@@ -1869,7 +1893,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 csv_data = export_history_csv(search=search, status=status, plan=plan)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/csv; charset=utf-8")
-                self.send_header("Content-Disposition", f"attachment; filename=netflix_history_{int(time.time())}.csv")
+                self.send_header("Content-Disposition", f"attachment; filename=suite_history_{int(time.time())}.csv")
                 self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(csv_data.encode("utf-8"))

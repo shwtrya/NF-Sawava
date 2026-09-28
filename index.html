@@ -1521,10 +1521,21 @@ tbody tr:hover {
       </select>
       <select id="hist-filter-plan" onchange="resetPageAndLoad()" style="flex:1; margin-bottom:0;">
         <option value="">Semua Plan</option>
-        <option value="PREMIUM">Premium (4K UHD)</option>
-        <option value="STANDARD">Standard</option>
-        <option value="BASIC">Basic</option>
-        <option value="MOBILE">Mobile</option>
+        <optgroup label="Netflix">
+          <option value="PREMIUM">Premium (4K UHD)</option>
+          <option value="STANDARD">Standard</option>
+          <option value="BASIC">Basic</option>
+          <option value="MOBILE">Mobile</option>
+        </optgroup>
+        <optgroup label="Spotify">
+          <option value="FAMILY">Family / Duo</option>
+          <option value="STUDENT">Student</option>
+        </optgroup>
+        <optgroup label="Lainnya">
+          <option value="DISNEY">Disney+</option>
+          <option value="CRUNCHYROLL">Crunchyroll</option>
+          <option value="EXPRESSVPN">ExpressVPN</option>
+        </optgroup>
       </select>
       <button class="btn-secondary" onclick="exportCsvWithAuth()">Export CSV</button>
       <button class="btn-secondary" onclick="loadHistory()">Refresh</button>
@@ -1534,7 +1545,7 @@ tbody tr:hover {
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Waktu</th><th>Service</th><th>Status</th><th>Email / Cookie</th><th>Plan</th><th>Country</th><th>Aksi</th></tr>
+          <tr><th>Waktu</th><th>Service</th><th>Status</th><th>Email / Cookie</th><th>Plan</th><th>Billing</th><th>Country</th><th>Aksi</th></tr>
         </thead>
         <tbody id="history-tbody"></tbody>
       </table>
@@ -2321,7 +2332,7 @@ function nextPage() {
 
 async function loadHistory() {
   const tbody = document.getElementById('history-tbody');
-  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:20px;">Memuat data riwayat...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:20px;">Memuat data riwayat...</td></tr>';
 
   const q = document.getElementById('hist-search').value.trim();
   const st = document.getElementById('hist-filter-status').value;
@@ -2344,7 +2355,7 @@ async function loadHistory() {
     const data = await res.json();
     renderHistoryTable(data);
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--dead); padding:20px;">Gagal memuat riwayat.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--dead); padding:20px;">Gagal memuat riwayat.</td></tr>';
   }
 }
 
@@ -2355,7 +2366,7 @@ function renderHistoryTable(data) {
   window.currentHistoryRows = rows;
 
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:20px;">Tidak ada data riwayat.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:20px;">Tidak ada data riwayat.</td></tr>';
     document.getElementById('pag-start').innerText = '0';
     document.getElementById('pag-end').innerText = '0';
     document.getElementById('pag-total').innerText = total;
@@ -2387,6 +2398,7 @@ function renderHistoryTable(data) {
       <td>${statusTag}</td>
       <td style="font-size:12px; color:var(--text-muted);">${identifier}</td>
       <td style="${r.plan && r.plan.includes('4K') ? 'color:var(--accent-4k); font-weight:700;' : ''}">${r.plan || '-'}</td>
+      <td style="font-size:12px; color:var(--text-muted);">${r.billing || '-'}</td>
       <td>${r.country || '-'}</td>
       <td>
         <div style="display:flex; gap:6px; align-items:center;">
@@ -2426,7 +2438,7 @@ async function exportCsvWithAuth() {
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `netflix_history_${Date.now()}.csv`;
+    a.download = `suite_history_${Date.now()}.csv`;
     a.click();
     showToast('File CSV berhasil diunduh (sesuai filter)');
   } catch(e) {
