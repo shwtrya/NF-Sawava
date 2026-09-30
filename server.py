@@ -3156,7 +3156,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             }).encode('utf-8'))
 
         elif path in ("/api/history", "/api/history/export_csv", "/api/analytics", "/api/proxies/detail", "/api/proxies/export"):
-            # Public access — no API key required for main dashboard data
+            # API key required for data/history endpoints
+            if not check_api_key_authorized(self.headers):
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(b'{"error": "Unauthorized: API Key required"}')
+                return
 
             if path == "/api/history":
                 limit = int(qs.get("limit", [25])[0])
@@ -3570,14 +3577,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(b'{"error": "Too Many Requests. Rate limit exceeded."}')
                 return
 
-            # API key required for checker and proxy management endpoints
-            if not check_api_key_authorized(self.headers):
-                self.send_response(401)
-                self.send_header("Content-Type", "application/json")
-                self.send_cors_headers()
-                self.end_headers()
-                self.wfile.write(b'{"error": "Unauthorized: API Key required"}')
-                return
+            # Checker endpoints are public; proxy management needs API key
+            proxy_mgmt = {"/api/proxies/save", "/api/proxies/test", "/api/proxies/test/stop",
+                          "/api/proxies/test_single", "/api/proxies/add", "/api/proxies/remove",
+                          "/api/history/clear", "/api/system/reload"}
+            if self.path in proxy_mgmt:
+                if not check_api_key_authorized(self.headers):
+                    self.send_response(401)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(b'{"error": "Unauthorized: API Key required"}')
+                    return
 
             if self.path == "/api/token":
                 try:

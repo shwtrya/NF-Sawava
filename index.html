@@ -3837,10 +3837,8 @@ async function checkPinStatus() {
     badge.innerText = '🔑 Authenticated';
     badge.style.color = 'var(--live)';
   } else {
-    badge.innerText = '🔒 No API Key';
-    badge.style.color = 'var(--hold)';
-    document.getElementById('pin-modal').style.display = 'flex';
-    document.getElementById('pin-input').focus();
+    badge.innerText = '🔑 API Key';
+    badge.style.color = 'var(--text-muted)';
   }
 }
 
