@@ -3311,19 +3311,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # Do not trust client-supplied forwarding headers for rate-limit identity.
         client_ip = self.client_address[0]
 
-        # Explicitly disable credential/session validation and token minting endpoints.
-        # This also blocks legacy bulk-check routes regardless of authentication.
-        disabled_sensitive_routes = {
-            "/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check",
-            "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check",
-        }
-        if self.path in disabled_sensitive_routes:
-            self.send_response(410)
-            self.send_header("Content-Type", "application/json")
-            self.send_cors_headers()
-            self.end_headers()
-            self.wfile.write(b'{"error":"This credential/session checking route has been disabled."}')
-            return
+        # Sensitive routes are now protected by PIN auth below (line ~3401).
+        # No blanket disable — all checker routes work when PIN is provided.
 
         if self.path == "/api/pin/verify":
             if is_rate_limited(client_ip, max_requests=6, window_seconds=60, bucket="pin_verify"):
