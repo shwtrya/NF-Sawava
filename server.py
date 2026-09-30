@@ -1015,8 +1015,8 @@ def generate_nftoken(cookie_text, use_proxy=True):
     last_err = None
 
     for attempt in range(max_retries):
-        # First 2 attempts: try proxy; last 3 attempts: direct (direct proven working)
-        if use_proxy and attempt < 2:
+        # All attempts use proxy when use_proxy=True; direct only when explicitly off
+        if use_proxy:
             proxies, proxy_label, proxy_raw_url = get_random_proxy()
         else:
             proxies, proxy_label, proxy_raw_url = None, None, None
@@ -1077,8 +1077,8 @@ def check_netflix_membership(cookie_text, use_proxy=True):
     last_err = None
 
     for attempt in range(max_retries):
-        # First 2 attempts: try proxy; last 3 attempts: direct (direct proven working)
-        if use_proxy and attempt < 2:
+        # All attempts use proxy when use_proxy=True; direct only when explicitly off
+        if use_proxy:
             proxies, proxy_label, proxy_raw_url = get_random_proxy()
         else:
             proxies, proxy_label, proxy_raw_url = None, None, None
