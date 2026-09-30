@@ -1356,6 +1356,71 @@ textarea {
   color: var(--text-secondary);
 }
 
+/* BULK CHECK - PROGRESS & STATS */
+.progress-wrap {
+  margin: 14px 0;
+  padding: 14px 16px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+}
+.progress-bar-bg {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--primary) 0%, #ff4d6a 50%, #ff7eb3 100%);
+  border-radius: 8px;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 12px rgba(229, 9, 20, 0.4);
+}
+.bulk-stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin: 14px 0;
+}
+@media (max-width: 600px) {
+  .bulk-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.stat-pill {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 12px 14px;
+  text-align: center;
+  backdrop-filter: blur(6px);
+  transition: all 0.2s ease;
+}
+.stat-pill:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+.stat-pill .label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.stat-pill .num {
+  font-size: 22px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: #fff;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
 /* TABLES */
 .table-wrap {
   overflow-x: auto;
@@ -3359,47 +3424,47 @@ button:disabled {
       <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopBulk()">Stop</button>
     </div>
     <div id="bulk-progress" class="progress-wrap">
-      <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600;">
-        <span id="progress-status" style="color:var(--text-muted)">Memeriksa 0/0...</span>
-        <span id="progress-percent" style="color:var(--primary)">0%</span>
+      <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:600;">
+        <span id="progress-status" style="color:var(--text-secondary)">⏳ Memeriksa 0/0...</span>
+        <span id="progress-percent" style="color:var(--primary); font-family:var(--font-mono);">0%</span>
       </div>
       <div class="progress-bar-bg"><div id="progress-fill" class="progress-bar-fill"></div></div>
     </div>
     <div class="bulk-stats">
       <div class="stat-pill">
-        <div class="label">Total</div>
+        <div class="label">📊 Total</div>
         <div class="num" id="stat-total">0</div>
       </div>
       <div class="stat-pill">
-        <div class="label" style="color:var(--live)">Live</div>
+        <div class="label" style="color:var(--live)">✅ Live</div>
         <div class="num" id="stat-live" style="color:var(--live)">0</div>
       </div>
       <div class="stat-pill">
-        <div class="label" style="color:var(--hold)">Hold</div>
+        <div class="label" style="color:var(--hold)">⏸ Hold</div>
         <div class="num" id="stat-hold" style="color:var(--hold)">0</div>
       </div>
       <div class="stat-pill">
-        <div class="label" style="color:var(--accent-4k)">4K Ultra</div>
+        <div class="label" style="color:var(--accent-4k)">🎬 4K Ultra</div>
         <div class="num" id="stat-4k" style="color:var(--accent-4k)">0</div>
       </div>
       <div class="stat-pill">
-        <div class="label" style="color:var(--dead)">Dead</div>
+        <div class="label" style="color:var(--dead)">💀 Dead</div>
         <div class="num" id="stat-dead" style="color:var(--dead)">0</div>
       </div>
     </div>
-    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-      <div style="display:flex; gap:6px; align-items:center;">
-        <span style="font-size:12px; font-weight:600; color:var(--text-muted); margin-right:4px;">Filter:</span>
-        <button id="btn-filter-all" class="btn-secondary" style="padding:4px 10px; font-size:11px; background:var(--bg-subtle);" onclick="setBulkFilter('ALL')">Semua</button>
-        <button id="btn-filter-live" class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="setBulkFilter('LIVE')">Hanya LIVE</button>
-        <button id="btn-filter-hold" class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="setBulkFilter('HOLD')">HOLD</button>
-        <button id="btn-filter-4k" class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="setBulkFilter('4K')">4K Ultra</button>
-        <button id="btn-filter-dead" class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="setBulkFilter('DEAD')">DEAD</button>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <span style="font-size:12px; font-weight:600; color:var(--text-muted); margin-right:2px;">🔍 Filter:</span>
+        <button id="btn-filter-all" class="btn-secondary" style="padding:5px 12px; font-size:11px; background:var(--bg-subtle); border-radius:8px;" onclick="setBulkFilter('ALL')">Semua</button>
+        <button id="btn-filter-live" class="btn-secondary" style="padding:5px 12px; font-size:11px; border-radius:8px;" onclick="setBulkFilter('LIVE')">✅ LIVE</button>
+        <button id="btn-filter-hold" class="btn-secondary" style="padding:5px 12px; font-size:11px; border-radius:8px;" onclick="setBulkFilter('HOLD')">⏸ HOLD</button>
+        <button id="btn-filter-4k" class="btn-secondary" style="padding:5px 12px; font-size:11px; border-radius:8px;" onclick="setBulkFilter('4K')">🎬 4K</button>
+        <button id="btn-filter-dead" class="btn-secondary" style="padding:5px 12px; font-size:11px; border-radius:8px;" onclick="setBulkFilter('DEAD')">💀 DEAD</button>
       </div>
-      <div style="display:flex; gap:8px;">
-        <button class="btn-secondary" onclick="exportBulk('txt', 'LIVE')">Export Live (TXT)</button>
-        <button class="btn-secondary" style="color:var(--hold); border-color:var(--hold-border);" onclick="exportBulk('txt', 'HOLD')">Export Hold (TXT)</button>
-        <button class="btn-secondary" onclick="exportBulk('json')">Export Live (JSON)</button>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn-secondary" style="font-size:11px; padding:5px 12px; border-radius:8px;" onclick="exportBulk('txt', 'LIVE')">📥 Export Live</button>
+        <button class="btn-secondary" style="font-size:11px; padding:5px 12px; border-radius:8px; color:var(--hold); border-color:var(--hold-border);" onclick="exportBulk('txt', 'HOLD')">📥 Export Hold</button>
+        <button class="btn-secondary" style="font-size:11px; padding:5px 12px; border-radius:8px;" onclick="exportBulk('json')">📋 Export JSON</button>
       </div>
     </div>
     <div class="table-wrap">
@@ -4659,7 +4724,7 @@ async function runBulk() {
 
       completed++;
       const pct = Math.round((completed / lines.length) * 100);
-      document.getElementById('progress-status').innerText = `Memeriksa ${completed}/${lines.length}...`;
+      document.getElementById('progress-status').innerText = `⏳ Memeriksa ${completed}/${lines.length}...`;
       document.getElementById('progress-percent').innerText = `${pct}%`;
       document.getElementById('progress-fill').style.width = `${pct}%`;
 
