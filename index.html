@@ -1816,8 +1816,8 @@ button:disabled {
 
 <div id="toast"><span>✓</span> <span id="toast-msg">Pesan</span></div>
 
-<!-- API KEY AUTH MODAL -->
-<div id="pin-modal" style="display:none;">
+<!-- AUTH MODAL REMOVED - main dashboard is public -->
+<div id="pin-modal" style="display:none !important;">
   <div class="pin-box">
     <div style="width:48px; height:48px; background:rgba(59,130,246,0.1); border-radius:12px; display:inline-flex; align-items:center; justify-content:center; color:var(--accent, #3b82f6); font-size:20px; margin-bottom:14px;">🔑</div>
     <h2 style="font-size:18px; font-weight:800; margin-bottom:6px;">API Key Required</h2>
@@ -3729,7 +3729,7 @@ button:disabled {
         </div>
         <div style="display:flex; gap:10px; align-items:center; margin-bottom:14px;">
           <button class="btn-primary" onclick="window.open('/admin','_blank')">🛡️ Buka Admin Panel</button>
-          <button class="btn-secondary" onclick="sessionStorage.removeItem('suite_api_key'); checkPinStatus(); showToast('Dashboard terkunci');">Kunci Sekarang</button>
+          <button class="btn-secondary" onclick="window.open('/admin','_blank')">⚙️ Admin Settings</button>
         </div>
       </div>
 
@@ -3798,9 +3798,7 @@ const pageSize = 25;
 let searchDebounce = null;
 
 function getAuthHeaders(extra = {}) {
-  const key = sessionStorage.getItem('suite_api_key') || '';
   const headers = {...extra};
-  if (key) headers['X-API-Key'] = key;
   return headers;
 }
 
@@ -3831,50 +3829,16 @@ checkServerHealth();
 
 // PIN Security
 async function checkPinStatus() {
-  try {
-    const key = sessionStorage.getItem('suite_api_key');
-    const badge = document.getElementById('pin-badge');
-    if (key) {
-      // Validate key against server
-      const res = await fetch('/api/auth/status', { headers: { 'X-API-Key': key } });
-      const d = await res.json();
-      if (d.authenticated) {
-        badge.innerText = '🔑 Authenticated';
-        badge.style.color = 'var(--live)';
-        document.getElementById('pin-modal').style.display = 'none';
-      } else {
-        sessionStorage.removeItem('suite_api_key');
-        badge.innerText = '🔒 Locked';
-        badge.style.color = 'var(--dead)';
-        document.getElementById('pin-modal').style.display = 'flex';
-        document.getElementById('pin-input').focus();
-      }
-    } else {
-      badge.innerText = '🔒 Locked';
-      badge.style.color = 'var(--dead)';
-      document.getElementById('pin-modal').style.display = 'flex';
-      document.getElementById('pin-input').focus();
-    }
-  } catch(e) {}
+  // Main dashboard is public - no auth needed
+  const badge = document.getElementById('pin-badge');
+  if (badge) {
+    badge.innerText = '⚡ Public';
+    badge.style.color = 'var(--live)';
+  }
 }
 
 async function verifyPin() {
-  const key = document.getElementById('pin-input').value.trim();
-  try {
-    const res = await fetch('/api/auth/status', { headers: { 'X-API-Key': key } });
-    const d = await res.json();
-    if (d.authenticated) {
-      sessionStorage.setItem('suite_api_key', key);
-      document.getElementById('pin-modal').style.display = 'none';
-      showToast('✅ Dashboard authenticated');
-      checkPinStatus();
-      fetchStats();
-    } else {
-      document.getElementById('pin-err').style.display = 'block';
-    }
-  } catch(e) {
-    document.getElementById('pin-err').style.display = 'block';
-  }
+  // No-op: main dashboard is public, auth is admin-only
 }
 
 

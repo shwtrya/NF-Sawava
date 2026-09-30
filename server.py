@@ -3156,13 +3156,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             }).encode('utf-8'))
 
         elif path in ("/api/history", "/api/history/export_csv", "/api/analytics", "/api/proxies/detail", "/api/proxies/export"):
-            if not check_api_key_authorized(self.headers):
-                self.send_response(401)
-                self.send_header("Content-Type", "application/json")
-                self.send_cors_headers()
-                self.end_headers()
-                self.wfile.write(b'{"error": "Unauthorized: API Key required"}')
-                return
+            # Public access — no API key required for main dashboard data
 
             if path == "/api/history":
                 limit = int(qs.get("limit", [25])[0])
@@ -3576,13 +3570,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(b'{"error": "Too Many Requests. Rate limit exceeded."}')
                 return
 
-            if not check_api_key_authorized(self.headers):
-                self.send_response(401)
-                self.send_header("Content-Type", "application/json")
-                self.send_cors_headers()
-                self.end_headers()
-                self.wfile.write(b'{"error": "Unauthorized: API Key required"}')
-                return
+            # Public access — no API key required for checker endpoints
 
             if self.path == "/api/token":
                 try:
