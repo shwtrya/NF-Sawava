@@ -2852,11 +2852,33 @@ button:disabled {
 
     <!-- Bulk Disney+ Check -->
     <div class="card" style="padding:16px;">
-      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Combo Check</label>
-      <textarea id="disney-bulk-input" placeholder="Paste combo list (email:password per baris)..." style="height:120px;"></textarea>
-      <div style="display:flex; gap:8px; margin-top:8px;">
-        <button id="disney-bulk-btn" class="btn-primary" style="flex:2;" onclick="runDisneyBulk()">Mulai Bulk Check</button>
-        <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopDisneyBulk()">Stop</button>
+      <div class="check-mode-tabs" style="margin-bottom:12px;">
+        <button class="check-mode-tab active" onclick="switchDisneyBulkMode('combo')" id="disney-bulk-mode-combo">🔑 Bulk Combo</button>
+        <button class="check-mode-tab" onclick="switchDisneyBulkMode('cookie')" id="disney-bulk-mode-cookie">🍪 Bulk Cookie</button>
+      </div>
+
+      <div id="disney-bulk-combo-form">
+        <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Combo Check</label>
+        <textarea id="disney-bulk-input" placeholder="Paste combo list (email:password per baris)..." style="height:120px;"></textarea>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button id="disney-bulk-btn" class="btn-primary" style="flex:2;" onclick="runDisneyBulk()">Mulai Bulk Check</button>
+          <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopDisneyBulk()">Stop</button>
+        </div>
+      </div>
+
+      <div id="disney-bulk-cookie-form" style="display:none;">
+        <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:#1ce783;">🍪 Bulk Cookie Check</label>
+        <textarea id="disney-bulk-cookie-input" placeholder="Paste cookies (satu cookie per baris)...&#10;Setiap baris = satu akun Disney+&#10;Format: Netscape .txt, JSON, key=value, atau raw token" style="height:140px;"></textarea>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+          <div class="toggle-wrap" onclick="document.getElementById('disney-bulk-cookie-proxy').click()">
+            <input type="checkbox" id="disney-bulk-cookie-proxy" onclick="event.stopPropagation()">
+            <span style="font-size:11.5px; color:var(--text-secondary);">Pakai Proxy Rotasi</span>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button id="disney-bulk-cookie-btn" class="btn-primary" style="flex:2;" onclick="runDisneyBulkCookie()">🍪 Mulai Bulk Cookie Check</button>
+          <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopDisneyBulk()">Stop</button>
+        </div>
       </div>
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
         <div id="disney-bulk-stats" style="font-size:12px; font-weight:600; color:var(--text-muted);"></div>
@@ -3017,11 +3039,33 @@ button:disabled {
 
     <!-- Bulk Crunchyroll Check -->
     <div class="card" style="padding:16px;">
-      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Combo Check</label>
-      <textarea id="cr-bulk-input" placeholder="Paste combo list (email:password per baris)..." style="height:120px;"></textarea>
-      <div style="display:flex; gap:8px; margin-top:8px;">
-        <button id="cr-bulk-btn" class="btn-primary" style="flex:2;" onclick="runCrBulk()">Mulai Bulk Check</button>
-        <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopCrBulk()">Stop</button>
+      <div class="check-mode-tabs" style="margin-bottom:12px;">
+        <button class="check-mode-tab active" onclick="switchCrBulkMode('combo')" id="cr-bulk-mode-combo">🔑 Bulk Combo</button>
+        <button class="check-mode-tab" onclick="switchCrBulkMode('cookie')" id="cr-bulk-mode-cookie">🍪 Bulk Cookie</button>
+      </div>
+
+      <div id="cr-bulk-combo-form">
+        <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Combo Check</label>
+        <textarea id="cr-bulk-input" placeholder="Paste combo list (email:password per baris)..." style="height:120px;"></textarea>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button id="cr-bulk-btn" class="btn-primary" style="flex:2;" onclick="runCrBulk()">Mulai Bulk Check</button>
+          <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopCrBulk()">Stop</button>
+        </div>
+      </div>
+
+      <div id="cr-bulk-cookie-form" style="display:none;">
+        <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:#f47521;">🍪 Bulk Cookie Check</label>
+        <textarea id="cr-bulk-cookie-input" placeholder="Paste cookies (satu cookie per baris)...&#10;Setiap baris = satu akun Crunchyroll&#10;Format: Netscape .txt, JSON, key=value, atau raw token" style="height:140px;"></textarea>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+          <div class="toggle-wrap" onclick="document.getElementById('cr-bulk-cookie-proxy').click()">
+            <input type="checkbox" id="cr-bulk-cookie-proxy" onclick="event.stopPropagation()">
+            <span style="font-size:11.5px; color:var(--text-secondary);">Pakai Proxy Rotasi</span>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button id="cr-bulk-cookie-btn" class="btn-primary" style="flex:2;" onclick="runCrBulkCookie()">🍪 Mulai Bulk Cookie Check</button>
+          <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopCrBulk()">Stop</button>
+        </div>
       </div>
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
         <div id="cr-bulk-stats" style="font-size:12px; font-weight:600; color:var(--text-muted);"></div>
@@ -5564,6 +5608,164 @@ async function runCrCookieCheck() {
   }
   btn.disabled = false;
   btnText.textContent = '🍪 CHECK COOKIE';
+}
+
+// ═══════ Bulk Mode Switchers ═══════
+function switchDisneyBulkMode(mode) {
+  document.getElementById('disney-bulk-combo-form').style.display = mode === 'combo' ? 'block' : 'none';
+  document.getElementById('disney-bulk-cookie-form').style.display = mode === 'cookie' ? 'block' : 'none';
+  document.getElementById('disney-bulk-mode-combo').className = 'check-mode-tab' + (mode === 'combo' ? ' active' : '');
+  document.getElementById('disney-bulk-mode-cookie').className = 'check-mode-tab' + (mode === 'cookie' ? ' active' : '');
+}
+function switchCrBulkMode(mode) {
+  document.getElementById('cr-bulk-combo-form').style.display = mode === 'combo' ? 'block' : 'none';
+  document.getElementById('cr-bulk-cookie-form').style.display = mode === 'cookie' ? 'block' : 'none';
+  document.getElementById('cr-bulk-mode-combo').className = 'check-mode-tab' + (mode === 'combo' ? ' active' : '');
+  document.getElementById('cr-bulk-mode-cookie').className = 'check-mode-tab' + (mode === 'cookie' ? ' active' : '');
+}
+
+// ═══════ Disney+ Bulk Cookie Check ═══════
+async function runDisneyBulkCookie() {
+  const raw = document.getElementById('disney-bulk-cookie-input').value.trim();
+  if (!raw) return showToast('Paste cookies dulu');
+  if (disneyBulkRunning) return;
+
+  let cookies;
+  if (raw.includes('\n\n')) {
+    cookies = raw.split(/\n\n+/).map(c => c.trim()).filter(c => c);
+  } else if (raw.includes('---')) {
+    cookies = raw.split(/^-{3,}$/m).map(c => c.trim()).filter(c => c);
+  } else {
+    cookies = raw.split('\n').map(c => c.trim()).filter(c => c);
+  }
+  if (!cookies.length) return showToast('Tidak ada cookie valid');
+
+  disneyBulkRunning = true;
+  disneyBulkAbort = false;
+  disneyBulkResults = [];
+
+  const outEl = document.getElementById('disney-bulk-out');
+  const statsEl = document.getElementById('disney-bulk-stats');
+  const progressEl = document.getElementById('disney-bulk-progress');
+  const barEl = document.getElementById('disney-progress-bar');
+  const useProxy = document.getElementById('disney-bulk-cookie-proxy')?.checked ?? false;
+
+  outEl.innerHTML = '';
+  progressEl.style.display = 'block';
+  barEl.style.width = '0%';
+
+  let done = 0, live = 0, bad = 0, errors = 0;
+  const total = cookies.length;
+  let currentIndex = 0;
+  const concurrency = 3;
+
+  async function worker() {
+    while (currentIndex < cookies.length && !disneyBulkAbort) {
+      const idx = currentIndex++;
+      const cookie = cookies[idx];
+      try {
+        const res = await fetch('/api/disney/cookie-check', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({cookie, use_proxy: useProxy})
+        });
+        const data = await res.json();
+        data.combo = `Cookie #${idx + 1}`;
+        disneyBulkResults.push(data);
+        updateDisneyStats(data.status);
+
+        if (data.status === 'LIVE' || data.status === 'HOLD') live++;
+        else if (data.status === 'BAD' || data.status === 'DEAD') bad++;
+        else errors++;
+
+        const html = renderDisneyResult(data, 'bulk');
+        outEl.insertAdjacentHTML('beforeend', html);
+      } catch(e) {
+        errors++;
+        outEl.insertAdjacentHTML('beforeend', `<div style="padding:8px; border-left:3px solid var(--dead); background:rgba(244,63,94,0.1); margin-bottom:6px; border-radius:6px; font-size:12px; color:var(--dead);">Cookie #${idx+1}: ${e.message}</div>`);
+      }
+      done++;
+      const pct = Math.round((done / total) * 100);
+      statsEl.innerText = `⏳ ${done}/${total} — ✅ ${live} Live | 💀 ${bad} Bad | ⚠️ ${errors} Error`;
+      barEl.style.width = pct + '%';
+    }
+  }
+
+  await Promise.all(Array.from({length: concurrency}, () => worker()));
+  statsEl.innerText = `✅ Selesai: ${done}/${total} — ${live} Live | ${bad} Bad | ${errors} Error`;
+  disneyBulkRunning = false;
+}
+
+// ═══════ Crunchyroll Bulk Cookie Check ═══════
+async function runCrBulkCookie() {
+  const raw = document.getElementById('cr-bulk-cookie-input').value.trim();
+  if (!raw) return showToast('Paste cookies dulu');
+  if (crBulkRunning) return;
+
+  let cookies;
+  if (raw.includes('\n\n')) {
+    cookies = raw.split(/\n\n+/).map(c => c.trim()).filter(c => c);
+  } else if (raw.includes('---')) {
+    cookies = raw.split(/^-{3,}$/m).map(c => c.trim()).filter(c => c);
+  } else {
+    cookies = raw.split('\n').map(c => c.trim()).filter(c => c);
+  }
+  if (!cookies.length) return showToast('Tidak ada cookie valid');
+
+  crBulkRunning = true;
+  crBulkAbort = false;
+  crBulkResults = [];
+
+  const outEl = document.getElementById('cr-bulk-out');
+  const statsEl = document.getElementById('cr-bulk-stats');
+  const progressEl = document.getElementById('cr-bulk-progress');
+  const barEl = document.getElementById('cr-progress-bar');
+  const useProxy = document.getElementById('cr-bulk-cookie-proxy')?.checked ?? false;
+
+  outEl.innerHTML = '';
+  progressEl.style.display = 'block';
+  barEl.style.width = '0%';
+
+  let done = 0, live = 0, bad = 0, errors = 0;
+  const total = cookies.length;
+  let currentIndex = 0;
+  const concurrency = 3;
+
+  async function worker() {
+    while (currentIndex < cookies.length && !crBulkAbort) {
+      const idx = currentIndex++;
+      const cookie = cookies[idx];
+      try {
+        const res = await fetch('/api/crunchyroll/cookie-check', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({cookie, use_proxy: useProxy})
+        });
+        const data = await res.json();
+        data.combo = `Cookie #${idx + 1}`;
+        crBulkResults.push(data);
+        updateCrStats(data.status);
+
+        if (data.status === 'LIVE' || data.status === 'PREMIUM' || data.status === 'FREE') live++;
+        else if (data.status === 'BAD' || data.status === 'DEAD') bad++;
+        else errors++;
+
+        const html = renderCrResult(data, 'bulk');
+        outEl.insertAdjacentHTML('beforeend', html);
+      } catch(e) {
+        errors++;
+        outEl.insertAdjacentHTML('beforeend', `<div style="padding:8px; border-left:3px solid var(--dead); background:rgba(244,63,94,0.1); margin-bottom:6px; border-radius:6px; font-size:12px; color:var(--dead);">Cookie #${idx+1}: ${e.message}</div>`);
+      }
+      done++;
+      const pct = Math.round((done / total) * 100);
+      statsEl.innerText = `⏳ ${done}/${total} — ✅ ${live} Live | 💀 ${bad} Bad | ⚠️ ${errors} Error`;
+      barEl.style.width = pct + '%';
+    }
+  }
+
+  await Promise.all(Array.from({length: concurrency}, () => worker()));
+  statsEl.innerText = `✅ Selesai: ${done}/${total} — ${live} Live | ${bad} Bad | ${errors} Error`;
+  crBulkRunning = false;
 }
 
 async function runDisneySingle() {
