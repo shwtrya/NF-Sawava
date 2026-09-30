@@ -1421,6 +1421,41 @@ textarea {
   line-height: 1;
 }
 
+/* CHECK MODE TABS (Login/Cookie switcher) */
+.check-mode-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  padding: 3px;
+  margin-bottom: 16px;
+}
+.check-mode-tab {
+  flex: 1;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.check-mode-tab.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.check-mode-tab:hover:not(.active) {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
 /* TABLES */
 .table-wrap {
   overflow-x: auto;
@@ -2693,7 +2728,7 @@ button:disabled {
       <div style="font-size:20px;">🏰</div>
       <div>
         <div style="font-weight:700; font-size:16px; color:var(--primary);">Disney+ Account Checker</div>
-        <div style="font-size:11px; color:var(--text-muted);">Check Disney+ accounts via BAMTech API. Format: email:password</div>
+        <div style="font-size:11px; color:var(--text-muted);">Check Disney+ accounts via BAMTech API atau cookies browser</div>
       </div>
     </div>
 
@@ -2707,6 +2742,12 @@ button:disabled {
         <span class="pill-tag" style="color:var(--text-muted); font-size:11px;">Single Account Check</span>
       </div>
 
+      <div class="check-mode-tabs">
+        <button class="check-mode-tab active" onclick="switchDisneyMode('login')" id="disney-mode-login">🔑 Login</button>
+        <button class="check-mode-tab" onclick="switchDisneyMode('cookie')" id="disney-mode-cookie">🍪 Cookie</button>
+      </div>
+
+      <div id="disney-login-form">
       <div style="margin-bottom:12px;">
         <label style="font-size:11.5px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; display:block;">Email / Account ID</label>
         <div class="input-with-icon">
@@ -2743,6 +2784,24 @@ button:disabled {
         <span class="btn-spinner"><svg class="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span>
         <span id="disney-single-btn-text">CHECK ACCOUNT</span>
       </button>
+      </div>
+
+      <div id="disney-cookie-form" style="display:none;">
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11.5px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; display:block;">Disney+ Cookie / Token</label>
+          <textarea id="disney-cookie-input" placeholder="Paste cookies dari browser...&#10;Format: Netscape .txt, JSON, key=value, atau raw token" style="height:140px;"></textarea>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <div class="toggle-wrap" onclick="document.getElementById('disney-cookie-proxy').click()">
+            <input type="checkbox" id="disney-cookie-proxy" onclick="event.stopPropagation()">
+            <span style="font-size:11.5px; color:var(--text-secondary);">Pakai Proxy Rotasi</span>
+          </div>
+        </div>
+        <button type="button" id="disney-cookie-btn" class="btn-primary" onclick="runDisneyCookieCheck()" style="width:100%;">
+          <span class="btn-spinner"><svg class="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span>
+          <span id="disney-cookie-btn-text">🍪 CHECK COOKIE</span>
+        </button>
+      </div>
 
       <div id="disney-single-out" class="card-out"></div>
     </div>
@@ -2831,7 +2890,7 @@ button:disabled {
       <div style="font-size:20px;">🍥</div>
       <div>
         <div style="font-weight:700; font-size:16px; color:var(--primary);">Crunchyroll Account Checker</div>
-        <div style="font-size:11px; color:var(--text-muted);">Check Crunchyroll accounts via Android API. Format: email:password</div>
+        <div style="font-size:11px; color:var(--text-muted);">Check Crunchyroll accounts via Android API atau cookies browser</div>
       </div>
     </div>
 
@@ -2845,6 +2904,12 @@ button:disabled {
         <span class="pill-tag" style="color:var(--text-muted); font-size:11px;">Single Account Check</span>
       </div>
 
+      <div class="check-mode-tabs">
+        <button class="check-mode-tab active" onclick="switchCrMode('login')" id="cr-mode-login">🔑 Login</button>
+        <button class="check-mode-tab" onclick="switchCrMode('cookie')" id="cr-mode-cookie">🍪 Cookie</button>
+      </div>
+
+      <div id="cr-login-form">
       <div style="margin-bottom:12px;">
         <label style="font-size:11.5px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; display:block;">Email / Account ID</label>
         <div class="input-with-icon">
@@ -2881,6 +2946,24 @@ button:disabled {
         <span class="btn-spinner"><svg class="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span>
         <span id="cr-single-btn-text">CHECK ACCOUNT</span>
       </button>
+      </div>
+
+      <div id="cr-cookie-form" style="display:none;">
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11.5px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; display:block;">Crunchyroll Cookie / Token</label>
+          <textarea id="cr-cookie-input" placeholder="Paste cookies dari browser...&#10;Format: Netscape .txt, JSON, key=value, atau raw token" style="height:140px;"></textarea>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <div class="toggle-wrap" onclick="document.getElementById('cr-cookie-proxy').click()">
+            <input type="checkbox" id="cr-cookie-proxy" onclick="event.stopPropagation()">
+            <span style="font-size:11.5px; color:var(--text-secondary);">Pakai Proxy Rotasi</span>
+          </div>
+        </div>
+        <button type="button" id="cr-cookie-btn" class="btn-primary" onclick="runCrCookieCheck()" style="width:100%;">
+          <span class="btn-spinner"><svg class="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span>
+          <span id="cr-cookie-btn-text">🍪 CHECK COOKIE</span>
+        </button>
+      </div>
 
       <div id="cr-single-out" class="card-out"></div>
     </div>
@@ -5387,6 +5470,100 @@ function renderDisneyResult(data, mode = 'single') {
     </div>
     <div style="color:var(--text-muted); font-size:12px;">${data.reason || data.email || 'Akun tidak valid'}</div>
   </div>`;
+}
+
+// Disney+ mode switching (Login / Cookie)
+function switchDisneyMode(mode) {
+  document.getElementById('disney-login-form').style.display = mode === 'login' ? 'block' : 'none';
+  document.getElementById('disney-cookie-form').style.display = mode === 'cookie' ? 'block' : 'none';
+  document.getElementById('disney-mode-login').className = 'check-mode-tab' + (mode === 'login' ? ' active' : '');
+  document.getElementById('disney-mode-cookie').className = 'check-mode-tab' + (mode === 'cookie' ? ' active' : '');
+}
+
+// Crunchyroll mode switching (Login / Cookie)
+function switchCrMode(mode) {
+  document.getElementById('cr-login-form').style.display = mode === 'login' ? 'block' : 'none';
+  document.getElementById('cr-cookie-form').style.display = mode === 'cookie' ? 'block' : 'none';
+  document.getElementById('cr-mode-login').className = 'check-mode-tab' + (mode === 'login' ? ' active' : '');
+  document.getElementById('cr-mode-cookie').className = 'check-mode-tab' + (mode === 'cookie' ? ' active' : '');
+}
+
+// Disney+ Cookie Check
+async function runDisneyCookieCheck() {
+  const cookie = document.getElementById('disney-cookie-input').value.trim();
+  if (!cookie) return showToast('Paste cookie dulu');
+  const btn = document.getElementById('disney-cookie-btn');
+  const btnText = document.getElementById('disney-cookie-btn-text');
+  const outEl = document.getElementById('disney-single-out');
+  const useProxy = document.getElementById('disney-cookie-proxy')?.checked ?? false;
+  btn.disabled = true;
+  btnText.textContent = 'Checking...';
+  outEl.style.display = 'none';
+  outEl.className = 'card-out';
+  outEl.innerHTML = '';
+  try {
+    const res = await fetch('/api/disney/cookie-check', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cookie, use_proxy: useProxy})
+    });
+    const data = await res.json();
+    outEl.innerHTML = renderDisneyResult(data, 'single');
+    outEl.style.display = 'block';
+    updateDisneyStats(data.status);
+    if (data.status === 'LIVE') playAlert('live');
+    else if (data.status === 'HOLD') playAlert('hold');
+  } catch(e) {
+    outEl.className = 'card-out dead';
+    outEl.innerHTML = `
+      <div class="card-header-status" style="color:var(--dead);">
+        <span style="font-size:20px;">❌</span> <span>Cookie Check Gagal</span>
+      </div>
+      <div style="color:var(--text-muted); font-size:12.5px;">${e.message}</div>
+    `;
+    outEl.style.display = 'block';
+  }
+  btn.disabled = false;
+  btnText.textContent = '🍪 CHECK COOKIE';
+}
+
+// Crunchyroll Cookie Check
+async function runCrCookieCheck() {
+  const cookie = document.getElementById('cr-cookie-input').value.trim();
+  if (!cookie) return showToast('Paste cookie dulu');
+  const btn = document.getElementById('cr-cookie-btn');
+  const btnText = document.getElementById('cr-cookie-btn-text');
+  const outEl = document.getElementById('cr-single-out');
+  const useProxy = document.getElementById('cr-cookie-proxy')?.checked ?? false;
+  btn.disabled = true;
+  btnText.textContent = 'Checking...';
+  outEl.style.display = 'none';
+  outEl.className = 'card-out';
+  outEl.innerHTML = '';
+  try {
+    const res = await fetch('/api/crunchyroll/cookie-check', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cookie, use_proxy: useProxy})
+    });
+    const data = await res.json();
+    outEl.innerHTML = renderCrResult(data, 'single');
+    outEl.style.display = 'block';
+    updateCrStats(data.status);
+    if (data.status === 'LIVE') playAlert('live');
+    else if (data.status === 'HOLD') playAlert('hold');
+  } catch(e) {
+    outEl.className = 'card-out dead';
+    outEl.innerHTML = `
+      <div class="card-header-status" style="color:var(--dead);">
+        <span style="font-size:20px;">❌</span> <span>Cookie Check Gagal</span>
+      </div>
+      <div style="color:var(--text-muted); font-size:12.5px;">${e.message}</div>
+    `;
+    outEl.style.display = 'block';
+  }
+  btn.disabled = false;
+  btnText.textContent = '🍪 CHECK COOKIE';
 }
 
 async function runDisneySingle() {
