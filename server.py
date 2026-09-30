@@ -3570,7 +3570,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(b'{"error": "Too Many Requests. Rate limit exceeded."}')
                 return
 
-            # Public access — no API key required for checker endpoints
+            # API key required for checker and proxy management endpoints
+            if not check_api_key_authorized(self.headers):
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(b'{"error": "Unauthorized: API Key required"}')
+                return
 
             if self.path == "/api/token":
                 try:

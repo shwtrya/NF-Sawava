@@ -1816,8 +1816,8 @@ button:disabled {
 
 <div id="toast"><span>✓</span> <span id="toast-msg">Pesan</span></div>
 
-<!-- AUTH MODAL REMOVED - main dashboard is public -->
-<div id="pin-modal" style="display:none !important;">
+<!-- AUTH MODAL - appears when API key needed for checker -->
+<div id="pin-modal" style="display:none;">
   <div class="pin-box">
     <div style="width:48px; height:48px; background:rgba(59,130,246,0.1); border-radius:12px; display:inline-flex; align-items:center; justify-content:center; color:var(--accent, #3b82f6); font-size:20px; margin-bottom:14px;">🔑</div>
     <h2 style="font-size:18px; font-weight:800; margin-bottom:6px;">API Key Required</h2>
@@ -3798,7 +3798,9 @@ const pageSize = 25;
 let searchDebounce = null;
 
 function getAuthHeaders(extra = {}) {
+  const key = sessionStorage.getItem('suite_api_key') || '';
   const headers = {...extra};
+  if (key) headers['X-API-Key'] = key;
   return headers;
 }
 
@@ -3829,16 +3831,37 @@ checkServerHealth();
 
 // PIN Security
 async function checkPinStatus() {
-  // Main dashboard is public - no auth needed
   const badge = document.getElementById('pin-badge');
-  if (badge) {
-    badge.innerText = '⚡ Public';
+  const key = sessionStorage.getItem('suite_api_key');
+  if (key) {
+    badge.innerText = '🔑 Authenticated';
     badge.style.color = 'var(--live)';
+  } else {
+    badge.innerText = '🔒 No API Key';
+    badge.style.color = 'var(--hold)';
+    document.getElementById('pin-modal').style.display = 'flex';
+    document.getElementById('pin-input').focus();
   }
 }
 
 async function verifyPin() {
-  // No-op: main dashboard is public, auth is admin-only
+  const key = document.getElementById('pin-input').value.trim();
+  if (!key) return;
+  try {
+    const res = await fetch('/api/auth/status', { headers: { 'X-API-Key': key } });
+    const d = await res.json();
+    if (d.authenticated) {
+      sessionStorage.setItem('suite_api_key', key);
+      document.getElementById('pin-modal').style.display = 'none';
+      document.getElementById('pin-err').style.display = 'none';
+      showToast('✅ API Key authenticated');
+      checkPinStatus();
+    } else {
+      document.getElementById('pin-err').style.display = 'block';
+    }
+  } catch(e) {
+    document.getElementById('pin-err').style.display = 'block';
+  }
 }
 
 
