@@ -194,14 +194,16 @@ cached_proxies_mtime = 0
 cached_proxies_lock = threading.Lock()
 
 def get_config():
+    defaults = {"api_key": "", "allow_cors_origins": [], "rate_limits": {"checker": 200, "admin": 50}, "security": {"max_body_size_mb": 10}}
     if not os.path.exists(CONFIG_FILE):
-        return {"pin": ""}
+        return defaults
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             c = json.load(f)
-            return c
+            merged = {**defaults, **c}
+            return merged
     except Exception:
-        return {"pin": ""}
+        return defaults
 
 def save_config(cfg):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -248,6 +250,26 @@ def init_db():
             )
         ''')
         c.execute("CREATE INDEX IF NOT EXISTS idx_proxy_status ON proxy_cache(status)")
+
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key TEXT UNIQUE NOT NULL,
+                label TEXT DEFAULT '',
+                created_at TEXT,
+                last_used TEXT,
+                is_active INTEGER DEFAULT 1
+            )
+        ''')
+
+        # Auto-insert master key from config if no keys exist
+        c.execute('SELECT COUNT(*) FROM api_keys')
+        if c.fetchone()[0] == 0:
+            cfg = get_config()
+            master_key = cfg.get('api_key', '')
+            if master_key:
+                c.execute('INSERT INTO api_keys (key, label, created_at, is_active) VALUES (?, ?, ?, 1)',
+                          (master_key, 'Master Key', datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
 
         conn.commit()
         conn.close()
@@ -2900,16 +2922,25 @@ def is_rate_limited(ip, max_requests=40, window_seconds=10, bucket="default"):
         ip_request_history[key] = timestamps
         return False
 
-def check_pin_authorized(headers):
-    cfg = get_config()
-    req_pin = str(cfg.get("pin", ""))
-    # An uninitialized PIN must fail closed; do not treat empty credentials as authorization.
-    if not req_pin:
+def check_api_key_authorized(headers):
+    # Check X-API-Key header or Authorization: Bearer <key>
+    key = headers.get('X-API-Key') or ''
+    if not key:
+        auth = headers.get('Authorization', '')
+        if auth.startswith('Bearer '):
+            key = auth[7:].strip()
+    if not key:
         return False
-    pin_header = headers.get("X-Suite-Pin") or headers.get("Authorization", "")
-    if pin_header.startswith("Bearer "):
-        pin_header = pin_header[7:].strip()
-    return hmac.compare_digest(pin_header, req_pin)
+    with db_lock:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('SELECT id FROM api_keys WHERE key = ? AND is_active = 1', (key,))
+        row = c.fetchone()
+        if row:
+            c.execute('UPDATE api_keys SET last_used = ? WHERE id = ?', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), row[0]))
+            conn.commit()
+        conn.close()
+        return row is not None
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
@@ -2926,7 +2957,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self.send_header('Access-Control-Allow-Origin', origin)
                     self.send_header('Vary', 'Origin')
                     self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-                    self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Suite-Pin, Authorization')
+                    self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-API-Key, Authorization')
             except (ValueError, TypeError):
                 pass
         self.send_header('X-Content-Type-Options', 'nosniff')
@@ -2959,7 +2990,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "DENY")
             self.end_headers()
-        elif path in ("/api/health", "/api/pin/status", "/api/proxies"):
+        elif path in ("/api/health", "/api/auth/status", "/api/proxies"):
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -2983,6 +3014,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self' https://*.trycloudflare.com https://*.sawavaganteng.cloud https://cdn.jsdelivr.net")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_cors_headers()
+            self.end_headers()
+            self.wfile.write(content)
+
+        elif path in ("/admin", "/admin/", "/admin.html"):
+            html_file = os.path.join(os.path.dirname(__file__), "admin.html")
+            if os.path.exists(html_file):
+                with open(html_file, "r", encoding="utf-8") as f:
+                    content = f.read().encode("utf-8")
+            else:
+                content = b"<h1>admin.html not found</h1>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "DENY")
             self.send_cors_headers()
@@ -3014,13 +3061,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             }
             self.wfile.write(json.dumps(res).encode("utf-8"))
 
-        elif path == "/api/pin/status":
+        elif path == "/api/auth/status":
             cfg = get_config()
+            is_authed = check_api_key_authorized(self.headers)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_cors_headers()
             self.end_headers()
-            self.wfile.write(json.dumps({"enabled": bool(cfg.get("pin"))}).encode("utf-8"))
+            self.wfile.write(json.dumps({"authenticated": is_authed, "method": "api_key"}).encode("utf-8"))
 
         elif path == "/api/proxies":
             with proxy_lock:
@@ -3099,20 +3147,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_cors_headers()
             self.end_headers()
             self.wfile.write(json.dumps({
-                'version': '7.2.0',
-                'codename': 'Ultra',
+                'version': '8.0.0',
+                'codename': 'Fortress',
+                'auth': 'api_key',
                 'services': ['netflix', 'disney', 'disney-cookie', 'crunchyroll', 'crunchyroll-cookie', 'expressvpn', 'spotify', 'outlook', 'hotmail'],
                 'python': platform.python_version(),
                 'uptime': int(time.time() - server_start_time)
             }).encode('utf-8'))
 
         elif path in ("/api/history", "/api/history/export_csv", "/api/analytics", "/api/proxies/detail", "/api/proxies/export"):
-            if not check_pin_authorized(self.headers):
+            if not check_api_key_authorized(self.headers):
                 self.send_response(401)
                 self.send_header("Content-Type", "application/json")
                 self.send_cors_headers()
                 self.end_headers()
-                self.wfile.write(b'{"error": "Unauthorized: PIN required"}')
+                self.wfile.write(b'{"error": "Unauthorized: API Key required"}')
                 return
 
             if path == "/api/history":
@@ -3243,13 +3292,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(out_txt.encode("utf-8"))
 
+        elif path in ('/admin', '/admin/'):
+            admin_file = os.path.join(os.path.dirname(__file__), 'admin.html')
+            if os.path.exists(admin_file):
+                with open(admin_file, 'r', encoding='utf-8') as f:
+                    content = f.read().encode('utf-8')
+            else:
+                content = b'<h1>admin.html not found</h1>'
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Security-Policy', "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self'")
+            self.send_cors_headers()
+            self.end_headers()
+            self.wfile.write(content)
+
         else:
             # Serve only explicit public assets; never expose source, database, config, logs,
             # proxy credentials, backups, or arbitrary files from the application directory.
             safe_root = os.path.realpath(os.path.dirname(__file__))
             clean_path = urllib.parse.unquote(path).lstrip("/")
             req_file = os.path.realpath(os.path.join(safe_root, clean_path))
-            allowed_public_files = {"index.html", "styles_redesign.css", "favicon.ico"}
+            allowed_public_files = {"index.html", "styles_redesign.css", "favicon.ico", "admin.html"}
             inside_root = os.path.commonpath((safe_root, req_file)) == safe_root
             public_path = os.path.relpath(req_file, safe_root).replace("\\", "/")
             if (inside_root and os.path.isfile(req_file)
@@ -3304,81 +3367,203 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # Do not trust client-supplied forwarding headers for rate-limit identity.
         client_ip = self.client_address[0]
 
-        # Sensitive routes are now protected by PIN auth below (line ~3401).
-        # No blanket disable — all checker routes work when PIN is provided.
+        # Sensitive routes are now protected by API key auth below.
+        # No blanket disable — all checker routes work when API key is provided.
 
-        if self.path == "/api/pin/verify":
-            if is_rate_limited(client_ip, max_requests=6, window_seconds=60, bucket="pin_verify"):
+        if self.path in ("/api/admin/keys", "/api/admin/config", "/api/admin/system"):
+            if is_rate_limited(client_ip, max_requests=50, window_seconds=60, bucket="admin"):
                 self.send_response(429)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Retry-After", "60")
                 self.send_cors_headers()
                 self.end_headers()
-                self.wfile.write(b'{"error": "Too Many Requests: PIN rate limit exceeded."}')
+                self.wfile.write(b'{"error": "Too Many Requests: admin rate limit exceeded."}')
                 return
-            try:
-                p = json.loads(body.decode("utf-8"))
-                cfg = get_config()
-                req_pin = str(cfg.get("pin", ""))
-                pin_input = str(p.get("pin", ""))
-                ok = bool(req_pin) and hmac.compare_digest(pin_input, req_pin)
-                self.send_response(200)
+            if not check_api_key_authorized(self.headers):
+                self.send_response(401)
                 self.send_header("Content-Type", "application/json")
                 self.send_cors_headers()
                 self.end_headers()
-                self.wfile.write(json.dumps({"ok": ok}).encode("utf-8"))
-            except Exception as e:
+                self.wfile.write(b'{"error": "Unauthorized: API Key required"}')
+                return
+            try:
+                p = json.loads(body.decode("utf-8")) if body else {}
+            except Exception:
                 self.send_response(400)
-                self.send_cors_headers()
-                self.end_headers()
-
-        elif self.path == "/api/pin/set":
-            if is_rate_limited(client_ip, max_requests=6, window_seconds=60, bucket="pin_set"):
-                self.send_response(429)
                 self.send_header("Content-Type", "application/json")
-                self.send_header("Retry-After", "60")
                 self.send_cors_headers()
                 self.end_headers()
-                self.wfile.write(b'{"error": "Too Many Requests: PIN rate limit exceeded."}')
+                self.wfile.write(b'{"error": "Invalid JSON body"}')
                 return
-            try:
-                p = json.loads(body.decode("utf-8"))
-                cfg = get_config()
-                cur_pin = str(cfg.get("pin", ""))
-                cur_input = str(p.get("current", ""))
-                if not cur_pin:
-                    self.send_response(503)
-                    self.send_header("Content-Type", "application/json")
-                    self.send_cors_headers()
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"ok": False, "error": "PIN is not initialized. Set it through local configuration before enabling access."}).encode("utf-8"))
-                    return
-                if not hmac.compare_digest(cur_input, cur_pin):
-                    self.send_response(401)
-                    self.send_header("Content-Type", "application/json")
-                    self.send_cors_headers()
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"ok": False, "error": "PIN saat ini salah"}).encode("utf-8"))
-                    return
-                new_p = str(p.get("new_pin", "")).strip()
-                if new_p and len(new_p) > 20:
+
+            if self.path == "/api/admin/keys":
+                action = p.get("action", "")
+                if action == "list":
+                    with db_lock:
+                        conn = get_db()
+                        c = conn.cursor()
+                        c.execute('SELECT id, key, label, created_at, last_used, is_active FROM api_keys')
+                        rows = c.fetchall()
+                        conn.close()
+                    keys_list = []
+                    for r in rows:
+                        masked = r[1][:8] + '...' + r[1][-4:] if len(r[1]) > 12 else '****'
+                        keys_list.append({"id": r[0], "key_masked": masked, "label": r[2], "created_at": r[3], "last_used": r[4], "is_active": bool(r[5])})
+                    result = {"keys": keys_list}
+                elif action == "create":
+                    import secrets as _secrets
+                    new_key = _secrets.token_hex(16)
+                    label = str(p.get("label", "")).strip() or "Unnamed Key"
+                    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    with db_lock:
+                        conn = get_db()
+                        c = conn.cursor()
+                        c.execute('INSERT INTO api_keys (key, label, created_at, is_active) VALUES (?, ?, ?, 1)', (new_key, label, now_str))
+                        new_id = c.lastrowid
+                        conn.commit()
+                        conn.close()
+                    result = {"id": new_id, "key": new_key, "label": label, "created_at": now_str}
+                elif action == "revoke":
+                    key_id = p.get("id")
+                    if not key_id:
+                        self.send_response(400)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_cors_headers()
+                        self.end_headers()
+                        self.wfile.write(b'{"error": "Missing id"}')
+                        return
+                    with db_lock:
+                        conn = get_db()
+                        c = conn.cursor()
+                        c.execute('UPDATE api_keys SET is_active = 0 WHERE id = ?', (key_id,))
+                        conn.commit()
+                        conn.close()
+                    result = {"ok": True, "revoked": key_id}
+                elif action == "delete":
+                    key_id = p.get("id")
+                    if not key_id:
+                        self.send_response(400)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_cors_headers()
+                        self.end_headers()
+                        self.wfile.write(b'{"error": "Missing id"}')
+                        return
+                    with db_lock:
+                        conn = get_db()
+                        c = conn.cursor()
+                        c.execute('DELETE FROM api_keys WHERE id = ?', (key_id,))
+                        conn.commit()
+                        conn.close()
+                    result = {"ok": True, "deleted": key_id}
+                else:
                     self.send_response(400)
                     self.send_header("Content-Type", "application/json")
                     self.send_cors_headers()
                     self.end_headers()
-                    self.wfile.write(json.dumps({"ok": False, "error": "PIN terlalu panjang (maks 20 karakter)"}).encode("utf-8"))
+                    self.wfile.write(json.dumps({"error": f"Unknown action: {action}"}).encode("utf-8"))
                     return
-                cfg["pin"] = new_p
-                save_config(cfg)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_cors_headers()
                 self.end_headers()
-                self.wfile.write(json.dumps({"ok": True}).encode("utf-8"))
-            except Exception as e:
-                self.send_response(400)
+                self.wfile.write(json.dumps(result).encode("utf-8"))
+
+            elif self.path == "/api/admin/config":
+                action = p.get("action", "")
+                if action == "get":
+                    cfg = get_config()
+                    safe_cfg = {k: v for k, v in cfg.items() if k != "api_key"}
+                    result = {"config": safe_cfg}
+                elif action == "set":
+                    cfg_key = p.get("key", "")
+                    cfg_val = p.get("value")
+                    if not cfg_key or cfg_key == "api_key":
+                        self.send_response(400)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_cors_headers()
+                        self.end_headers()
+                        self.wfile.write(b'{"error": "Invalid or protected config key"}')
+                        return
+                    cfg = get_config()
+                    parts = cfg_key.split(".")
+                    target = cfg
+                    for part in parts[:-1]:
+                        if part not in target or not isinstance(target[part], dict):
+                            target[part] = {}
+                        target = target[part]
+                    target[parts[-1]] = cfg_val
+                    save_config(cfg)
+                    result = {"ok": True, "key": cfg_key, "value": cfg_val}
+                else:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": f"Unknown action: {action}"}).encode("utf-8"))
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
                 self.send_cors_headers()
                 self.end_headers()
+                self.wfile.write(json.dumps(result).encode("utf-8"))
+
+            elif self.path == "/api/admin/system":
+                action = p.get("action", "")
+                if action == "info":
+                    import psutil
+                    try:
+                        mem = psutil.Process(os.getpid()).memory_info().rss
+                    except Exception:
+                        mem = 0
+                    db_size = os.path.getsize(DB_FILE) if os.path.exists(DB_FILE) else 0
+                    with db_lock:
+                        conn = get_db()
+                        c = conn.cursor()
+                        c.execute('SELECT COUNT(*) FROM history')
+                        hist_count = c.fetchone()[0]
+                        conn.close()
+                    with proxy_lock:
+                        proxy_count = len(all_tested_proxies)
+                    result = {
+                        "version": "8.0.0",
+                        "uptime": int(time.time() - server_start_time),
+                        "python": platform.python_version(),
+                        "db_size": db_size,
+                        "proxy_count": proxy_count,
+                        "history_count": hist_count,
+                        "memory_usage": mem
+                    }
+                elif action == "restart":
+                    result = {"status": "reloading"}
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps(result).encode("utf-8"))
+                    def _do_exit():
+                        time.sleep(0.5)
+                        os._exit(0)
+                    threading.Thread(target=_do_exit, daemon=True).start()
+                    return
+                elif action == "clear_logs":
+                    try:
+                        with open(LOG_FILE, 'w', encoding='utf-8') as lf:
+                            lf.truncate(0)
+                        result = {"ok": True, "message": "Logs cleared"}
+                    except Exception as e:
+                        result = {"ok": False, "error": str(e)}
+                else:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": f"Unknown action: {action}"}).encode("utf-8"))
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode("utf-8"))
 
         elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check", "/api/proxies/save", "/api/proxies/test", "/api/proxies/test/stop", "/api/proxies/test_single", "/api/proxies/add", "/api/proxies/remove", "/api/history/clear", "/api/system/reload"):
             rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check") else 50
@@ -3391,12 +3576,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(b'{"error": "Too Many Requests. Rate limit exceeded."}')
                 return
 
-            if not check_pin_authorized(self.headers):
+            if not check_api_key_authorized(self.headers):
                 self.send_response(401)
                 self.send_header("Content-Type", "application/json")
                 self.send_cors_headers()
                 self.end_headers()
-                self.wfile.write(b'{"error": "Unauthorized: PIN required"}')
+                self.wfile.write(b'{"error": "Unauthorized: API Key required"}')
                 return
 
             if self.path == "/api/token":

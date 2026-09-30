@@ -1816,15 +1816,15 @@ button:disabled {
 
 <div id="toast"><span>✓</span> <span id="toast-msg">Pesan</span></div>
 
-<!-- PIN MODAL -->
+<!-- API KEY AUTH MODAL -->
 <div id="pin-modal" style="display:none;">
   <div class="pin-box">
-    <div style="width:48px; height:48px; background:rgba(229,9,20,0.1); border-radius:12px; display:inline-flex; align-items:center; justify-content:center; color:var(--primary); font-size:20px; margin-bottom:14px;">🔒</div>
-    <h2 style="font-size:18px; font-weight:800; margin-bottom:6px;">Security PIN Required</h2>
-    <p style="font-size:13px; color:var(--text-muted); margin-bottom:18px;">Masukkan PIN keamanan untuk mengakses dashboard.</p>
-    <input type="password" id="pin-input" placeholder="••••" style="text-align:center; font-size:20px; letter-spacing:6px; margin-bottom:14px;" maxlength="10">
-    <button class="btn-primary" onclick="verifyPin()">Buka Kunci</button>
-    <div id="pin-err" style="color:var(--dead); font-size:12px; font-weight:600; margin-top:12px; display:none;">PIN Tidak Valid!</div>
+    <div style="width:48px; height:48px; background:rgba(59,130,246,0.1); border-radius:12px; display:inline-flex; align-items:center; justify-content:center; color:var(--accent, #3b82f6); font-size:20px; margin-bottom:14px;">🔑</div>
+    <h2 style="font-size:18px; font-weight:800; margin-bottom:6px;">API Key Required</h2>
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:18px;">Masukkan API Key untuk mengakses dashboard.</p>
+    <input type="password" id="pin-input" placeholder="API Key" style="text-align:center; font-size:14px; letter-spacing:2px; margin-bottom:14px;" maxlength="64">
+    <button class="btn-primary" onclick="verifyPin()">Authenticate</button>
+    <div id="pin-err" style="color:var(--dead); font-size:12px; font-weight:600; margin-top:12px; display:none;">API Key Tidak Valid!</div>
   </div>
 </div>
 
@@ -1915,10 +1915,10 @@ button:disabled {
       <input type="checkbox" id="sound-toggle" checked onclick="event.stopPropagation()">
     </div>
 
-    <!-- PIN Status Pill -->
-    <div class="topbar-pin-pill" onclick="managePin()" title="Klik untuk atur atau ubah PIN keamanan">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      <span id="pin-badge">PIN: Disabled</span>
+    <!-- Auth Status Pill -->
+    <div class="topbar-pin-pill" onclick="window.open('/admin','_blank')" title="Buka Admin Panel">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+      <span id="pin-badge">🔒 Locked</span>
     </div>
 
     <!-- Proxy Pool Count Pill -->
@@ -3722,14 +3722,14 @@ button:disabled {
       <!-- Security Card -->
       <div class="card">
         <div style="font-weight:700; font-size:14px; margin-bottom:6px; display:flex; align-items:center; gap:8px;">
-          <span>🔒</span> Security & Access PIN
+          <span>🔑</span> Security & API Key
         </div>
         <div style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">
-          Amankan dashboard dengan PIN 4-10 digit agar tidak sembarang orang bisa mengakses atau memicu bulk checker.
+          Dashboard diamankan dengan API Key. Kelola API Key dan settings lainnya di Admin Panel.
         </div>
         <div style="display:flex; gap:10px; align-items:center; margin-bottom:14px;">
-          <button class="btn-primary" onclick="managePin()">Atur / Ubah Security PIN</button>
-          <button class="btn-secondary" onclick="sessionStorage.removeItem('suite_unlocked'); checkPinStatus(); showToast('Dashboard terkunci');">Kunci Sekarang</button>
+          <button class="btn-primary" onclick="window.open('/admin','_blank')">🛡️ Buka Admin Panel</button>
+          <button class="btn-secondary" onclick="sessionStorage.removeItem('suite_api_key'); checkPinStatus(); showToast('Dashboard terkunci');">Kunci Sekarang</button>
         </div>
       </div>
 
@@ -3798,9 +3798,9 @@ const pageSize = 25;
 let searchDebounce = null;
 
 function getAuthHeaders(extra = {}) {
-  const pin = sessionStorage.getItem('suite_pin') || '';
+  const key = sessionStorage.getItem('suite_api_key') || '';
   const headers = {...extra};
-  if (pin) headers['X-Suite-Pin'] = pin;
+  if (key) headers['X-API-Key'] = key;
   return headers;
 }
 
@@ -3832,67 +3832,53 @@ checkServerHealth();
 // PIN Security
 async function checkPinStatus() {
   try {
-    const res = await fetch('/api/pin/status');
-    const d = await res.json();
+    const key = sessionStorage.getItem('suite_api_key');
     const badge = document.getElementById('pin-badge');
-    if (d.enabled) {
-      badge.innerText = 'PIN: Active';
-      badge.style.color = 'var(--live)';
-      const unlocked = sessionStorage.getItem('suite_unlocked');
-      if (!unlocked) {
+    if (key) {
+      // Validate key against server
+      const res = await fetch('/api/auth/status', { headers: { 'X-API-Key': key } });
+      const d = await res.json();
+      if (d.authenticated) {
+        badge.innerText = '🔑 Authenticated';
+        badge.style.color = 'var(--live)';
+        document.getElementById('pin-modal').style.display = 'none';
+      } else {
+        sessionStorage.removeItem('suite_api_key');
+        badge.innerText = '🔒 Locked';
+        badge.style.color = 'var(--dead)';
         document.getElementById('pin-modal').style.display = 'flex';
         document.getElementById('pin-input').focus();
       }
     } else {
-      badge.innerText = 'PIN: Inactive';
-      badge.style.color = 'var(--text-muted)';
+      badge.innerText = '🔒 Locked';
+      badge.style.color = 'var(--dead)';
+      document.getElementById('pin-modal').style.display = 'flex';
+      document.getElementById('pin-input').focus();
     }
   } catch(e) {}
 }
 
 async function verifyPin() {
-  const pin = document.getElementById('pin-input').value.trim();
-  const res = await fetch('/api/pin/verify', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({pin})
-  });
-  const d = await res.json();
-  if (d.ok) {
-    sessionStorage.setItem('suite_unlocked', 'true');
-    sessionStorage.setItem('suite_pin', pin);
-    document.getElementById('pin-modal').style.display = 'none';
-    showToast('Dashboard tidak terkunci');
-    fetchStats();
-  } else {
+  const key = document.getElementById('pin-input').value.trim();
+  try {
+    const res = await fetch('/api/auth/status', { headers: { 'X-API-Key': key } });
+    const d = await res.json();
+    if (d.authenticated) {
+      sessionStorage.setItem('suite_api_key', key);
+      document.getElementById('pin-modal').style.display = 'none';
+      showToast('✅ Dashboard authenticated');
+      checkPinStatus();
+      fetchStats();
+    } else {
+      document.getElementById('pin-err').style.display = 'block';
+    }
+  } catch(e) {
     document.getElementById('pin-err').style.display = 'block';
   }
 }
 
-async function managePin() {
-  const current = prompt('Masukkan PIN saat ini (kosongkan jika belum ada):');
-  if (current === null) return;
-  const newPin = prompt('Masukkan PIN Baru (4-10 digit, kosongkan untuk nonaktifkan):');
-  if (newPin === null) return;
-  const res = await fetch('/api/pin/set', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({current, new_pin: newPin})
-  });
-  const d = await res.json();
-  if (d.ok) {
-    showToast(newPin ? 'PIN berhasil diatur' : 'PIN dinonaktifkan');
-    sessionStorage.setItem('suite_unlocked', 'true');
-    if (newPin) {
-      sessionStorage.setItem('suite_pin', newPin);
-    } else {
-      sessionStorage.removeItem('suite_pin');
-    }
-    checkPinStatus();
-  } else {
-    alert('Gagal: ' + (d.error || 'PIN saat ini salah.'));
-  }
-}
+
+// managePin removed - API Key management is now in /admin panel
 
 // Audio synthesize
 function playAlert(type) {

@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NF-Sawava Admin — System Administration Panel</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect width='24' height='24' rx='5' fill='%2307090e'/%3E%3Cpath d='M12 2L2 7l10 5 10-5-10-5Z' stroke='%23e50914' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='m2 17 10 5 10-5' stroke='%2306b6d4' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='m2 12 10 5 10-5' stroke='%233b82f6' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090e;--surface:#0f1318;--surface2:#171c24;--border:#1e2530;
+  --text:#e8eaed;--text-muted:#8b929e;--accent:#3b82f6;--accent-hover:#2563eb;
+  --live:#22c55e;--hold:#eab308;--dead:#ef4444;--premium:#a855f7;
+  --error-bg:rgba(239,68,68,0.1);--success-bg:rgba(34,197,94,0.1);
+  --glass:rgba(15,19,24,0.85);--glass-border:rgba(255,255,255,0.06);
+  --radius:10px;--radius-sm:6px;--radius-lg:14px;
+}
+html{font-size:14px}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+button{cursor:pointer;font-family:inherit;border:none;outline:none}
+input,textarea,select{font-family:inherit;outline:none;border:none}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--text-muted)}
+
+/* ─── Login Screen ─── */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;background:radial-gradient(ellipse at 50% 20%,rgba(59,130,246,0.08),transparent 70%)}
+.login-card{background:var(--surface);border:1px solid var(--glass-border);border-radius:var(--radius-lg);padding:40px 36px;width:100%;max-width:400px;text-align:center;backdrop-filter:blur(20px);box-shadow:0 25px 50px rgba(0,0,0,0.4)}
+.login-card .lock-icon{width:56px;height:56px;margin:0 auto 20px;background:rgba(59,130,246,0.1);border-radius:50%;display:flex;align-items:center;justify-content:center}
+.login-card .lock-icon svg{width:28px;height:28px;stroke:var(--accent);fill:none;stroke-width:2}
+.login-card h1{font-size:1.4rem;font-weight:700;margin-bottom:6px}
+.login-card p{color:var(--text-muted);font-size:.85rem;margin-bottom:24px}
+.login-input-wrap{position:relative;margin-bottom:16px}
+.login-input-wrap input{width:100%;padding:12px 16px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);font-size:.95rem;transition:border-color .2s}
+.login-input-wrap input:focus{border-color:var(--accent)}
+.login-error{color:var(--dead);font-size:.82rem;margin-bottom:12px;display:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:var(--radius);font-size:.875rem;font-weight:600;transition:all .2s}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-hover)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--border)}
+.btn-danger{background:rgba(239,68,68,0.15);color:var(--dead);border:1px solid rgba(239,68,68,0.2)}
+.btn-danger:hover{background:rgba(239,68,68,0.25)}
+.btn-success{background:rgba(34,197,94,0.15);color:var(--live);border:1px solid rgba(34,197,94,0.2)}
+.btn-success:hover{background:rgba(34,197,94,0.25)}
+.btn-sm{padding:6px 12px;font-size:.78rem;border-radius:var(--radius-sm)}
+.btn-xs{padding:4px 8px;font-size:.72rem;border-radius:4px}
+.btn-icon{padding:6px;border-radius:var(--radius-sm);background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center}
+.btn-icon:hover{color:var(--text);background:var(--border)}
+.btn-full{width:100%}
+
+/* ─── Main Layout ─── */
+#app{display:none}
+.header{position:sticky;top:0;z-index:100;background:var(--glass);backdrop-filter:blur(20px);border-bottom:1px solid var(--glass-border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:60px}
+.header-left{display:flex;align-items:center;gap:12px}
+.header-left .shield{width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:rgba(59,130,246,0.1);border-radius:var(--radius-sm)}
+.header-left .shield svg{width:22px;height:22px}
+.header-title h1{font-size:1.1rem;font-weight:700;line-height:1.2}
+.header-title p{font-size:.72rem;color:var(--text-muted);font-weight:500}
+.header-right{display:flex;align-items:center;gap:10px}
+
+/* ─── Tab Navigation ─── */
+.tab-bar{display:flex;gap:2px;padding:8px 24px;background:var(--surface);border-bottom:1px solid var(--glass-border);overflow-x:auto}
+.tab-btn{padding:8px 16px;border-radius:var(--radius-sm);font-size:.82rem;font-weight:600;color:var(--text-muted);background:transparent;transition:all .2s;white-space:nowrap;border:1px solid transparent}
+.tab-btn:hover{color:var(--text);background:var(--surface2)}
+.tab-btn.active{color:var(--accent);background:rgba(59,130,246,0.1);border-color:rgba(59,130,246,0.2)}
+
+/* ─── Content Area ─── */
+.content{padding:20px 24px;max-width:1400px;margin:0 auto}
+.tab-panel{display:none;animation:fadeIn .25s ease}
+.tab-panel.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* ─── Cards Grid ─── */
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:20px}
+.stat-card{background:var(--surface);border:1px solid var(--glass-border);border-radius:var(--radius);padding:18px;transition:border-color .2s}
+.stat-card:hover{border-color:var(--border)}
+.stat-card .label{font-size:.72rem;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.stat-card .value{font-size:1.5rem;font-weight:700;font-family:'JetBrains Mono','Inter',monospace}
+.stat-card .sub{font-size:.72rem;color:var(--text-muted);margin-top:4px}
+
+/* ─── Tables ─── */
+.table-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--glass-border);border-radius:var(--radius);margin-top:14px}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+thead{background:var(--surface2)}
+th{padding:10px 14px;text-align:left;font-weight:600;color:var(--text-muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid var(--glass-border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,0.02)}
+
+/* ─── Badges ─── */
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:20px;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.badge-live,.badge-ok,.badge-premium{background:rgba(34,197,94,0.12);color:var(--live)}
+.badge-dead,.badge-fail,.badge-error{background:rgba(239,68,68,0.12);color:var(--dead)}
+.badge-hold{background:rgba(234,179,8,0.12);color:var(--hold)}
+.badge-unverified,.badge-untested,.badge-ready{background:rgba(139,146,158,0.12);color:var(--text-muted)}
+
+/* ─── Filter Bar ─── */
+.filter-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.filter-bar input,.filter-bar select{padding:8px 12px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.82rem;transition:border-color .2s}
+.filter-bar input:focus,.filter-bar select:focus{border-color:var(--accent)}
+.filter-bar input{min-width:200px}
+.filter-bar select{min-width:120px}
+.filter-actions{display:flex;gap:8px;margin-left:auto}
+
+/* ─── Pagination ─── */
+.pagination{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-top:1px solid var(--glass-border);font-size:.78rem;color:var(--text-muted)}
+.pagination .page-info span{color:var(--text);font-weight:600}
+.page-btns{display:flex;gap:4px}
+.page-btns button{padding:6px 10px;border-radius:var(--radius-sm);background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);font-size:.78rem;font-weight:500}
+.page-btns button:hover:not(:disabled){background:var(--border);color:var(--text)}
+.page-btns button:disabled{opacity:.4;cursor:not-allowed}
+.page-btns button.active{background:rgba(59,130,246,0.15);color:var(--accent);border-color:rgba(59,130,246,0.3)}
+
+/* ─── Action Bar ─── */
+.action-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+
+/* ─── Toast ─── */
+.toast-container{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{padding:12px 18px;border-radius:var(--radius);font-size:.82rem;font-weight:500;display:flex;align-items:center;gap:10px;transform:translateX(120%);opacity:0;transition:all .3s cubic-bezier(.4,0,.2,1);max-width:380px;backdrop-filter:blur(12px)}
+.toast.show{transform:translateX(0);opacity:1}
+.toast-success{background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.2);color:var(--live)}
+.toast-error{background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.2);color:var(--dead)}
+.toast-info{background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.2);color:var(--accent)}
+.toast-warn{background:rgba(234,179,8,0.15);border:1px solid rgba(234,179,8,0.2);color:var(--hold)}
+
+/* ─── Modal ─── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.show{display:flex}
+.modal{background:var(--surface);border:1px solid var(--glass-border);border-radius:var(--radius-lg);width:100%;max-width:600px;max-height:85vh;overflow:hidden;display:flex;flex-direction:column;animation:modalIn .2s ease}
+@keyframes modalIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--glass-border)}
+.modal-header h3{font-size:1rem;font-weight:700}
+.modal-body{padding:22px;overflow-y:auto;flex:1}
+.modal-footer{padding:14px 22px;border-top:1px solid var(--glass-border);display:flex;gap:8px;justify-content:flex-end}
+
+/* ─── Spinner ─── */
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner-lg{width:28px;height:28px;border-width:3px}
+
+/* ─── Progress Bar ─── */
+.progress-bar{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin:10px 0}
+.progress-bar .fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--live));border-radius:3px;transition:width .3s ease;width:0%}
+
+/* ─── Empty State ─── */
+.empty-state{text-align:center;padding:48px 20px;color:var(--text-muted)}
+.empty-state svg{width:48px;height:48px;margin-bottom:12px;opacity:.4}
+.empty-state p{font-size:.9rem;margin-bottom:16px}
+
+/* ─── Settings ─── */
+.settings-section{background:var(--surface);border:1px solid var(--glass-border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+.settings-section h3{font-size:.95rem;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.settings-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--glass-border)}
+.settings-row:last-child{border-bottom:none}
+.settings-row .s-label{font-size:.82rem;color:var(--text-muted);font-weight:500}
+.settings-row .s-value{font-size:.85rem;font-weight:600;font-family:'JetBrains Mono',monospace}
+.danger-zone{border-color:rgba(239,68,68,0.2)}
+.danger-zone h3{color:var(--dead)}
+
+/* ─── Cookie Detail ─── */
+.cookie-detail{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;font-family:'JetBrains Mono',monospace;font-size:.75rem;word-break:break-all;white-space:pre-wrap;max-height:300px;overflow-y:auto;color:var(--text-muted);line-height:1.6}
+
+/* ─── Responsive ─── */
+@media(max-width:768px){
+  .header{padding:0 14px;height:52px}
+  .header-title h1{font-size:.95rem}
+  .header-title p{display:none}
+  .tab-bar{padding:6px 14px}
+  .tab-btn{padding:6px 12px;font-size:.78rem}
+  .content{padding:14px}
+  .cards-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+  .stat-card .value{font-size:1.2rem}
+  .filter-bar{flex-direction:column;align-items:stretch}
+  .filter-bar input,.filter-bar select{min-width:0;width:100%}
+  .filter-actions{margin-left:0;justify-content:stretch}
+  .filter-actions .btn{flex:1}
+  .action-bar{flex-direction:column}
+  .action-bar .btn{width:100%}
+  .login-card{padding:28px 22px}
+  .pagination{flex-direction:column;gap:10px}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ LOGIN SCREEN ═══ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="lock-icon">
+      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1"/></svg>
+    </div>
+    <h1>Admin Authentication</h1>
+    <p>Enter your API Key to access the administration panel</p>
+    <div class="login-input-wrap">
+      <input type="password" id="login-pin" placeholder="API Key" autocomplete="off" autofocus>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <button class="btn btn-primary btn-full" id="login-btn" onclick="doLogin()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+      Authenticate
+    </button>
+  </div>
+</div>
+
+<!-- ═══ MAIN APP ═══ -->
+<div id="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="shield">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="#3b82f6" fill="rgba(59,130,246,0.1)"/>
+          <polyline points="9 12 11 14 15 10" stroke="#22c55e" stroke-width="2.5"/>
+        </svg>
+      </div>
+      <div class="header-title">
+        <h1>NF-Sawava Admin</h1>
+        <p>System Administration Panel</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <a href="/" class="btn btn-secondary btn-sm">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Dashboard
+      </a>
+      <button class="btn btn-danger btn-sm" onclick="doLogout()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Logout
+      </button>
+    </div>
+  </div>
+
+  <!-- Tab Bar -->
+  <div class="tab-bar" id="tab-bar">
+    <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Overview
+    </button>
+    <button class="tab-btn" data-tab="history" onclick="switchTab('history')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      History
+    </button>
+    <button class="tab-btn" data-tab="proxies" onclick="switchTab('proxies')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path d="M12 2L2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+      Proxies
+    </button>
+    <button class="tab-btn" data-tab="apikeys" onclick="switchTab('apikeys')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      API Keys
+    </button>
+    <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      Settings
+    </button>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+
+    <!-- ═══ OVERVIEW TAB ═══ -->
+    <div class="tab-panel active" id="panel-overview">
+      <div class="cards-grid" id="overview-cards">
+        <div class="stat-card"><div class="label">Version</div><div class="value" id="ov-version">—</div><div class="sub" id="ov-codename"></div></div>
+        <div class="stat-card"><div class="label">Uptime</div><div class="value" id="ov-uptime">—</div><div class="sub">since start</div></div>
+        <div class="stat-card"><div class="label">Python</div><div class="value" id="ov-python">—</div></div>
+        <div class="stat-card"><div class="label">Services</div><div class="value" id="ov-services">—</div></div>
+        <div class="stat-card"><div class="label">History Count</div><div class="value" id="ov-history">—</div></div>
+        <div class="stat-card"><div class="label">Proxy Count</div><div class="value" id="ov-proxies">—</div><div class="sub" id="ov-proxy-sub"></div></div>
+        <div class="stat-card"><div class="label">Healthy Proxies</div><div class="value" id="ov-healthy" style="color:var(--live)">—</div></div>
+        <div class="stat-card"><div class="label">Dead Proxies</div><div class="value" id="ov-dead" style="color:var(--dead)">—</div></div>
+        <div class="stat-card"><div class="label">DB Size</div><div class="value" id="ov-dbsize">—</div></div>
+        <div class="stat-card"><div class="label">Memory Usage</div><div class="value" id="ov-memory">—</div></div>
+      </div>
+      <div class="action-bar">
+        <button class="btn btn-secondary btn-sm" onclick="quickRestart()" id="btn-restart">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Restart Server
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="reloadProxies()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6"/><path d="M2.5 22v-6h6"/><path d="M2 11.5a10 10 0 0 1 18.8-4.3"/><path d="M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+          Reload Proxies
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="clearLogs()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          Clear Logs
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="loadOverview()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          Refresh
+        </button>
+      </div>
+    </div>
+
+    <!-- ═══ HISTORY TAB ═══ -->
+    <div class="tab-panel" id="panel-history">
+      <div class="filter-bar">
+        <input type="text" id="hist-search" placeholder="Search email, country, plan..." onkeydown="if(event.key==='Enter')loadHistory()">
+        <select id="hist-status" onchange="loadHistory()">
+          <option value="">All Status</option>
+          <option value="LIVE">LIVE</option>
+          <option value="DEAD">DEAD</option>
+          <option value="HOLD">HOLD</option>
+          <option value="ERROR">ERROR</option>
+          <option value="PREMIUM">PREMIUM</option>
+          <option value="FREE">FREE</option>
+        </select>
+        <select id="hist-type" onchange="loadHistory()">
+          <option value="">All Types</option>
+          <option value="netflix">Netflix</option>
+          <option value="checker">Checker</option>
+          <option value="disney">Disney+</option>
+          <option value="crunchyroll">Crunchyroll</option>
+          <option value="expressvpn">ExpressVPN</option>
+          <option value="spotify">Spotify</option>
+          <option value="outlook">Outlook</option>
+          <option value="hotmail">Hotmail</option>
+        </select>
+        <div class="filter-actions">
+          <button class="btn btn-primary btn-sm" onclick="loadHistory()">Search</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportHistoryCSV()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export CSV
+          </button>
+        </div>
+      </div>
+      <div class="action-bar">
+        <button class="btn btn-danger btn-sm" onclick="confirmAction('Clear dead results only?',()=>clearHistory(true))">Clear Dead</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmAction('Clear ALL history? This cannot be undone.',()=>clearHistory(false))">Clear All</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Date</th><th>Type</th><th>Status</th><th>Plan</th><th>Billing</th><th>Country</th><th>Route</th><th>Email</th><th>Actions</th></tr></thead>
+          <tbody id="hist-tbody"><tr><td colspan="10" class="empty-state"><p>Loading...</p></td></tr></tbody>
+        </table>
+        <div class="pagination" id="hist-pagination"></div>
+      </div>
+    </div>
+
+    <!-- ═══ PROXIES TAB ═══ -->
+    <div class="tab-panel" id="panel-proxies">
+      <div class="cards-grid" id="proxy-cards">
+        <div class="stat-card"><div class="label">Total</div><div class="value" id="px-total">—</div></div>
+        <div class="stat-card"><div class="label">Healthy</div><div class="value" id="px-healthy" style="color:var(--live)">—</div></div>
+        <div class="stat-card"><div class="label">Dead</div><div class="value" id="px-dead" style="color:var(--dead)">—</div></div>
+        <div class="stat-card"><div class="label">Unverified</div><div class="value" id="px-unverified" style="color:var(--text-muted)">—</div></div>
+        <div class="stat-card"><div class="label">Avg Latency</div><div class="value" id="px-latency">—</div><div class="sub">ms</div></div>
+      </div>
+      <!-- Test Progress -->
+      <div id="proxy-test-progress" style="display:none;margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;font-size:.78rem;color:var(--text-muted);margin-bottom:4px">
+          <span>Testing proxies... <span id="pxt-tested">0</span>/<span id="pxt-total">0</span></span>
+          <span><span id="pxt-healthy" style="color:var(--live)">0</span> healthy · <span id="pxt-dead" style="color:var(--dead)">0</span> dead</span>
+        </div>
+        <div class="progress-bar"><div class="fill" id="pxt-bar"></div></div>
+      </div>
+      <div class="action-bar">
+        <button class="btn btn-primary btn-sm" onclick="proxyTestAll()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21"/></svg>
+          Test All
+        </button>
+        <button class="btn btn-danger btn-sm" onclick="proxyTestStop()" id="btn-stop-test" style="display:none">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+          Stop Test
+        </button>
+        <button class="btn btn-success btn-sm" onclick="showAddProxyModal()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Proxies
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="proxySave()">Save Proxies</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmAction('Remove all dead proxies?',()=>proxyRemove('clear_dead'))">Clear Dead</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmAction('Remove ALL proxies?',()=>proxyRemove('clear_all'))">Clear All</button>
+        <button class="btn btn-secondary btn-sm" onclick="proxyExport('healthy')">Export Healthy</button>
+        <button class="btn btn-secondary btn-sm" onclick="proxyExport('all')">Export All</button>
+      </div>
+      <div class="filter-bar">
+        <input type="text" id="px-search" placeholder="Search proxy..." onkeydown="if(event.key==='Enter')loadProxies()">
+        <select id="px-status" onchange="loadProxies()">
+          <option value="ALL">All Status</option>
+          <option value="OK">Healthy</option>
+          <option value="FAIL">Dead</option>
+          <option value="UNVERIFIED">Unverified</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="loadProxies()">Search</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Proxy</th><th>Status</th><th>Latency</th><th>Last Tested</th><th>Actions</th></tr></thead>
+          <tbody id="px-tbody"><tr><td colspan="5" class="empty-state"><p>Loading...</p></td></tr></tbody>
+        </table>
+        <div class="pagination" id="px-pagination"></div>
+      </div>
+    </div>
+
+    <!-- ═══ API KEYS TAB ═══ -->
+    <div class="tab-panel" id="panel-apikeys">
+      <div class="action-bar">
+        <button class="btn btn-primary btn-sm" onclick="createApiKey()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Create New Key
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="loadApiKeys()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          Refresh
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Label</th><th>Key</th><th>Created</th><th>Last Used</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="keys-tbody"><tr><td colspan="7" class="empty-state"><p>Loading...</p></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══ SETTINGS TAB ═══ -->
+    <div class="tab-panel" id="panel-settings">
+      <div class="settings-section">
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          System Information
+        </h3>
+        <div id="settings-info">
+          <div class="settings-row"><span class="s-label">Server Version</span><span class="s-value" id="si-version">—</span></div>
+          <div class="settings-row"><span class="s-label">Codename</span><span class="s-value" id="si-codename">—</span></div>
+          <div class="settings-row"><span class="s-label">Python Version</span><span class="s-value" id="si-python">—</span></div>
+          <div class="settings-row"><span class="s-label">Uptime</span><span class="s-value" id="si-uptime">—</span></div>
+          <div class="settings-row"><span class="s-label">Active Services</span><span class="s-value" id="si-services">—</span></div>
+          <div class="settings-row"><span class="s-label">PIN Status</span><span class="s-value" id="si-pin" style="color:var(--live)">Active</span></div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          Analytics Summary
+        </h3>
+        <div id="analytics-info">
+          <div class="settings-row"><span class="s-label">Total Checks (All Time)</span><span class="s-value" id="an-total">—</span></div>
+          <div class="settings-row"><span class="s-label">Live Accounts</span><span class="s-value" id="an-live" style="color:var(--live)">—</span></div>
+          <div class="settings-row"><span class="s-label">Dead Accounts</span><span class="s-value" id="an-dead" style="color:var(--dead)">—</span></div>
+          <div class="settings-row"><span class="s-label">Hold / Other</span><span class="s-value" id="an-hold" style="color:var(--hold)">—</span></div>
+          <div class="settings-row"><span class="s-label">Hit Rate</span><span class="s-value" id="an-rate">—</span></div>
+        </div>
+      </div>
+
+      <div class="settings-section danger-zone">
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--dead)" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Danger Zone
+        </h3>
+        <div class="action-bar" style="margin-bottom:0">
+          <button class="btn btn-danger btn-sm" onclick="confirmAction('Clear ALL history data? This is irreversible.',()=>clearHistory(false))">Clear All History</button>
+          <button class="btn btn-danger btn-sm" onclick="confirmAction('Remove ALL proxies from the proxy file?',()=>proxyRemove('clear_all'))">Clear All Proxies</button>
+          <button class="btn btn-danger btn-sm" onclick="confirmAction('Restart the server? All active checks will be interrupted.',()=>quickRestart())">Restart Server</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /app -->
+
+<!-- ═══ MODAL ═══ -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">Modal</h3>
+      <button class="btn-icon" onclick="closeModal()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<!-- ═══ TOAST ═══ -->
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// GLOBALS
+// ═══════════════════════════════════════════════════════════════════
+const API_PIN_KEY = 'suite_api_key';
+let historyPage = { offset: 0, limit: 25, total: 0 };
+let proxyPage = { page: 1, limit: 50, total: 0, totalPages: 1 };
+let proxyTestPollTimer = null;
+
+// ═══════════════════════════════════════════════════════════════════
+// AUTH HELPERS
+// ═══════════════════════════════════════════════════════════════════
+function getPin() { return sessionStorage.getItem(API_PIN_KEY) || ''; }
+
+function authHeaders() {
+  return { 'X-API-Key': getPin(), 'Content-Type': 'application/json' };
+}
+
+async function apiFetch(url, opts = {}) {
+  const headers = { ...authHeaders(), ...(opts.headers || {}) };
+  const res = await fetch(url, { ...opts, headers });
+  if (res.status === 401) {
+    sessionStorage.removeItem(API_PIN_KEY);
+    showLoginScreen();
+    throw new Error('Unauthorized');
+  }
+  if (res.status === 429) {
+    toast('Rate limit exceeded. Try again shortly.', 'warn');
+    throw new Error('Rate limited');
+  }
+  return res;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LOGIN
+// ═══════════════════════════════════════════════════════════════════
+function showLoginScreen() {
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('login-pin').value = '';
+  document.getElementById('login-error').style.display = 'none';
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+}
+
+async function doLogin() {
+  const pin = document.getElementById('login-pin').value.trim();
+  if (!pin) { showLoginError('Please enter an API Key'); return; }
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Authenticating...';
+  try {
+    // Test with a protected endpoint to validate the API key
+    const res2 = await fetch('/api/history?limit=1&offset=0', {
+      headers: { 'X-API-Key': pin }
+    });
+    if (res2.status === 401) {
+      showLoginError('Invalid API Key. Access denied.');
+      return;
+    }
+    sessionStorage.setItem(API_PIN_KEY, pin);
+    showApp();
+    loadOverview();
+  } catch (e) {
+    showLoginError('Connection error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Authenticate';
+  }
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function doLogout() {
+  sessionStorage.removeItem(API_PIN_KEY);
+  if (proxyTestPollTimer) { clearInterval(proxyTestPollTimer); proxyTestPollTimer = null; }
+  showLoginScreen();
+  toast('Logged out', 'info');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + tab));
+  if (tab === 'overview') loadOverview();
+  else if (tab === 'history') loadHistory();
+  else if (tab === 'proxies') loadProxies();
+  else if (tab === 'apikeys') loadApiKeys();
+  else if (tab === 'settings') loadSettings();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════════════
+function toast(msg, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + type;
+  const icons = {
+    success: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+    error: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+    warn: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    info: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+  };
+  el.innerHTML = (icons[type] || icons.info) + '<span>' + escHtml(msg) + '</span>';
+  container.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 300);
+  }, 3500);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════════════════════════════
+function openModal(title, bodyHtml, footerHtml) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = bodyHtml;
+  document.getElementById('modal-footer').innerHTML = footerHtml || '';
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('show');
+}
+
+function confirmAction(msg, fn) {
+  openModal('Confirm Action',
+    '<p style="color:var(--text-muted);font-size:.88rem">' + escHtml(msg) + '</p>',
+    '<button class="btn btn-secondary btn-sm" onclick="closeModal()">Cancel</button>' +
+    '<button class="btn btn-danger btn-sm" onclick="closeModal();(' + fn.toString() + ')()">Confirm</button>'
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function fmtDate(s) {
+  if (!s) return '—';
+  try {
+    const d = new Date(s);
+    if (isNaN(d)) return s;
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  } catch { return s; }
+}
+
+function fmtUptime(seconds) {
+  if (!seconds && seconds !== 0) return '—';
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return d + 'd ' + h + 'h ' + m + 'm';
+  if (h > 0) return h + 'h ' + m + 'm';
+  return m + 'm ' + (seconds % 60) + 's';
+}
+
+function fmtNumber(n) {
+  if (n === null || n === undefined) return '—';
+  return Number(n).toLocaleString();
+}
+
+function fmtBytes(bytes) {
+  if (bytes === null || bytes === undefined || bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const k = 1024;
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + units[i];
+}
+
+function statusBadge(status) {
+  if (!status) return '<span class="badge badge-unverified">—</span>';
+  const s = status.toUpperCase();
+  const cls = { LIVE: 'live', OK: 'ok', PREMIUM: 'premium', DEAD: 'dead', FAIL: 'fail', ERROR: 'error', HOLD: 'hold', FREE: 'live', UNVERIFIED: 'unverified', UNTESTED: 'untested', READY: 'ready' };
+  return '<span class="badge badge-' + (cls[s] || 'unverified') + '">' + escHtml(status) + '</span>';
+}
+
+function maskCookie(raw) {
+  if (!raw) return '—';
+  if (raw.length <= 16) return raw;
+  return raw.substring(0, 8) + '...' + raw.substring(raw.length - 4);
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Copied to clipboard', 'success');
+  } catch {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    toast('Copied to clipboard', 'success');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// OVERVIEW
+// ═══════════════════════════════════════════════════════════════════
+async function loadOverview() {
+  try {
+    const [verRes, proxyRes, histRes] = await Promise.all([
+      apiFetch('/api/version'),
+      apiFetch('/api/proxies'),
+      apiFetch('/api/history?limit=1&offset=0')
+    ]);
+    const ver = await verRes.json();
+    const proxy = await proxyRes.json();
+    const hist = await histRes.json();
+
+    document.getElementById('ov-version').textContent = ver.version || '—';
+    document.getElementById('ov-codename').textContent = ver.codename || '';
+    document.getElementById('ov-python').textContent = ver.python || '—';
+    document.getElementById('ov-uptime').textContent = fmtUptime(ver.uptime);
+    document.getElementById('ov-services').textContent = (ver.services || []).length;
+    document.getElementById('ov-history').textContent = fmtNumber(hist.total);
+    document.getElementById('ov-proxies').textContent = fmtNumber(proxy.total);
+    document.getElementById('ov-proxy-sub').textContent = proxy.active + ' active';
+    document.getElementById('ov-healthy').textContent = fmtNumber(proxy.healthy);
+    document.getElementById('ov-dead').textContent = fmtNumber(proxy.dead);
+
+    // Try to get extended system info from admin endpoint
+    try {
+      const sysRes = await apiFetch('/api/admin/system', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'info' })
+      });
+      const sys = await sysRes.json();
+      document.getElementById('ov-dbsize').textContent = fmtBytes(sys.db_size);
+      document.getElementById('ov-memory').textContent = fmtBytes(sys.memory_usage);
+      if (sys.history_count != null) document.getElementById('ov-history').textContent = fmtNumber(sys.history_count);
+      if (sys.proxy_count != null) document.getElementById('ov-proxies').textContent = fmtNumber(sys.proxy_count);
+    } catch { /* admin endpoint may not be available */ }
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Failed to load overview: ' + e.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HISTORY
+// ═══════════════════════════════════════════════════════════════════
+async function loadHistory() {
+  const search = document.getElementById('hist-search').value;
+  const status = document.getElementById('hist-status').value;
+  const type = document.getElementById('hist-type').value;
+  const tbody = document.getElementById('hist-tbody');
+  tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:24px"><span class="spinner"></span></td></tr>';
+
+  try {
+    const params = new URLSearchParams({
+      limit: historyPage.limit,
+      offset: historyPage.offset,
+      search, status, type
+    });
+    const res = await apiFetch('/api/history?' + params);
+    const data = await res.json();
+    historyPage.total = data.total || 0;
+
+    if (!data.items || data.items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" class="empty-state"><p>No history records found</p></td></tr>';
+      renderHistPagination();
+      return;
+    }
+
+    tbody.innerHTML = data.items.map(r => `
+      <tr>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:.75rem;color:var(--text-muted)">${r.id}</td>
+        <td style="white-space:nowrap;font-size:.78rem">${fmtDate(r.created_at)}</td>
+        <td><span style="font-size:.78rem;text-transform:capitalize">${escHtml(r.type || '—')}</span></td>
+        <td>${statusBadge(r.status)}</td>
+        <td style="font-size:.78rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.plan || '')}">${escHtml(r.plan || '—')}</td>
+        <td style="font-size:.78rem;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.billing || '')}">${escHtml(r.billing || '—')}</td>
+        <td style="font-size:.78rem">${escHtml(r.country || '—')}</td>
+        <td style="font-size:.75rem;color:var(--text-muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.route || '')}">${escHtml(r.route || '—')}</td>
+        <td style="font-size:.75rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.email || '')}">${escHtml(r.email || '—')}</td>
+        <td style="white-space:nowrap">
+          ${r.raw_cookie ? `<button class="btn-icon" title="Copy Cookie" onclick="copyToClipboard(decodeURIComponent('${encodeURIComponent(r.raw_cookie)}'))"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>` : ''}
+          ${r.token_url ? `<button class="btn-icon" title="Copy Token URL" onclick="copyToClipboard(decodeURIComponent('${encodeURIComponent(r.token_url)}'))"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>` : ''}
+          <button class="btn-icon" title="View Details" onclick="showHistoryDetail(${r.id})"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </td>
+      </tr>
+    `).join('');
+
+    renderHistPagination();
+  } catch (e) {
+    if (e.message !== 'Unauthorized') {
+      tbody.innerHTML = '<tr><td colspan="10" class="empty-state"><p>Error loading history</p><button class="btn btn-secondary btn-sm" onclick="loadHistory()">Retry</button></td></tr>';
+    }
+  }
+}
+
+// Store last loaded history items for detail view
+let _historyItems = [];
+
+function renderHistPagination() {
+  const el = document.getElementById('hist-pagination');
+  const total = historyPage.total;
+  const limit = historyPage.limit;
+  const offset = historyPage.offset;
+  const pages = Math.ceil(total / limit);
+  const current = Math.floor(offset / limit) + 1;
+
+  let html = '<div class="page-info">Showing <span>' + (offset + 1) + '–' + Math.min(offset + limit, total) + '</span> of <span>' + fmtNumber(total) + '</span></div>';
+  html += '<div class="page-btns">';
+  html += '<button ' + (current <= 1 ? 'disabled' : '') + ' onclick="histGo(0)">First</button>';
+  html += '<button ' + (current <= 1 ? 'disabled' : '') + ' onclick="histGo(' + ((current - 2) * limit) + ')">Prev</button>';
+
+  const start = Math.max(1, current - 2);
+  const end = Math.min(pages, current + 2);
+  for (let i = start; i <= end; i++) {
+    html += '<button class="' + (i === current ? 'active' : '') + '" onclick="histGo(' + ((i - 1) * limit) + ')">' + i + '</button>';
+  }
+
+  html += '<button ' + (current >= pages ? 'disabled' : '') + ' onclick="histGo(' + (current * limit) + ')">Next</button>';
+  html += '<button ' + (current >= pages ? 'disabled' : '') + ' onclick="histGo(' + ((pages - 1) * limit) + ')">Last</button>';
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function histGo(offset) {
+  historyPage.offset = Math.max(0, offset);
+  loadHistory();
+}
+
+async function showHistoryDetail(id) {
+  try {
+    const res = await apiFetch('/api/history?limit=1&offset=0&search=' + id);
+    const data = await res.json();
+    const item = data.items && data.items.find(r => r.id === id);
+    if (!item) {
+      // Fallback: search by broad query in case ID doesn't match search
+      toast('Record not found', 'warn');
+      return;
+    }
+    openModal('History Detail — #' + item.id,
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">' +
+        '<div><span style="color:var(--text-muted);font-size:.75rem">Type</span><br>' + escHtml(item.type || '—') + '</div>' +
+        '<div><span style="color:var(--text-muted);font-size:.75rem">Status</span><br>' + statusBadge(item.status) + '</div>' +
+        '<div><span style="color:var(--text-muted);font-size:.75rem">Plan</span><br>' + escHtml(item.plan || '—') + '</div>' +
+        '<div><span style="color:var(--text-muted);font-size:.75rem">Billing</span><br>' + escHtml(item.billing || '—') + '</div>' +
+        '<div><span style="color:var(--text-muted);font-size:.75rem">Country</span><br>' + escHtml(item.country || '—') + '</div>' +
+        '<div><span style="color:var(--text-muted);font-size:.75rem">Route</span><br>' + escHtml(item.route || '—') + '</div>' +
+        '<div style="grid-column:1/-1"><span style="color:var(--text-muted);font-size:.75rem">Email</span><br>' + escHtml(item.email || '—') + '</div>' +
+        '<div style="grid-column:1/-1"><span style="color:var(--text-muted);font-size:.75rem">Date</span><br>' + fmtDate(item.created_at) + '</div>' +
+      '</div>' +
+      (item.token_url ? '<div style="margin-bottom:12px"><span style="color:var(--text-muted);font-size:.75rem">Token URL</span><div class="cookie-detail" style="margin-top:4px">' + escHtml(item.token_url) + '</div></div>' : '') +
+      '<div><span style="color:var(--text-muted);font-size:.75rem">Raw Cookie / Credentials</span>' +
+      '<div class="cookie-detail" style="margin-top:4px">' + escHtml(item.raw_cookie || 'No data') + '</div></div>',
+      (item.raw_cookie ? '<button class="btn btn-primary btn-sm" onclick="copyToClipboard(decodeURIComponent(\'' + encodeURIComponent(item.raw_cookie) + '\'));closeModal()">Copy Cookie</button>' : '') +
+      (item.token_url ? '<button class="btn btn-secondary btn-sm" onclick="copyToClipboard(decodeURIComponent(\'' + encodeURIComponent(item.token_url) + '\'));closeModal()">Copy Token URL</button>' : '') +
+      '<button class="btn btn-secondary btn-sm" onclick="closeModal()">Close</button>'
+    );
+  } catch (e) {
+    toast('Error loading detail: ' + e.message, 'error');
+  }
+}
+
+async function clearHistory(onlyDead) {
+  try {
+    await apiFetch('/api/history/clear', {
+      method: 'POST',
+      body: JSON.stringify({ only_dead: onlyDead })
+    });
+    toast(onlyDead ? 'Dead records cleared' : 'All history cleared', 'success');
+    loadHistory();
+    loadOverview();
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Error clearing history: ' + e.message, 'error');
+  }
+}
+
+function exportHistoryCSV() {
+  const search = document.getElementById('hist-search').value;
+  const status = document.getElementById('hist-status').value;
+  const type = document.getElementById('hist-type').value;
+  const params = new URLSearchParams({ search, status, type });
+  // Open as download with auth in URL would be a workaround, but we use fetch+blob
+  apiFetch('/api/history/export_csv?' + params)
+    .then(r => r.blob())
+    .then(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'suite_history_' + Date.now() + '.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('CSV exported', 'success');
+    })
+    .catch(e => { if (e.message !== 'Unauthorized') toast('Export failed: ' + e.message, 'error'); });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PROXIES
+// ═══════════════════════════════════════════════════════════════════
+async function loadProxies() {
+  const search = document.getElementById('px-search').value;
+  const status = document.getElementById('px-status').value;
+  const tbody = document.getElementById('px-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px"><span class="spinner"></span></td></tr>';
+
+  try {
+    const params = new URLSearchParams({
+      page: proxyPage.page,
+      limit: proxyPage.limit,
+      status,
+      search
+    });
+    const res = await apiFetch('/api/proxies/detail?' + params);
+    const data = await res.json();
+
+    // Update stats cards
+    document.getElementById('px-total').textContent = fmtNumber(data.stats?.total ?? data.total ?? 0);
+    document.getElementById('px-healthy').textContent = fmtNumber(data.stats?.healthy ?? data.healthy ?? 0);
+    document.getElementById('px-dead').textContent = fmtNumber(data.stats?.dead ?? data.dead ?? 0);
+    document.getElementById('px-unverified').textContent = fmtNumber(data.stats?.unverified ?? data.unverified ?? 0);
+    document.getElementById('px-latency').textContent = data.stats?.avg_latency != null ? Math.round(data.stats.avg_latency) : (data.avg_latency != null ? Math.round(data.avg_latency) : '—');
+
+    proxyPage.total = data.filtered_total ?? data.total ?? 0;
+    proxyPage.totalPages = data.total_pages ?? Math.ceil(proxyPage.total / proxyPage.limit);
+
+    // Update test progress if running
+    const ti = data.test_info || data.testing || {};
+    if (ti.running) {
+      showTestProgress(ti);
+    } else {
+      hideTestProgress();
+    }
+
+    const items = data.items || data.proxies || [];
+    if (items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><p>No proxies found</p></td></tr>';
+      renderProxyPagination();
+      return;
+    }
+
+    tbody.innerHTML = items.map(p => {
+      const raw = p.raw || p.proxy || p.line || '—';
+      const st = p.status || 'UNVERIFIED';
+      const lat = p.latency != null ? Math.round(p.latency) + ' ms' : '—';
+      const tested = p.last_tested ? fmtDate(p.last_tested) : (p.tested_at ? fmtDate(p.tested_at) : '—');
+      return `<tr>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:.75rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(raw)}">${escHtml(raw)}</td>
+        <td>${statusBadge(st)}</td>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:.78rem">${lat}</td>
+        <td style="font-size:.78rem">${tested}</td>
+        <td>
+          <button class="btn-icon" title="Test Single" onclick="proxyTestSingle('${escHtml(raw)}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21"/></svg>
+          </button>
+          <button class="btn-icon" title="Copy" onclick="copyToClipboard('${escHtml(raw)}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    renderProxyPagination();
+  } catch (e) {
+    if (e.message !== 'Unauthorized') {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><p>Error loading proxies</p><button class="btn btn-secondary btn-sm" onclick="loadProxies()">Retry</button></td></tr>';
+    }
+  }
+}
+
+function renderProxyPagination() {
+  const el = document.getElementById('px-pagination');
+  const { page, totalPages, total, limit } = proxyPage;
+  const start = (page - 1) * limit + 1;
+  const end = Math.min(page * limit, total);
+
+  let html = '<div class="page-info">Showing <span>' + start + '–' + end + '</span> of <span>' + fmtNumber(total) + '</span></div>';
+  html += '<div class="page-btns">';
+  html += '<button ' + (page <= 1 ? 'disabled' : '') + ' onclick="proxyGo(1)">First</button>';
+  html += '<button ' + (page <= 1 ? 'disabled' : '') + ' onclick="proxyGo(' + (page - 1) + ')">Prev</button>';
+
+  const s = Math.max(1, page - 2), e2 = Math.min(totalPages, page + 2);
+  for (let i = s; i <= e2; i++) {
+    html += '<button class="' + (i === page ? 'active' : '') + '" onclick="proxyGo(' + i + ')">' + i + '</button>';
+  }
+
+  html += '<button ' + (page >= totalPages ? 'disabled' : '') + ' onclick="proxyGo(' + (page + 1) + ')">Next</button>';
+  html += '<button ' + (page >= totalPages ? 'disabled' : '') + ' onclick="proxyGo(' + totalPages + ')">Last</button>';
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function proxyGo(p) {
+  proxyPage.page = Math.max(1, p);
+  loadProxies();
+}
+
+function showTestProgress(info) {
+  const el = document.getElementById('proxy-test-progress');
+  el.style.display = 'block';
+  document.getElementById('btn-stop-test').style.display = '';
+  document.getElementById('pxt-tested').textContent = info.tested || 0;
+  document.getElementById('pxt-total').textContent = info.total || 0;
+  document.getElementById('pxt-healthy').textContent = info.healthy || 0;
+  document.getElementById('pxt-dead').textContent = info.dead || 0;
+  const pct = info.total > 0 ? Math.round((info.tested / info.total) * 100) : 0;
+  document.getElementById('pxt-bar').style.width = pct + '%';
+}
+
+function hideTestProgress() {
+  document.getElementById('proxy-test-progress').style.display = 'none';
+  document.getElementById('btn-stop-test').style.display = 'none';
+  if (proxyTestPollTimer) { clearInterval(proxyTestPollTimer); proxyTestPollTimer = null; }
+}
+
+async function proxyTestAll() {
+  try {
+    const res = await apiFetch('/api/proxies/test', {
+      method: 'POST',
+      body: JSON.stringify({ limit: 0, mode: 'all' })
+    });
+    const data = await res.json();
+    toast(data.message || 'Proxy test started', 'success');
+    // Start polling
+    if (proxyTestPollTimer) clearInterval(proxyTestPollTimer);
+    proxyTestPollTimer = setInterval(pollProxyTest, 3000);
+    pollProxyTest();
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Failed to start proxy test: ' + e.message, 'error');
+  }
+}
+
+async function proxyTestStop() {
+  try {
+    const res = await apiFetch('/api/proxies/test/stop', { method: 'POST', body: '{}' });
+    const data = await res.json();
+    toast(data.message || 'Test stopped', 'info');
+    hideTestProgress();
+    loadProxies();
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Error stopping test: ' + e.message, 'error');
+  }
+}
+
+async function proxyTestSingle(proxy) {
+  toast('Testing ' + proxy.substring(0, 30) + '...', 'info');
+  try {
+    const res = await apiFetch('/api/proxies/test_single', {
+      method: 'POST',
+      body: JSON.stringify({ proxy })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast('Proxy OK — ' + Math.round(data.latency) + 'ms', 'success');
+    } else {
+      toast('Proxy FAILED', 'error');
+    }
+    loadProxies();
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Test error: ' + e.message, 'error');
+  }
+}
+
+async function pollProxyTest() {
+  try {
+    const res = await apiFetch('/api/proxies/detail?page=1&limit=1&status=ALL');
+    const data = await res.json();
+    const ti = data.test_info || data.testing || {};
+    if (ti.running) {
+      showTestProgress(ti);
+    } else {
+      hideTestProgress();
+      loadProxies();
+    }
+  } catch { /* ignore poll errors */ }
+}
+
+async function proxyRemove(action) {
+  try {
+    const res = await apiFetch('/api/proxies/remove', {
+      method: 'POST',
+      body: JSON.stringify({ action })
+    });
+    const data = await res.json();
+    toast('Removed ' + (data.removed === 'all' ? 'all' : data.removed) + ' proxies. Total: ' + data.total, 'success');
+    loadProxies();
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Error: ' + e.message, 'error');
+  }
+}
+
+function showAddProxyModal() {
+  openModal('Add Proxies',
+    '<p style="color:var(--text-muted);font-size:.82rem;margin-bottom:10px">Paste proxy list (one per line). Supports ip:port, user:pass@ip:port, protocol://ip:port</p>' +
+    '<textarea id="add-proxy-text" style="width:100%;height:200px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;font-family:\'JetBrains Mono\',monospace;font-size:.78rem;resize:vertical" placeholder="1.2.3.4:8080\nuser:pass@5.6.7.8:3128\nsocks5://9.10.11.12:1080"></textarea>',
+    '<button class="btn btn-secondary btn-sm" onclick="closeModal()">Cancel</button>' +
+    '<button class="btn btn-primary btn-sm" onclick="doAddProxies()">Add Proxies</button>'
+  );
+}
+
+async function doAddProxies() {
+  const text = document.getElementById('add-proxy-text').value.trim();
+  if (!text) { toast('No proxies to add', 'warn'); return; }
+  try {
+    const res = await apiFetch('/api/proxies/add', {
+      method: 'POST',
+      body: JSON.stringify({ text })
+    });
+    const data = await res.json();
+    closeModal();
+    toast('Added ' + data.added + ' new proxies. Total: ' + data.total, 'success');
+    loadProxies();
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Error adding proxies: ' + e.message, 'error');
+  }
+}
+
+async function proxySave() {
+  // Read current proxy file content and save (trigger reload)
+  try {
+    const res = await apiFetch('/api/proxies/export?mode=all');
+    const text = await res.text();
+    const res2 = await apiFetch('/api/proxies/save', {
+      method: 'POST',
+      body: JSON.stringify({ text })
+    });
+    const data = await res2.json();
+    toast('Proxies saved and reloaded. Count: ' + data.count, 'success');
+    loadProxies();
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Error saving proxies: ' + e.message, 'error');
+  }
+}
+
+function proxyExport(mode) {
+  apiFetch('/api/proxies/export?mode=' + mode)
+    .then(r => r.text())
+    .then(text => {
+      const blob = new Blob([text], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'proxies_' + mode + '_' + Date.now() + '.txt';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('Exported ' + mode + ' proxies', 'success');
+    })
+    .catch(e => { if (e.message !== 'Unauthorized') toast('Export failed: ' + e.message, 'error'); });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════════════════
+async function loadSettings() {
+  try {
+    const [verRes, proxyRes, histRes, analyticsRes] = await Promise.all([
+      apiFetch('/api/version'),
+      apiFetch('/api/proxies'),
+      apiFetch('/api/history?limit=1&offset=0'),
+      apiFetch('/api/analytics')
+    ]);
+    const ver = await verRes.json();
+    const proxy = await proxyRes.json();
+    const hist = await histRes.json();
+    const an = await analyticsRes.json();
+
+    document.getElementById('si-version').textContent = ver.version || '—';
+    document.getElementById('si-codename').textContent = ver.codename || '—';
+    document.getElementById('si-python').textContent = ver.python || '—';
+    document.getElementById('si-uptime').textContent = fmtUptime(ver.uptime);
+    document.getElementById('si-services').textContent = (ver.services || []).join(', ');
+
+    // Analytics
+    const totalChecks = hist.total || 0;
+    const liveCount = an.live || an.total_live || 0;
+    const deadCount = an.dead || an.total_dead || 0;
+    const holdCount = an.hold || an.total_hold || an.other || 0;
+    const hitRate = totalChecks > 0 ? ((liveCount / totalChecks) * 100).toFixed(1) + '%' : '—';
+
+    document.getElementById('an-total').textContent = fmtNumber(totalChecks);
+    document.getElementById('an-live').textContent = fmtNumber(liveCount);
+    document.getElementById('an-dead').textContent = fmtNumber(deadCount);
+    document.getElementById('an-hold').textContent = fmtNumber(holdCount);
+    document.getElementById('an-rate').textContent = hitRate;
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Failed to load settings: ' + e.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// API KEYS MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════
+async function loadApiKeys() {
+  const tbody = document.getElementById('keys-tbody');
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px"><span class="spinner"></span></td></tr>';
+  try {
+    const res = await apiFetch('/api/admin/keys', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'list' })
+    });
+    const data = await res.json();
+    const keys = data.keys || [];
+    if (keys.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><p>No API keys found. Create one to get started.</p></td></tr>';
+      return;
+    }
+    tbody.innerHTML = keys.map(k => `
+      <tr>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:.75rem;color:var(--text-muted)">${k.id}</td>
+        <td style="font-size:.82rem">${escHtml(k.label || '—')}</td>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:.75rem">${escHtml(k.key_masked || '****')}</td>
+        <td style="font-size:.78rem;white-space:nowrap">${fmtDate(k.created_at)}</td>
+        <td style="font-size:.78rem;white-space:nowrap">${k.last_used ? fmtDate(k.last_used) : '<span style="color:var(--text-muted)">Never</span>'}</td>
+        <td>${k.is_active ? '<span class="badge badge-live">Active</span>' : '<span class="badge badge-dead">Revoked</span>'}</td>
+        <td style="white-space:nowrap">
+          ${k.is_active ? `<button class="btn btn-danger btn-xs" onclick="confirmAction('Revoke this API key?',()=>revokeApiKey(${k.id}))">Revoke</button>` : ''}
+          <button class="btn btn-danger btn-xs" onclick="confirmAction('Delete this API key permanently?',()=>deleteApiKey(${k.id}))">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    if (e.message !== 'Unauthorized') {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><p>Error loading API keys</p><button class="btn btn-secondary btn-sm" onclick="loadApiKeys()">Retry</button></td></tr>';
+    }
+  }
+}
+
+async function createApiKey() {
+  const label = prompt('Enter a label for the new API key:');
+  if (label === null) return;
+  try {
+    const res = await apiFetch('/api/admin/keys', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'create', label: label || 'Unnamed Key' })
+    });
+    const data = await res.json();
+    if (data.key) {
+      openModal('New API Key Created',
+        '<p style="color:var(--text-muted);font-size:.82rem;margin-bottom:12px">Copy this key now. It will not be shown again in full.</p>' +
+        '<div class="cookie-detail" style="font-size:.88rem;color:var(--live);background:rgba(34,197,94,0.06);border-color:rgba(34,197,94,0.15)">' + escHtml(data.key) + '</div>' +
+        '<p style="color:var(--text-muted);font-size:.78rem;margin-top:10px">Label: ' + escHtml(data.label) + '</p>',
+        '<button class="btn btn-primary btn-sm" onclick="copyToClipboard(\'' + escHtml(data.key) + '\');closeModal()">Copy Key</button>' +
+        '<button class="btn btn-secondary btn-sm" onclick="closeModal()">Close</button>'
+      );
+      loadApiKeys();
+    }
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Error creating key: ' + e.message, 'error');
+  }
+}
+
+async function revokeApiKey(id) {
+  try {
+    await apiFetch('/api/admin/keys', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'revoke', id })
+    });
+    toast('API key revoked', 'success');
+    loadApiKeys();
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Error revoking key: ' + e.message, 'error');
+  }
+}
+
+async function deleteApiKey(id) {
+  try {
+    await apiFetch('/api/admin/keys', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'delete', id })
+    });
+    toast('API key deleted', 'success');
+    loadApiKeys();
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Error deleting key: ' + e.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// QUICK ACTIONS
+// ═══════════════════════════════════════════════════════════════════
+async function quickRestart() {
+  const btn = document.getElementById('btn-restart');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Restarting...'; }
+  try {
+    await apiFetch('/api/system/reload', { method: 'POST', body: '{}' });
+    toast('Server restarting... Page will reload in 3s.', 'warn');
+    setTimeout(() => location.reload(), 3000);
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Restart failed: ' + e.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Restart Server';
+    }
+  }
+}
+
+async function reloadProxies() {
+  try {
+    // Trigger proxy reload by fetching proxies detail with force
+    const res = await apiFetch('/api/proxies');
+    toast('Proxy data refreshed', 'success');
+    loadOverview();
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Reload failed: ' + e.message, 'error');
+  }
+}
+
+async function clearLogs() {
+  try {
+    const res = await apiFetch('/api/admin/system', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'clear_logs' })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast('Server logs cleared', 'success');
+    } else {
+      toast('Failed to clear logs: ' + (data.error || 'Unknown error'), 'error');
+    }
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Error clearing logs: ' + e.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+  // Enter key on login
+  document.getElementById('login-pin').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+
+  // Check if already authed
+  const pin = getPin();
+  if (pin) {
+    try {
+      const res = await fetch('/api/history?limit=1&offset=0', {
+        headers: { 'X-API-Key': pin }
+      });
+      if (res.status === 401) {
+        sessionStorage.removeItem(API_PIN_KEY);
+        showLoginScreen();
+      } else {
+        showApp();
+        loadOverview();
+      }
+    } catch {
+      showLoginScreen();
+    }
+  } else {
+    showLoginScreen();
+  }
+});
+</script>
+</body>
+</html>
