@@ -3044,13 +3044,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
             }).encode("utf-8"))
 
         elif path in ('/api/account/random', '/api/random_account'):
-            # Deprecated: this endpoint disclosed stored cookies, tokens, and credentials.
-            self.send_response(410)
-            self.send_header('Content-Type', 'application/json')
-            self.send_cors_headers()
-            self.end_headers()
-            self.wfile.write(b'{"error":"Endpoint disabled: sensitive account export is not available."}')
-            return
             svc = qs.get("service", qs.get("type", ["netflix"]))[0].lower().strip()
 
             with db_lock:
