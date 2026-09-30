@@ -1922,7 +1922,7 @@ button:disabled {
     </div>
 
     <!-- Proxy Pool Count Pill -->
-    <div class="topbar-pool-pill" onclick="switchTab('proxymanager')" title="Lihat detail di Proxy Manager">
+    <div class="topbar-pool-pill" onclick="window.open('/admin','_blank')" title="Buka Admin Panel - Proxy Manager">
       <span id="proxy-count-label" class="pill-tag">Memuat proxy...</span>
     </div>
 
@@ -2015,17 +2015,9 @@ button:disabled {
     </button>
 
     <div class="nav-section-label">DATA & NETWORK</div>
-    <button type="button" class="sidebar-item tab-btn" data-tab="history" onclick="switchTab('history')">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
-      <span class="item-text">History Database</span>
-    </button>
-    <button type="button" class="sidebar-item tab-btn" data-tab="analytics" onclick="switchTab('analytics')">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
-      <span class="item-text">Visual Analytics</span>
-    </button>
-    <button type="button" class="sidebar-item tab-btn" data-tab="proxymanager" onclick="switchTab('proxymanager')">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-      <span class="item-text">Proxy Manager</span>
+    <button type="button" class="sidebar-item" onclick="window.open('/admin','_blank')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <span class="item-text">🛡️ Admin Panel</span>
     </button>
 
     <div class="nav-section-label">SYSTEM</div>
@@ -7463,7 +7455,7 @@ let globalDbStats = { total: 0, live: 0, bad: 0, hold: 0, raw: {}, services: {} 
 
 async function fetchDashboardData() {
   try {
-    const aRes = await fetch('/api/analytics', { headers: getAuthHeaders() });
+    const aRes = await fetch('/api/stats');
     if (aRes.ok) {
       const aData = await aRes.json();
       if (aData.status_counts) {
@@ -7481,23 +7473,14 @@ async function fetchDashboardData() {
           services: aData.services || {}
         };
       }
-    }
-  } catch(e) {
-    console.error('fetchDashboardData analytics error:', e);
-  }
-
-  try {
-    const pRes = await fetch('/api/proxies/detail', { headers: getAuthHeaders() });
-    if (pRes.ok) {
-      const pData = await pRes.json();
-      if (pData.total !== undefined) {
-        pmState.total = pData.total;
-        pmState.healthy = pData.healthy_count || 0;
-        pmState.dead = pData.dead_count || 0;
-        pmState.unverified = pData.unverified_count || 0;
+      if (aData.proxy) {
+        pmState.total = aData.proxy.total || 0;
+        pmState.healthy = aData.proxy.healthy || 0;
       }
     }
-  } catch(e) {}
+  } catch(e) {
+    console.error('fetchDashboardData error:', e);
+  }
 
   refreshDashboardCards();
 }
@@ -7928,9 +7911,9 @@ function launchGrabModalService() {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
     <span>Bulk</span>
   </button>
-  <button type="button" class="mobile-nav-item" data-tab="history" onclick="switchTab('history')">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
-    <span>History</span>
+  <button type="button" class="mobile-nav-item" onclick="window.open('/admin','_blank')">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    <span>Admin</span>
   </button>
   <button type="button" class="mobile-nav-item" onclick="toggleMobileSidebar(true)">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>

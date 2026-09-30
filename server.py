@@ -3141,6 +3141,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "error": f"Belum ada akun/cookie LIVE untuk layanan '{svc}' di database."
                 }).encode('utf-8'))
 
+        elif path == '/api/stats':
+            # Public summary stats for main dashboard (no sensitive data)
+            an = get_analytics()
+            with proxy_lock:
+                p_total = len(all_tested_proxies) if all_tested_proxies else 0
+                p_healthy = len(healthy_proxies)
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_cors_headers()
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status_counts": an.get("status_counts", {}),
+                "services": an.get("services", {}),
+                "proxy": {"total": p_total, "healthy": p_healthy}
+            }).encode('utf-8'))
+
         elif path == '/api/version':
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
