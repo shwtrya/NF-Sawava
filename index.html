@@ -3489,7 +3489,7 @@ html, body {
     <!-- Single Spotify Check -->
     <div class="card" style="padding:16px; margin-bottom:14px;">
       <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Single Cookie Check</label>
-      <textarea id="spotify-cookie" placeholder="Paste sp_dc cookie here (Netscape .txt, JSON array, or raw sp_dc=XXXXXX)..." style="height:120px;"></textarea>
+      <textarea id="spotify-cookie" placeholder="Paste Spotify cookies di sini:&#10;• Netscape HTTP Cookie File (.txt)&#10;• JSON array [{name:'sp_dc', value:'xxx'}]&#10;• sp_dc=XXXXXX&#10;• Raw sp_dc token value" style="height:120px;"></textarea>
       <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
         <div class="toggle-wrap" onclick="document.getElementById('spotify-proxy-toggle').click()" style="margin:0;">
           <input type="checkbox" id="spotify-proxy-toggle" onclick="event.stopPropagation()">
@@ -3567,7 +3567,7 @@ html, body {
         <span style="font-size:11px; color:var(--text-dim);">— atau paste manual di bawah —</span>
       </div>
 
-      <textarea id="spotify-bulk-input" placeholder="Paste multiple sp_dc cookies (one per line, or blocks separated by empty lines)..." style="height:120px;"></textarea>
+      <textarea id="spotify-bulk-input" placeholder="Paste cookies di sini:&#10;• Multi-account Netscape .txt (dipisah oleh '# Netscape HTTP Cookie File')&#10;• sp_dc=XXXXXX (satu per baris)&#10;• Raw sp_dc token values" style="height:120px;"></textarea>
       <div style="display:flex; gap:8px; margin-top:8px;">
         <button id="spotify-bulk-btn" class="btn-primary" style="flex:2;" onclick="runSpotifyBulk()">Mulai Bulk Check</button>
         <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="stopSpotifyBulk()">Stop</button>
@@ -6930,20 +6930,43 @@ function handleSpotifyFiles(files) {
           spotifyFileQueue.push(content);
         }
       } else {
-        // .txt / .cookie — each file could be:
-        // 1. A single Netscape cookie file (multiple tab-separated lines) → treat as one cookie set
-        // 2. A list of sp_dc values (one per line) → each line is a separate cookie
-        const lines = content.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
-        if (!lines.length) { processed++; return; }
+        // .txt / .cookie — could be:
+        // 1. Multi-account Netscape file (separated by "# Netscape HTTP Cookie File" headers)
+        // 2. A single Netscape cookie file → one cookie set
+        // 3. A list of sp_dc values (one per line)
+        const allLines = content.split('\n');
+        const hasNetscape = allLines.some(l => l.trim().split('\t').length >= 7);
 
-        // Check if it looks like Netscape format (tab-separated, has domain field)
-        const isNetscape = lines.some(l => l.split('\t').length >= 7);
-        if (isNetscape) {
-          // Entire file is one cookie set (Netscape format)
-          spotifyFileQueue.push(lines.join('\n'));
+        if (hasNetscape) {
+          // Split multi-account Netscape files by "# Netscape HTTP Cookie File" header
+          const blocks = [];
+          let currentBlock = [];
+          for (const rawLine of allLines) {
+            const line = rawLine.trim();
+            // New block starts at "# Netscape HTTP Cookie File" (case-insensitive)
+            if (line.toLowerCase().startsWith('# netscape http cookie file') && currentBlock.length > 0) {
+              // Save previous block if it has actual cookie lines
+              const cookieLines = currentBlock.filter(l => l && !l.startsWith('#') && l.split('\t').length >= 7);
+              if (cookieLines.length > 0) blocks.push(cookieLines.join('\n'));
+              currentBlock = [];
+            }
+            currentBlock.push(line);
+          }
+          // Push last block
+          if (currentBlock.length > 0) {
+            const cookieLines = currentBlock.filter(l => l && !l.startsWith('#') && l.split('\t').length >= 7);
+            if (cookieLines.length > 0) blocks.push(cookieLines.join('\n'));
+          }
+          // If no blocks found (single file without header), treat all cookie lines as one set
+          if (blocks.length === 0) {
+            const cookieLines = allLines.map(l => l.trim()).filter(l => l && !l.startsWith('#') && l.split('\t').length >= 7);
+            if (cookieLines.length > 0) blocks.push(cookieLines.join('\n'));
+          }
+          blocks.forEach(b => spotifyFileQueue.push(b));
         } else {
-          // Each line is a separate sp_dc cookie
-          lines.forEach(l => spotifyFileQueue.push(l));
+          // Each non-comment line is a separate sp_dc cookie
+          const cleanLines = allLines.map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+          cleanLines.forEach(l => spotifyFileQueue.push(l));
         }
       }
 
@@ -6975,17 +6998,52 @@ async function runSpotifyBulk() {
     lines = [...spotifyFileQueue];
   }
   const raw = document.getElementById('spotify-bulk-input').value.trim();
+  const existing = new Set(lines);
   if (raw) {
-    // Also parse textarea content
-    let textLines;
-    if (raw.includes('\n\n')) {
-      textLines = raw.split(/\n\s*\n/).map(b => b.trim()).filter(b => b);
+    // Parse textarea: detect multi-account Netscape format
+    const allRawLines = raw.split('\n');
+    const hasNetscapeHeader = allRawLines.some(l => l.trim().toLowerCase().startsWith('# netscape http cookie file'));
+    const hasTabCookies = allRawLines.some(l => l.trim().split('\t').length >= 7);
+
+    if (hasNetscapeHeader && hasTabCookies) {
+      // Multi-account Netscape: split by "# Netscape HTTP Cookie File" headers
+      let currentBlock = [];
+      for (const rawLine of allRawLines) {
+        const line = rawLine.trim();
+        if (line.toLowerCase().startsWith('# netscape http cookie file') && currentBlock.length > 0) {
+          const cookieLines = currentBlock.filter(l => l && !l.startsWith('#') && l.split('\t').length >= 7);
+          if (cookieLines.length > 0) {
+            const block = cookieLines.join('\n');
+            if (!existing.has(block)) lines.push(block);
+          }
+          currentBlock = [];
+        }
+        currentBlock.push(line);
+      }
+      if (currentBlock.length > 0) {
+        const cookieLines = currentBlock.filter(l => l && !l.startsWith('#') && l.split('\t').length >= 7);
+        if (cookieLines.length > 0) {
+          const block = cookieLines.join('\n');
+          if (!existing.has(block)) lines.push(block);
+        }
+      }
+    } else if (hasTabCookies) {
+      // Single Netscape cookie set in textarea
+      const cookieLines = allRawLines.map(l => l.trim()).filter(l => l && !l.startsWith('#') && l.split('\t').length >= 7);
+      if (cookieLines.length > 0) {
+        const block = cookieLines.join('\n');
+        if (!existing.has(block)) lines.push(block);
+      }
     } else {
-      textLines = raw.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+      // Plain sp_dc values or key=value pairs
+      let textLines;
+      if (raw.includes('\n\n')) {
+        textLines = raw.split(/\n\s*\n/).map(b => b.trim()).filter(b => b);
+      } else {
+        textLines = raw.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+      }
+      textLines.forEach(l => { if (!existing.has(l)) lines.push(l); });
     }
-    // Dedupe: only add textarea lines not already in file queue
-    const existing = new Set(lines);
-    textLines.forEach(l => { if (!existing.has(l)) lines.push(l); });
   }
   if (!lines.length) return showToast('Upload file atau paste cookies terlebih dahulu');
   if (spotifyBulkRunning) return;
