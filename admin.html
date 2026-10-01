@@ -277,6 +277,370 @@ tr:hover td{background:rgba(255,255,255,0.03)}
   .header-key{display:none}
   .health-grid{grid-template-columns:repeat(2,1fr)}
 }
+
+/* ═══ MOBILE RESPONSIVENESS UPGRADE ═══ */
+
+/* ─── General mobile touch & iOS fixes ─── */
+@media(max-width:768px){
+  /* iOS zoom prevention on inputs */
+  input,textarea,select{font-size:16px !important}
+  /* Touch optimizations */
+  button,a,.btn,.btn-icon,.tab-btn{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+  /* Momentum scrolling */
+  .table-wrap,.modal-body,.countries-list,.activity-list,.cookie-detail{-webkit-overflow-scrolling:touch}
+  /* Hide scrollbars on nav */
+  .tab-bar::-webkit-scrollbar,.mobile-bottom-nav::-webkit-scrollbar{display:none}
+  .tab-bar,.mobile-bottom-nav{-ms-overflow-style:none;scrollbar-width:none}
+  /* Safe area padding */
+  body{padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+}
+
+/* ─── 1. Bottom Navigation Bar (mobile ≤768px) ─── */
+.mobile-bottom-nav{display:none}
+@media(max-width:768px){
+  /* Hide desktop tab bar on mobile */
+  .tab-bar{display:none !important}
+  /* Show bottom nav */
+  .mobile-bottom-nav{
+    display:flex;
+    position:fixed;
+    bottom:0;left:0;right:0;
+    z-index:200;
+    height:56px;
+    padding-bottom:env(safe-area-inset-bottom);
+    background:linear-gradient(135deg,rgba(15,19,24,0.97),rgba(59,130,246,0.04));
+    backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+    border-top:1px solid var(--glass-border);
+    justify-content:space-around;
+    align-items:center;
+    box-shadow:0 -4px 20px rgba(0,0,0,0.4);
+  }
+  .mobile-bottom-nav .bnav-item{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;padding:4px 0;flex:1;
+    color:var(--text-muted);font-size:.6rem;font-weight:600;
+    text-transform:uppercase;letter-spacing:.3px;
+    cursor:pointer;transition:color .2s;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+    position:relative;
+  }
+  .mobile-bottom-nav .bnav-item svg{width:22px;height:22px;stroke-width:1.8;transition:all .2s}
+  .mobile-bottom-nav .bnav-item.active{color:var(--accent)}
+  .mobile-bottom-nav .bnav-item.active svg{stroke:var(--accent);transform:scale(1.08)}
+  .mobile-bottom-nav .bnav-item.active::before{
+    content:'';position:absolute;top:-1px;left:25%;right:25%;
+    height:2px;background:var(--accent);border-radius:0 0 2px 2px;
+  }
+  .mobile-bottom-nav .bnav-item .bnav-badge{
+    position:absolute;top:2px;right:calc(50% - 18px);
+    min-width:14px;height:14px;padding:0 3px;
+    border-radius:7px;font-size:.55rem;font-weight:700;
+    background:var(--accent);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'JetBrains Mono',monospace;
+  }
+  /* Add bottom padding to content so it's not hidden behind bottom nav */
+  .content{padding-bottom:72px !important}
+  /* Move toasts above bottom nav */
+  .toast-container{bottom:calc(64px + env(safe-area-inset-bottom)) !important}
+}
+
+/* ─── 2. Compact Header (mobile) ─── */
+@media(max-width:768px){
+  .header{height:48px !important;padding:0 12px !important}
+  .header-left .shield{width:28px !important;height:28px !important}
+  .header-left .shield svg{width:16px !important;height:16px !important}
+  .header-left{gap:8px !important}
+  .header-title h1{font-size:.88rem !important}
+  /* Hide dashboard & logout buttons, show kebab menu */
+  .header-right>a.btn,.header-right>.btn-danger{display:none !important}
+  .header-right .header-key{display:none !important}
+  /* Kebab menu button */
+  .kebab-menu-btn{
+    display:flex !important;
+    align-items:center;justify-content:center;
+    width:36px;height:36px;
+    background:var(--surface2);border:1px solid var(--border);
+    border-radius:var(--radius-sm);color:var(--text);
+    cursor:pointer;font-size:1.2rem;line-height:1;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .kebab-dropdown{
+    display:none;position:absolute;top:44px;right:12px;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);padding:4px;min-width:160px;
+    box-shadow:0 12px 32px rgba(0,0,0,0.5);z-index:300;
+  }
+  .kebab-dropdown.show{display:block}
+  .kebab-dropdown a,.kebab-dropdown button{
+    display:flex;align-items:center;gap:8px;
+    width:100%;padding:10px 14px;border-radius:var(--radius-sm);
+    font-size:.82rem;font-weight:500;color:var(--text);
+    background:transparent;border:none;text-align:left;
+    cursor:pointer;text-decoration:none;
+  }
+  .kebab-dropdown a:hover,.kebab-dropdown button:hover{background:var(--surface2)}
+  .kebab-dropdown button.dd-danger{color:var(--dead)}
+}
+/* Hide kebab on desktop */
+.kebab-menu-btn{display:none}
+.kebab-dropdown{display:none}
+
+/* ─── 3. Tables → Card View (mobile ≤768px) ─── */
+@media(max-width:768px){
+  /* History table: card layout */
+  #panel-history .table-wrap table thead{display:none}
+  #panel-history .table-wrap table,
+  #panel-history .table-wrap table tbody{display:block;width:100%}
+  #panel-history .table-wrap table tr{
+    display:grid;grid-template-columns:1fr 1fr;
+    gap:4px 10px;padding:14px;margin-bottom:8px;
+    background:var(--surface2);border:1px solid var(--glass-border);
+    border-radius:var(--radius);position:relative;
+  }
+  #panel-history .table-wrap table tr:hover td{background:transparent}
+  #panel-history .table-wrap table td{
+    padding:2px 0 !important;border:none !important;
+    font-size:.78rem !important;white-space:normal !important;
+    overflow:visible !important;text-overflow:unset !important;
+    max-width:none !important;
+  }
+  /* ID: hidden on mobile */
+  #panel-history .table-wrap table td:nth-child(1){display:none}
+  /* Date: full width top */
+  #panel-history .table-wrap table td:nth-child(2){grid-column:1/-1;font-size:.72rem !important;color:var(--text-muted)}
+  /* Type */
+  #panel-history .table-wrap table td:nth-child(3){font-weight:600}
+  #panel-history .table-wrap table td:nth-child(3)::before{content:'Type: ';font-size:.65rem;color:var(--text-muted);text-transform:uppercase}
+  /* Status: badge top-right */
+  #panel-history .table-wrap table td:nth-child(4){position:absolute;top:12px;right:12px}
+  /* Plan */
+  #panel-history .table-wrap table td:nth-child(5)::before{content:'Plan: ';font-size:.65rem;color:var(--text-muted);text-transform:uppercase}
+  /* Billing */
+  #panel-history .table-wrap table td:nth-child(6)::before{content:'Billing: ';font-size:.65rem;color:var(--text-muted);text-transform:uppercase}
+  /* Country */
+  #panel-history .table-wrap table td:nth-child(7)::before{content:'Country: ';font-size:.65rem;color:var(--text-muted);text-transform:uppercase}
+  /* Route */
+  #panel-history .table-wrap table td:nth-child(8)::before{content:'Route: ';font-size:.65rem;color:var(--text-muted);text-transform:uppercase}
+  /* Email: full width */
+  #panel-history .table-wrap table td:nth-child(9){grid-column:1/-1;word-break:break-all}
+  #panel-history .table-wrap table td:nth-child(9)::before{content:'Email: ';font-size:.65rem;color:var(--text-muted);text-transform:uppercase}
+  /* Actions: full width */
+  #panel-history .table-wrap table td:nth-child(10){grid-column:1/-1;display:flex;gap:8px;padding-top:6px !important;border-top:1px solid var(--glass-border) !important}
+  /* Empty state row */
+  #panel-history .table-wrap table tr:has(td[colspan]){display:block}
+  #panel-history .table-wrap table td[colspan]{display:block !important;grid-column:unset}
+
+  /* Proxy table: card layout */
+  #panel-proxies .table-wrap table thead{display:none}
+  #panel-proxies .table-wrap table,
+  #panel-proxies .table-wrap table tbody{display:block;width:100%}
+  #panel-proxies .table-wrap table tr{
+    display:flex;flex-wrap:wrap;align-items:center;
+    gap:6px 12px;padding:12px 14px;margin-bottom:6px;
+    background:var(--surface2);border:1px solid var(--glass-border);
+    border-radius:var(--radius);
+  }
+  #panel-proxies .table-wrap table tr:hover td{background:transparent}
+  #panel-proxies .table-wrap table td{
+    padding:0 !important;border:none !important;
+  }
+  /* Proxy address: full width */
+  #panel-proxies .table-wrap table td:nth-child(1){flex:1 1 100%;font-size:.72rem !important;word-break:break-all;white-space:normal !important;max-width:none !important}
+  /* Status pill */
+  #panel-proxies .table-wrap table td:nth-child(2){order:2}
+  /* Latency */
+  #panel-proxies .table-wrap table td:nth-child(3){order:3;font-size:.75rem !important}
+  /* Last tested */
+  #panel-proxies .table-wrap table td:nth-child(4){order:4;font-size:.72rem !important;color:var(--text-muted)}
+  /* Actions */
+  #panel-proxies .table-wrap table td:nth-child(5){order:5;margin-left:auto}
+  /* Empty state */
+  #panel-proxies .table-wrap table tr:has(td[colspan]){display:block}
+  #panel-proxies .table-wrap table td[colspan]{display:block !important}
+
+  /* API Keys table: card layout */
+  #panel-apikeys .table-wrap table thead{display:none}
+  #panel-apikeys .table-wrap table,
+  #panel-apikeys .table-wrap table tbody{display:block;width:100%}
+  #panel-apikeys .table-wrap table tr{
+    display:grid;grid-template-columns:1fr 1fr;
+    gap:4px 10px;padding:14px;margin-bottom:8px;
+    background:var(--surface2);border:1px solid var(--glass-border);
+    border-radius:var(--radius);position:relative;
+  }
+  #panel-apikeys .table-wrap table tr:hover td{background:transparent}
+  #panel-apikeys .table-wrap table td{
+    padding:2px 0 !important;border:none !important;
+    font-size:.78rem !important;white-space:normal !important;
+  }
+  /* ID: small */
+  #panel-apikeys .table-wrap table td:nth-child(1){font-size:.68rem !important;color:var(--text-muted)}
+  #panel-apikeys .table-wrap table td:nth-child(1)::before{content:'#';font-size:.65rem}
+  /* Label: prominent */
+  #panel-apikeys .table-wrap table td:nth-child(2){font-weight:600;font-size:.88rem !important}
+  /* Key masked: full width */
+  #panel-apikeys .table-wrap table td:nth-child(3){grid-column:1/-1;word-break:break-all}
+  /* Created */
+  #panel-apikeys .table-wrap table td:nth-child(4)::before{content:'Created: ';font-size:.65rem;color:var(--text-muted)}
+  /* Last used */
+  #panel-apikeys .table-wrap table td:nth-child(5)::before{content:'Last used: ';font-size:.65rem;color:var(--text-muted)}
+  /* Status: absolute top-right */
+  #panel-apikeys .table-wrap table td:nth-child(6){position:absolute;top:12px;right:12px}
+  /* Actions: full width */
+  #panel-apikeys .table-wrap table td:nth-child(7){grid-column:1/-1;display:flex;gap:8px;padding-top:6px !important;border-top:1px solid var(--glass-border) !important}
+  /* Empty state */
+  #panel-apikeys .table-wrap table tr:has(td[colspan]){display:block}
+  #panel-apikeys .table-wrap table td[colspan]{display:block !important;grid-column:unset}
+}
+
+/* ─── 4. Filter Bar (mobile ≤768px) ─── */
+@media(max-width:768px){
+  .filter-bar{
+    position:sticky;top:48px;z-index:50;
+    background:var(--bg);padding:10px 0;margin:0 -14px;
+    padding-left:14px;padding-right:14px;
+    border-bottom:1px solid var(--glass-border);
+  }
+  .filter-bar input,.filter-bar select{
+    width:100% !important;min-width:0 !important;
+    padding:10px 14px !important;border-radius:var(--radius) !important;
+    font-size:16px !important;
+  }
+  .filter-actions{
+    width:100%;margin-left:0 !important;
+    display:flex !important;gap:8px !important;
+  }
+  .filter-actions .btn{flex:1;min-height:44px}
+}
+
+/* ─── 5. Action Buttons (mobile ≤768px) ─── */
+@media(max-width:768px){
+  .action-bar{
+    display:grid !important;
+    grid-template-columns:1fr 1fr;
+    gap:8px !important;
+  }
+  .action-bar .btn{
+    width:100% !important;
+    min-height:48px !important;
+    font-size:.78rem !important;
+    justify-content:center;
+    border-radius:var(--radius) !important;
+  }
+  .action-bar .btn svg{flex-shrink:0}
+  .action-bar .btn-danger{border:1px solid rgba(239,68,68,0.3) !important}
+  /* If odd number of buttons, last one spans full width */
+  .action-bar .btn:last-child:nth-child(odd){grid-column:1/-1}
+}
+
+/* ─── 6. Modal → Bottom Sheet (mobile ≤768px) ─── */
+@media(max-width:768px){
+  .modal-overlay{align-items:flex-end !important;padding:0 !important}
+  .modal{
+    border-radius:16px 16px 0 0 !important;
+    max-height:85vh !important;
+    animation:modalSlideUp .3s cubic-bezier(.4,0,.2,1) !important;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  @keyframes modalSlideUp{from{opacity:0;transform:translateY(100%)}to{opacity:1;transform:translateY(0)}}
+  .modal-header{padding:10px 22px 14px !important;position:relative}
+  /* Drag handle */
+  .modal-header::before{
+    content:'';position:absolute;top:8px;left:50%;transform:translateX(-50%);
+    width:36px;height:4px;background:var(--border);border-radius:2px;
+  }
+  .modal-body{padding:16px 20px !important;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .modal-footer{padding:12px 20px !important;padding-bottom:calc(12px + env(safe-area-inset-bottom)) !important}
+  .modal-footer .btn{min-height:44px;flex:1}
+}
+
+/* ─── 7. Overview Cards (mobile) ─── */
+@media(max-width:768px){
+  .cards-grid{grid-template-columns:repeat(2,1fr) !important;gap:10px !important}
+  .stat-card .value{font-size:1.3rem !important}
+  .stat-card .label{font-size:.68rem !important}
+  .stat-card{padding:14px !important}
+  /* Activity log: compact single-line */
+  .activity-item{
+    padding:8px 12px !important;gap:8px !important;
+    font-size:.75rem !important;
+  }
+  .activity-item .a-email{
+    overflow:hidden !important;text-overflow:ellipsis !important;
+    white-space:nowrap !important;max-width:120px;
+  }
+  .activity-item .a-time{min-width:42px !important;font-size:.68rem !important}
+  .activity-item .a-service{min-width:55px !important;font-size:.72rem !important}
+}
+
+/* ─── 8. Analytics (mobile) ─── */
+@media(max-width:768px){
+  .analytics-grid{grid-template-columns:1fr !important}
+  .donut-container{flex-direction:column !important;align-items:center !important;gap:14px !important}
+  .donut-container svg{width:90px !important;height:90px !important}
+  .donut-legend{flex-direction:row !important;flex-wrap:wrap !important;gap:6px 12px !important;justify-content:center}
+  .sparkline-container{width:100%}
+  .countries-list{
+    display:flex !important;flex-direction:row !important;flex-wrap:nowrap !important;
+    overflow-x:auto !important;gap:8px !important;
+    max-height:none !important;padding:4px 0;
+    -webkit-overflow-scrolling:touch;
+  }
+  .country-row{
+    flex-shrink:0 !important;
+    padding:6px 12px !important;border-radius:20px !important;
+    font-size:.72rem !important;white-space:nowrap;
+    background:var(--surface2) !important;
+    border:1px solid var(--glass-border);
+  }
+  .chart-card{padding:16px !important}
+  .chart-card h4{font-size:.75rem !important;margin-bottom:10px !important}
+}
+
+/* ─── 9. Login Screen (mobile) ─── */
+@media(max-width:768px){
+  #login-screen{min-height:100dvh !important;padding:16px !important}
+  .login-card{padding:24px 20px !important}
+  .login-card h1{font-size:1.2rem !important}
+  .login-input-wrap input{font-size:16px !important;padding:14px 16px !important}
+  #login-btn,.login-card .btn{min-height:48px !important;font-size:.9rem !important}
+}
+
+/* ─── 10. Small phones (≤480px) ─── */
+@media(max-width:480px){
+  html{font-size:13px}
+  .header-title h1{font-size:.82rem !important}
+  .cards-grid{grid-template-columns:1fr !important}
+  .stat-card .value{font-size:1.5rem !important}
+  .stat-card{padding:16px !important}
+  .content{padding:10px !important;padding-bottom:72px !important}
+  .header{padding:0 10px !important}
+  .health-grid{grid-template-columns:1fr 1fr !important;gap:6px !important}
+  .health-card{padding:10px !important}
+  .health-card .h-value{font-size:.95rem !important}
+  .action-bar{grid-template-columns:1fr !important}
+  .filter-bar{margin:0 -10px !important;padding-left:10px !important;padding-right:10px !important}
+  .mobile-bottom-nav{height:52px}
+  .mobile-bottom-nav .bnav-item{font-size:.55rem}
+  .mobile-bottom-nav .bnav-item svg{width:20px;height:20px}
+  .settings-section{padding:14px !important}
+  .settings-row{flex-direction:column;align-items:flex-start;gap:2px}
+  .settings-row .s-value{font-size:.78rem}
+  /* Pagination compact */
+  .pagination{padding:10px !important;font-size:.72rem !important}
+  .page-btns button{padding:4px 8px !important;font-size:.72rem !important}
+  /* Modal adjustments */
+  .modal-body{padding:14px 16px !important}
+  .modal-header h3{font-size:.9rem !important}
+  /* Login */
+  .login-card{max-width:100%}
+  .lock-icon{width:48px !important;height:48px !important}
+  .lock-icon svg{width:24px !important;height:24px !important}
+  /* Activity */
+  .activity-item .a-email{max-width:80px !important}
+}
 </style>
 </head>
 <body>
@@ -326,6 +690,22 @@ tr:hover td{background:rgba(255,255,255,0.03)}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         Logout
       </button>
+      <!-- Mobile kebab menu -->
+      <button class="kebab-menu-btn" onclick="toggleKebabMenu(event)" aria-label="Menu">⋮</button>
+      <div class="kebab-dropdown" id="kebab-dropdown">
+        <a href="/">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          Dashboard
+        </a>
+        <button onclick="switchTab('apikeys');closeKebabMenu()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          API Keys
+        </button>
+        <button class="dd-danger" onclick="doLogout();closeKebabMenu()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Logout
+        </button>
+      </div>
     </div>
   </div>
 
@@ -1836,6 +2216,47 @@ document.addEventListener('keydown', e => {
 // Reset session timeout on mouse activity
 document.addEventListener('click', () => { if (getApiKey()) resetSessionTimeout(); });
 
+// ═══════════════════════════════════════════════════════════════════
+// MOBILE NAVIGATION
+// ═══════════════════════════════════════════════════════════════════
+function mobileNavSwitch(tab) {
+  // Update bottom nav active state
+  document.querySelectorAll('.mobile-bottom-nav .bnav-item').forEach(item => {
+    item.classList.toggle('active', item.dataset.tab === tab);
+  });
+  // Delegate to existing switchTab
+  switchTab(tab);
+}
+
+// Keep bottom nav in sync when switchTab is called from desktop tab bar or keyboard shortcuts
+(function(){
+  const _origSwitchTab = window.switchTab;
+  window.switchTab = function(tab) {
+    _origSwitchTab(tab);
+    // Sync bottom nav highlight
+    document.querySelectorAll('.mobile-bottom-nav .bnav-item').forEach(item => {
+      item.classList.toggle('active', item.dataset.tab === tab);
+    });
+  };
+})();
+
+// Kebab menu
+function toggleKebabMenu(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('kebab-dropdown');
+  dd.classList.toggle('show');
+}
+function closeKebabMenu() {
+  const dd = document.getElementById('kebab-dropdown');
+  if (dd) dd.classList.remove('show');
+}
+// Close kebab on outside click
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.kebab-menu-btn') && !e.target.closest('.kebab-dropdown')) {
+    closeKebabMenu();
+  }
+});
+
 // Rate limit cooldown visual
 let _cooldownBar = null;
 function showRateLimitCooldown(seconds) {
@@ -1885,5 +2306,29 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 </script>
+<!-- ═══ MOBILE BOTTOM NAVIGATION ═══ -->
+<nav class="mobile-bottom-nav" id="mobile-bottom-nav">
+  <div class="bnav-item active" data-tab="overview" onclick="mobileNavSwitch('overview')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    <span>Overview</span>
+  </div>
+  <div class="bnav-item" data-tab="history" onclick="mobileNavSwitch('history')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    <span>History</span>
+  </div>
+  <div class="bnav-item" data-tab="analytics" onclick="mobileNavSwitch('analytics')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+    <span>Analytics</span>
+  </div>
+  <div class="bnav-item" data-tab="proxies" onclick="mobileNavSwitch('proxies')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+    <span>Proxies</span>
+  </div>
+  <div class="bnav-item" data-tab="settings" onclick="mobileNavSwitch('settings')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    <span>Settings</span>
+  </div>
+</nav>
+
 </body>
 </html>

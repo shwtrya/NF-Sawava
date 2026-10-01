@@ -1979,6 +1979,397 @@ button:disabled {
   box-shadow: 0 0 16px rgba(16, 185, 129, 0.35) !important;
 }
 
+/* ═══════════════════════════════════════════════════════
+   ENHANCED MOBILE RESPONSIVENESS — NF-Sawava v2
+   Added: comprehensive mobile optimization layer
+   ═══════════════════════════════════════════════════════ */
+
+/* ── GLOBAL: Prevent horizontal overflow ── */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* ── 768px: TABLETS & SMALL SCREENS ── */
+@media (max-width: 768px) {
+
+  /* CHECK MODE TABS: full-width, scrollable snap */
+  .check-mode-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    gap: 3px;
+  }
+  .check-mode-tabs::-webkit-scrollbar { display: none; }
+  .check-mode-tab {
+    scroll-snap-align: start;
+    min-width: 0;
+    flex: 1 0 auto;
+    padding: 10px 16px;
+    font-size: 12.5px;
+    min-height: 44px;
+  }
+
+  /* CHECKER QUICK TABS: horizontal scroll */
+  .checker-quick-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+    max-width: 100%;
+  }
+  .checker-quick-tabs::-webkit-scrollbar { display: none; }
+  .checker-pill {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+    white-space: nowrap;
+    min-height: 44px;
+    padding: 8px 14px;
+    font-size: 11.5px;
+  }
+  .checker-top-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 10px;
+  }
+
+  /* INPUT FIELDS: iOS zoom fix + full width */
+  input[type="text"], input[type="password"], input[type="email"],
+  input[type="url"], input[type="number"], select, textarea {
+    font-size: 16px !important;
+    width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  /* TEXTAREAS: proper mobile height & font */
+  textarea {
+    min-height: 100px;
+    min-font-size: 14px;
+    font-size: 14px !important;
+  }
+
+  /* COOKIE TEXTAREAS: taller on mobile */
+  #disney-login-cookie, #disney-bulk-input,
+  #cr-login-cookie, #cr-bulk-input,
+  #evpn-login-cookie, #evpn-bulk-input,
+  #spotify-bulk-input, #outlook-bulk-input,
+  #bulk-input {
+    min-height: 120px;
+  }
+
+  /* BULK STATS: 2-column grid */
+  .bulk-stats {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px;
+  }
+
+  /* PROGRESS BARS: thicker on mobile */
+  .progress-bar-bg {
+    height: 10px !important;
+  }
+  .progress-wrap {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px;
+  }
+
+  /* STAT PILLS: bigger touch targets */
+  .stat-pill {
+    padding: 10px 8px;
+    min-height: 44px;
+  }
+  .stat-pill .num {
+    font-size: 18px;
+  }
+  .stat-pill .label {
+    font-size: 9.5px;
+  }
+
+  /* CARD-OUT: full width, no overflow */
+  .card-out {
+    width: 100% !important;
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    padding: 14px !important;
+  }
+
+  /* GRID-META: 2 columns on tablet */
+  .grid-meta {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px;
+  }
+
+  /* TOKEN LINK / URLs: break long text */
+  .token-link, .token-link a {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    font-size: 10.5px;
+  }
+
+  /* LAUNCHER CARDS: stack vertically */
+  .launcher-card {
+    display: block;
+    width: 100%;
+  }
+
+  /* ACTION BUTTONS: 2-col grid */
+  .action-btns {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .action-btns .btn-secondary {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+    min-height: 44px;
+  }
+
+  /* SERVICE HUB: buttons full width */
+  .hub-launch-btn {
+    width: 100% !important;
+    min-height: 44px;
+    justify-content: center;
+  }
+  .btn-grab-account {
+    width: 100% !important;
+    min-height: 44px;
+  }
+
+  /* CARD HEADER STATUS: proper emoji sizing */
+  .card-header-status {
+    font-size: 14px;
+    gap: 8px;
+    flex-wrap: wrap;
+    word-break: break-word;
+  }
+
+  /* META BOXES: better mobile spacing */
+  .meta-box {
+    padding: 8px 10px;
+    font-size: 11.5px;
+  }
+  .meta-box strong {
+    font-size: 11.5px;
+    word-break: break-all;
+  }
+
+  /* SETTINGS PANEL: stack cards */
+  #panel-settings .card {
+    padding: 14px 12px !important;
+  }
+  #panel-settings .card div[style*="display:flex"][style*="gap:10px"],
+  #panel-settings .card div[style*="display:flex"][style*="gap:8px"] {
+    flex-direction: column !important;
+  }
+  #panel-settings .btn-primary,
+  #panel-settings .btn-secondary {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  /* FILTER BUTTONS: horizontal scroll */
+  #pm-filter-buttons {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap !important;
+    scrollbar-width: none;
+  }
+  #pm-filter-buttons::-webkit-scrollbar { display: none; }
+  #pm-filter-buttons .pm-filter-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+    min-height: 44px;
+  }
+
+  /* BULK RESULT CONTAINERS: compact */
+  [id$="-bulk-out"] {
+    max-height: 350px !important;
+  }
+
+  /* GENERAL TOUCH TARGETS: min 44px */
+  button, .tab-btn, .checker-pill, .check-mode-tab,
+  .hub-launch-btn, .btn-grab-account, .btn-primary,
+  .btn-secondary, .btn-subtle, .pm-filter-btn,
+  .checker-back-btn, .mobile-nav-item {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  /* TOPBAR: prevent overflow */
+  .topbar {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+  .topbar-right {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
+
+/* ── 480px: PHONES ── */
+@media (max-width: 480px) {
+
+  /* GRID-META: single column */
+  .grid-meta {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* BULK STATS: single column */
+  .bulk-stats {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ACTION BUTTONS: stack to single column */
+  .action-btns {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* CHECK MODE TABS: stack full-width */
+  .check-mode-tabs {
+    flex-direction: column;
+    overflow-x: visible;
+  }
+  .check-mode-tab {
+    width: 100%;
+    flex: none;
+    padding: 12px 16px;
+    font-size: 13px;
+  }
+
+  /* SERVICE HUB: stack buttons */
+  .services-hub-grid .card div[style*="display:flex"] {
+    flex-direction: column !important;
+  }
+  .hub-launch-btn {
+    flex: none !important;
+  }
+
+  /* TOPBAR PILLS: smaller */
+  .topbar-pin-pill, .topbar-pool-pill {
+    padding: 3px 6px !important;
+    font-size: 9.5px !important;
+  }
+  .system-pulse-pill {
+    padding: 2px 6px !important;
+    font-size: 9.5px !important;
+  }
+
+  /* CARD HEADER STATUS: compact */
+  .card-header-status {
+    font-size: 13px;
+    gap: 6px;
+  }
+
+  /* PROGRESS TEXT: larger for readability */
+  .progress-wrap {
+    padding: 10px !important;
+  }
+  .progress-wrap div[style*="font-size:13px"] {
+    font-size: 12px !important;
+  }
+
+  /* STAT PILLS: compact single column */
+  .stat-pill {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    text-align: left;
+    padding: 10px 14px;
+  }
+  .stat-pill .label {
+    margin-bottom: 0;
+    font-size: 10px;
+  }
+  .stat-pill .num {
+    font-size: 18px;
+  }
+
+  /* MAIN CONTENT: tighter padding */
+  .main-content {
+    padding: 8px 6px calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* VIEW HEADER: compact */
+  .view-header-title h2 {
+    font-size: 15px !important;
+  }
+  .view-header-title p {
+    font-size: 11px;
+  }
+
+  /* LAUNCHER CARD: tighter */
+  .launcher-card {
+    padding: 10px 12px;
+  }
+  .launcher-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  /* BULK DROP ZONE: compact */
+  #bulk-drop-zone {
+    padding: 14px 10px !important;
+  }
+  #bulk-drop-zone div[style*="font-size:30px"] {
+    font-size: 24px !important;
+  }
+
+  /* SETTINGS: full-width buttons */
+  #panel-settings .btn-sm {
+    width: 100%;
+    padding: 10px 14px !important;
+    min-height: 44px;
+  }
+
+  /* CHECKER TOP BAR: compact */
+  .checker-top-bar {
+    padding: 8px !important;
+    gap: 6px;
+  }
+  .checker-back-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* TABLES: compact cells */
+  th, td {
+    padding: 6px 8px !important;
+    font-size: 10.5px !important;
+  }
+}
+
+/* ── 360px: VERY SMALL PHONES ── */
+@media (max-width: 360px) {
+  .main-content {
+    padding: 6px 4px calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .card {
+    padding: 10px 8px !important;
+  }
+  .topbar {
+    padding: 0 8px !important;
+    height: 48px !important;
+  }
+  .brand-title {
+    font-size: 12px !important;
+  }
+  .view-header-title h2 {
+    font-size: 14px !important;
+  }
+  .check-mode-tab {
+    font-size: 12px;
+    padding: 10px 12px;
+  }
+}
+
 </style>
 </head>
 <body>
