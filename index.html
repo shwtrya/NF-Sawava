@@ -2140,7 +2140,7 @@ button:disabled {
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
       <span class="item-text">Dashboard</span>
     </button>
-    <button type="button" class="sidebar-item tab-btn" data-tab="checkers" onclick="switchTab('checkers')">
+    <button type="button" class="sidebar-item tab-btn" data-tab="single" onclick="switchTab('single')">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
       <span class="item-text">Account Checkers</span>
       <span class="sidebar-badge">6</span>
@@ -2320,13 +2320,14 @@ button:disabled {
       </div>
     </div>
 
+    
     <!-- Quick Service Launchers Hub -->
     <div class="dash-section-header">
       <div>
         <h3 class="dash-section-title">Specialized Checker Engines</h3>
         <p class="dash-section-sub">Launch multi-service credential checkers & token generators</p>
       </div>
-      <button class="btn-subtle" onclick="switchTab('checkers')">All Checkers Grid →</button>
+      <button class="btn-subtle" onclick="switchTab('single')">Netflix Token →</button>
     </div>
 
     <div class="services-hub-grid">
@@ -2537,160 +2538,13 @@ button:disabled {
 
   </div>
 
+    <!-- PANEL: ACCOUNT CHECKERS HUB (removed) -->
+  <div id="panel-checkers" class="section-panel" style="display:none;"></div>
 
-    <!-- 2. ACCOUNT CHECKERS HUB -->
-    
-  <!-- PANEL: ACCOUNT CHECKERS HUB -->
-  <div id="panel-checkers" class="section-panel">
-    <div style="font-size:13px; color:var(--text-muted); margin-bottom:18px;">
-      Pilih service checker yang ingin digunakan. Setiap modul memiliki mode pengecekan tunggal (Single) dan pengecekan massal (Bulk) dengan visual analytics terintegrasi.
-    </div>
-
-    <div class="services-hub-grid">
-      <!-- 1. Netflix Suite (Unified Single & Bulk) -->
-      <div class="service-hub-card">
-        <div class="service-hub-header">
-          <div class="service-hub-brand">
-            <div class="service-hub-icon" style="background:rgba(229,9,20,0.1); border-color:rgba(229,9,20,0.3); color:#e50914;">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="15" x="2" y="4.5" rx="2"/><polygon points="10 8 16 12 10 16"/></svg>
-            </div>
-            <div>
-              <div class="service-hub-title">Netflix Suite</div>
-              <div class="service-hub-sub">Token Generator & Bulk Engine</div>
-            </div>
-          </div>
-          <span class="service-hub-status-badge badge-active">Active</span>
-        </div>
-        <div class="service-hub-desc">Platform terpadu Netflix: ubah cookie menjadi token launch link, browser injection URL, atau jalankan pengecekan massal multi-threaded secara simultan.</div>
-        <div class="service-hub-footer" style="display:flex; flex-direction:column; gap:6px;">
-          <div style="display:flex; gap:8px;">
-            <button type="button" class="hub-launch-btn" onclick="switchTab('single')" style="flex:1;">Single Token →</button>
-            <button type="button" class="hub-launch-btn" onclick="switchTab('bulk')" style="flex:1; background:rgba(255,255,255,0.06); color:#fff; border-color:var(--border);">Bulk Check →</button>
-          </div>
-          <button type="button" class="btn-grab-account" onclick="grabRandomLiveAccount('netflix', this)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Ambil Cookie Live</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- 3. Disney+ -->
-      <div class="service-hub-card">
-        <div class="service-hub-header">
-          <div class="service-hub-brand">
-            <div class="service-hub-icon" style="background:rgba(28,231,131,0.1); border-color:rgba(28,231,131,0.3); color:#1ce783;">🏰</div>
-            <div>
-              <div class="service-hub-title">Disney+ Checker</div>
-              <div class="service-hub-sub">BAMTech Direct API</div>
-            </div>
-          </div>
-          <span class="service-hub-status-badge badge-active">Active</span>
-        </div>
-        <div class="service-hub-desc">Cek akun Disney+ via endpoint BAMTech. Mendukung Single Check dan Bulk Check dengan filter hasil LIVE, HOLD, BAD & ERROR.</div>
-        <div class="service-hub-footer" style="display:flex; flex-direction:column; gap:6px;">
-          <button type="button" class="hub-launch-btn" onclick="switchTab('disney')">Buka Disney+ Checker →</button>
-          <button type="button" class="btn-grab-account" onclick="grabRandomLiveAccount('disney', this)" title="Ambil Akun Live Disney+ dari database">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Ambil Akun Live</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- 4. Crunchyroll -->
-      <div class="service-hub-card">
-        <div class="service-hub-header">
-          <div class="service-hub-brand">
-            <div class="service-hub-icon" style="background:rgba(244,117,33,0.1); border-color:rgba(244,117,33,0.3); color:#f47521;">🍥</div>
-            <div>
-              <div class="service-hub-title">Crunchyroll Checker</div>
-              <div class="service-hub-sub">Anime Subscriptions API</div>
-            </div>
-          </div>
-          <span class="service-hub-status-badge badge-active">Active</span>
-        </div>
-        <div class="service-hub-desc">Pengecekan akun Crunchyroll berkecepatan tinggi. Mendeteksi paket Mega Fan, Fan, Free, status verifikasi email & tanggal expired.</div>
-        <div class="service-hub-footer" style="display:flex; flex-direction:column; gap:6px;">
-          <button type="button" class="hub-launch-btn" onclick="switchTab('crunchyroll')">Buka Crunchyroll Checker →</button>
-          <button type="button" class="btn-grab-account" onclick="grabRandomLiveAccount('crunchyroll', this)" title="Ambil Akun Live Crunchyroll dari database">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Ambil Akun Live</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- 5. ExpressVPN -->
-      <div class="service-hub-card">
-        <div class="service-hub-header">
-          <div class="service-hub-brand">
-            <div class="service-hub-icon" style="background:rgba(218,57,64,0.1); border-color:rgba(218,57,64,0.3); color:#da3940;">🔐</div>
-            <div>
-              <div class="service-hub-title">ExpressVPN Checker</div>
-              <div class="service-hub-sub">Direct Authentication & Plans</div>
-            </div>
-          </div>
-          <span class="service-hub-status-badge badge-active">Active</span>
-        </div>
-        <div class="service-hub-desc">Pengecekan akun ExpressVPN langsung ke auth engine. Mengidentifikasi akun Premium Active, 7-Day Free Trial, dan Expired.</div>
-        <div class="service-hub-footer" style="display:flex; flex-direction:column; gap:6px;">
-          <button type="button" class="hub-launch-btn" onclick="switchTab('expressvpn')">Buka ExpressVPN Checker →</button>
-          <button type="button" class="btn-grab-account" onclick="grabRandomLiveAccount('expressvpn', this)" title="Ambil Akun Live ExpressVPN dari database">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Ambil Akun Live</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- 6. Spotify -->
-      <div class="service-hub-card">
-        <div class="service-hub-header">
-          <div class="service-hub-brand">
-            <div class="service-hub-icon" style="background:rgba(29,185,84,0.1); border-color:rgba(29,185,84,0.3); color:#1DB954;">🎵</div>
-            <div>
-              <div class="service-hub-title">Spotify Suite</div>
-              <div class="service-hub-sub">Web Player API & sp_dc Cookies</div>
-            </div>
-          </div>
-          <span class="service-hub-status-badge badge-active">Active</span>
-        </div>
-        <div class="service-hub-desc">Pengecekan akun Spotify dan cookie sp_dc. Mendeteksi paket Premium, Family Owner, Family Member, Duo, Student, dan Free.</div>
-        <div class="service-hub-footer" style="display:flex; flex-direction:column; gap:6px;">
-          <button type="button" class="hub-launch-btn" onclick="switchTab('spotify')">Buka Spotify Suite →</button>
-          <button type="button" class="btn-grab-account" onclick="grabRandomLiveAccount('spotify', this)" title="Ambil Cookie/Akun Live Spotify dari database">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Ambil Cookie Live</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- 7. Outlook / Hotmail -->
-      <div class="service-hub-card">
-        <div class="service-hub-header">
-          <div class="service-hub-brand">
-            <div class="service-hub-icon" style="background:rgba(2,132,199,0.1); border-color:rgba(2,132,199,0.3); color:#0284c7;">📧</div>
-            <div>
-              <div class="service-hub-title">Outlook / Hotmail</div>
-              <div class="service-hub-sub">Microsoft Graph & 2FA Detection</div>
-            </div>
-          </div>
-          <span class="service-hub-status-badge badge-active">Active</span>
-        </div>
-        <div class="service-hub-desc">Pengecekan akun email Microsoft Outlook / Hotmail. Memisahkan login valid tanpa 2FA dari akun dengan 2FA dan Phone Lock.</div>
-        <div class="service-hub-footer" style="display:flex; flex-direction:column; gap:6px;">
-          <button type="button" class="hub-launch-btn" onclick="switchTab('outlook')">Buka Outlook Checker →</button>
-          <button type="button" class="btn-grab-account" onclick="grabRandomLiveAccount('outlook', this)" title="Ambil Akun Live Outlook dari database">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Ambil Akun Live</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-
-    <!-- 3. SPECIALIZED CHECKER MODULES & TOOLS -->
+<!-- 3. SPECIALIZED CHECKER MODULES & TOOLS -->
     <div id="panel-single" class="section-panel">
     <div class="checker-top-bar">
-      <button type="button" class="checker-back-btn" onclick="switchTab('checkers')" title="Back to All Checkers">
+      <button type="button" class="checker-back-btn" onclick="switchTab('dashboard')" title="Back to Dashboard">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         <span>All Checkers</span>
       </button>
@@ -2715,7 +2569,7 @@ button:disabled {
   <!-- PANEL: DISNEY+ CHECKER -->
     <div id="panel-disney" class="section-panel">
     <div class="checker-top-bar">
-      <button type="button" class="checker-back-btn" onclick="switchTab('checkers')" title="Back to All Checkers">
+      <button type="button" class="checker-back-btn" onclick="switchTab('dashboard')" title="Back to Dashboard">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         <span>All Checkers</span>
       </button>
@@ -2899,7 +2753,7 @@ button:disabled {
   <!-- PANEL: CRUNCHYROLL CHECKER -->
     <div id="panel-crunchyroll" class="section-panel">
     <div class="checker-top-bar">
-      <button type="button" class="checker-back-btn" onclick="switchTab('checkers')" title="Back to All Checkers">
+      <button type="button" class="checker-back-btn" onclick="switchTab('dashboard')" title="Back to Dashboard">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         <span>All Checkers</span>
       </button>
@@ -3086,7 +2940,7 @@ button:disabled {
   <!-- PANEL: EXPRESSVPN CHECKER -->
     <div id="panel-expressvpn" class="section-panel">
     <div class="checker-top-bar">
-      <button type="button" class="checker-back-btn" onclick="switchTab('checkers')" title="Back to All Checkers">
+      <button type="button" class="checker-back-btn" onclick="switchTab('dashboard')" title="Back to Dashboard">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         <span>All Checkers</span>
       </button>
@@ -3224,7 +3078,7 @@ button:disabled {
   <!-- PANEL: SPOTIFY COOKIE CHECKER -->
     <div id="panel-spotify" class="section-panel">
     <div class="checker-top-bar">
-      <button type="button" class="checker-back-btn" onclick="switchTab('checkers')" title="Back to All Checkers">
+      <button type="button" class="checker-back-btn" onclick="switchTab('dashboard')" title="Back to Dashboard">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         <span>All Checkers</span>
       </button>
@@ -3346,7 +3200,7 @@ button:disabled {
   <!-- PANEL: OUTLOOK/HOTMAIL -->
     <div id="panel-outlook" class="section-panel">
     <div class="checker-top-bar">
-      <button type="button" class="checker-back-btn" onclick="switchTab('checkers')" title="Back to All Checkers">
+      <button type="button" class="checker-back-btn" onclick="switchTab('dashboard')" title="Back to Dashboard">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         <span>All Checkers</span>
       </button>
@@ -3481,7 +3335,7 @@ button:disabled {
   <!-- PANEL 2: BULK -->
     <div id="panel-bulk" class="section-panel">
     <div class="checker-top-bar">
-      <button type="button" class="checker-back-btn" onclick="switchTab('checkers')" title="Back to All Checkers">
+      <button type="button" class="checker-back-btn" onclick="switchTab('dashboard')" title="Back to Dashboard">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         <span>All Checkers</span>
       </button>
@@ -7885,37 +7739,37 @@ function updateViewHeader(tab) {
     single: {
       title: 'Netflix Token Generator & Single Check',
       subtitle: 'Inspect raw cookie, generate direct Netflix Token & launch links',
-      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'checkers\')">← All Checkers</button>'
+      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'dashboard\')">← Dashboard</button>'
     },
     bulk: {
       title: 'Netflix Concurrent Bulk Check',
       subtitle: 'Multi-threaded high-speed cookie batch processing with Netscape/JSON parser',
-      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'checkers\')">← All Checkers</button>'
+      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'dashboard\')">← Dashboard</button>'
     },
     disney: {
       title: 'Disney+ BAMTech Checker',
       subtitle: 'Direct API authentication & subscription entitlement validation',
-      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'checkers\')">← All Checkers</button>'
+      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'dashboard\')">← Dashboard</button>'
     },
     crunchyroll: {
       title: 'Crunchyroll Anime Checker',
       subtitle: 'Direct authentication endpoint & subscription tier detection',
-      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'checkers\')">← All Checkers</button>'
+      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'dashboard\')">← Dashboard</button>'
     },
     expressvpn: {
       title: 'ExpressVPN Account Checker',
       subtitle: 'VPN authentication engine & expiration / subscription status',
-      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'checkers\')">← All Checkers</button>'
+      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'dashboard\')">← Dashboard</button>'
     },
     spotify: {
       title: 'Spotify Account Checker',
       subtitle: 'Web Player API & sp_dc validation for Premium, Family & Duo plans',
-      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'checkers\')">← All Checkers</button>'
+      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'dashboard\')">← Dashboard</button>'
     },
     outlook: {
       title: 'Outlook / Hotmail MS Graph Checker',
       subtitle: 'Microsoft protocol verification with accurate 2FA & phone lock detection',
-      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'checkers\')">← All Checkers</button>'
+      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'dashboard\')">← Dashboard</button>'
     },
     history: {
       title: 'History Database',
@@ -8392,7 +8246,7 @@ function launchGrabModalService() {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
     <span>Dashboard</span>
   </button>
-  <button type="button" class="mobile-nav-item" data-tab="checkers" onclick="switchTab('checkers')">
+  <button type="button" class="mobile-nav-item" data-tab="single" onclick="switchTab('single')">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
     <span>Checkers</span>
   </button>
