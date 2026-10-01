@@ -168,6 +168,88 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 /* ─── Cookie Detail ─── */
 .cookie-detail{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;font-family:'JetBrains Mono',monospace;font-size:.75rem;word-break:break-all;white-space:pre-wrap;max-height:300px;overflow-y:auto;color:var(--text-muted);line-height:1.6}
 
+/* ─── Card colored borders ─── */
+.stat-card.card-blue{border-left:3px solid var(--accent)}
+.stat-card.card-purple{border-left:3px solid var(--premium)}
+.stat-card.card-green{border-left:3px solid var(--live)}
+.stat-card.card-red{border-left:3px solid var(--dead)}
+.stat-card.card-amber{border-left:3px solid var(--hold)}
+
+/* ─── Glassmorphism cards ─── */
+.stat-card{background:rgba(15,19,24,0.7);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--glass-border);transition:all .25s ease}
+.stat-card:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(0,0,0,0.3);border-color:var(--border)}
+
+/* ─── Gradient header ─── */
+.header{background:linear-gradient(135deg,rgba(15,19,24,0.95),rgba(59,130,246,0.05));backdrop-filter:blur(20px)}
+.hamburger-btn{display:none;align-items:center;justify-content:center;width:36px;height:36px;background:none;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);cursor:pointer}
+
+/* ─── Tab animated underline ─── */
+.tab-btn{position:relative}
+.tab-btn::after{content:'';position:absolute;bottom:-1px;left:50%;width:0;height:2px;background:var(--accent);transition:all .25s ease;transform:translateX(-50%);border-radius:1px}
+.tab-btn.active::after{width:60%}
+
+/* ─── Tab badges ─── */
+.tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;font-size:.65rem;font-weight:700;margin-left:5px;font-family:'JetBrains Mono',monospace}
+.tab-badge-default{background:rgba(139,146,158,0.15);color:var(--text-muted)}
+.tab-badge-accent{background:rgba(59,130,246,0.15);color:var(--accent)}
+.tab-badge-green{background:rgba(34,197,94,0.12);color:var(--live)}
+
+/* ─── Table row transitions ─── */
+tr td{transition:background .15s ease}
+tr:hover td{background:rgba(255,255,255,0.03)}
+
+/* ─── Analytics Charts ─── */
+.analytics-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-bottom:20px}
+.chart-card{background:var(--surface);border:1px solid var(--glass-border);border-radius:var(--radius);padding:20px}
+.chart-card h4{font-size:.82rem;font-weight:700;margin-bottom:14px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
+.donut-container{display:flex;align-items:center;gap:20px}
+.donut-legend{display:flex;flex-direction:column;gap:6px;font-size:.78rem}
+.donut-legend-item{display:flex;align-items:center;gap:8px}
+.donut-legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.bar-chart{display:flex;flex-direction:column;gap:8px}
+.bar-row{display:flex;align-items:center;gap:10px;font-size:.78rem}
+.bar-label{width:50px;text-align:right;color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:.7rem}
+.bar-track{flex:1;height:22px;background:var(--surface2);border-radius:4px;overflow:hidden;position:relative}
+.bar-fill{height:100%;border-radius:4px;transition:width .5s ease;display:flex;align-items:center;padding-left:8px;font-size:.7rem;font-weight:600;color:#fff;min-width:fit-content}
+.bar-value{margin-left:8px;font-family:'JetBrains Mono',monospace;font-size:.75rem;white-space:nowrap}
+.sparkline-container{display:flex;align-items:flex-end;gap:3px;height:60px;padding:4px 0}
+.spark-bar{flex:1;background:var(--accent);border-radius:2px 2px 0 0;transition:height .3s ease;min-width:8px;position:relative;opacity:.7}
+.spark-bar:hover{opacity:1}
+.spark-bar .spark-tip{display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--surface2);color:var(--text);padding:2px 6px;border-radius:3px;font-size:.65rem;white-space:nowrap;margin-bottom:4px;font-family:'JetBrains Mono',monospace}
+.spark-bar:hover .spark-tip{display:block}
+.countries-list{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto}
+.country-row{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--surface2);border-radius:var(--radius-sm);font-size:.78rem}
+.country-row .c-name{font-weight:500}
+.country-row .c-count{font-family:'JetBrains Mono',monospace;color:var(--text-muted);font-size:.75rem}
+
+/* ─── Activity Log ─── */
+.activity-section{margin-top:20px}
+.activity-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.activity-header h3{font-size:.9rem;font-weight:700;display:flex;align-items:center;gap:8px}
+.activity-toggle{display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--text-muted)}
+.activity-toggle input[type="checkbox"]{accent-color:var(--accent)}
+.activity-list{display:flex;flex-direction:column;gap:4px}
+.activity-item{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface);border:1px solid var(--glass-border);border-radius:var(--radius-sm);font-size:.78rem;animation:fadeIn .25s ease}
+.activity-item .a-time{font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--text-muted);white-space:nowrap;min-width:55px}
+.activity-item .a-service{font-weight:600;text-transform:capitalize;min-width:70px}
+.activity-item .a-email{color:var(--text-muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ─── System Health ─── */
+.health-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-top:16px;margin-bottom:16px}
+.health-card{background:var(--surface);border:1px solid var(--glass-border);border-radius:var(--radius-sm);padding:12px;text-align:center}
+.health-card .h-label{font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.health-card .h-value{font-size:1.1rem;font-weight:700;font-family:'JetBrains Mono',monospace}
+
+/* ─── Button loading state ─── */
+.btn.loading{pointer-events:none;opacity:.7}
+.btn.loading .spinner{margin-right:4px}
+
+/* ─── Masked key in header ─── */
+.header-key{font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--text-muted);padding:4px 8px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border)}
+
+/* ─── Rate limit cooldown ─── */
+.cooldown-bar{position:fixed;top:0;left:0;height:3px;background:var(--hold);z-index:9999;transition:width .1s linear}
+
 /* ─── Responsive ─── */
 @media(max-width:768px){
   .header{padding:0 14px;height:52px}
@@ -186,6 +268,14 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   .action-bar .btn{width:100%}
   .login-card{padding:28px 22px}
   .pagination{flex-direction:column;gap:10px}
+  .btn,.btn-icon{min-height:44px;min-width:44px}
+  .tab-btn{min-height:40px}
+  .analytics-grid{grid-template-columns:1fr}
+  .donut-container{flex-direction:column;align-items:flex-start}
+  .hamburger-btn{display:flex !important}
+  .tab-bar{flex-wrap:wrap}
+  .header-key{display:none}
+  .health-grid{grid-template-columns:repeat(2,1fr)}
 }
 </style>
 </head>
@@ -227,6 +317,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       </div>
     </div>
     <div class="header-right">
+      <span class="header-key" id="header-masked-key" title="Active API Key"></span>
       <a href="/" class="btn btn-secondary btn-sm">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         Dashboard
@@ -246,15 +337,19 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     </button>
     <button class="tab-btn" data-tab="history" onclick="switchTab('history')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      History
+      History<span class="tab-badge tab-badge-default" id="tab-badge-history"></span>
+    </button>
+    <button class="tab-btn" data-tab="analytics" onclick="switchTab('analytics')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+      Analytics
     </button>
     <button class="tab-btn" data-tab="proxies" onclick="switchTab('proxies')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path d="M12 2L2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
-      Proxies
+      Proxies<span class="tab-badge tab-badge-green" id="tab-badge-proxies"></span>
     </button>
     <button class="tab-btn" data-tab="apikeys" onclick="switchTab('apikeys')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-      API Keys
+      API Keys<span class="tab-badge tab-badge-accent" id="tab-badge-apikeys"></span>
     </button>
     <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
@@ -268,16 +363,23 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <!-- ═══ OVERVIEW TAB ═══ -->
     <div class="tab-panel active" id="panel-overview">
       <div class="cards-grid" id="overview-cards">
-        <div class="stat-card"><div class="label">Version</div><div class="value" id="ov-version">—</div><div class="sub" id="ov-codename"></div></div>
-        <div class="stat-card"><div class="label">Uptime</div><div class="value" id="ov-uptime">—</div><div class="sub">since start</div></div>
-        <div class="stat-card"><div class="label">Python</div><div class="value" id="ov-python">—</div></div>
-        <div class="stat-card"><div class="label">Services</div><div class="value" id="ov-services">—</div></div>
-        <div class="stat-card"><div class="label">History Count</div><div class="value" id="ov-history">—</div></div>
-        <div class="stat-card"><div class="label">Proxy Count</div><div class="value" id="ov-proxies">—</div><div class="sub" id="ov-proxy-sub"></div></div>
-        <div class="stat-card"><div class="label">Healthy Proxies</div><div class="value" id="ov-healthy" style="color:var(--live)">—</div></div>
-        <div class="stat-card"><div class="label">Dead Proxies</div><div class="value" id="ov-dead" style="color:var(--dead)">—</div></div>
-        <div class="stat-card"><div class="label">DB Size</div><div class="value" id="ov-dbsize">—</div></div>
-        <div class="stat-card"><div class="label">Memory Usage</div><div class="value" id="ov-memory">—</div></div>
+        <div class="stat-card card-blue"><div class="label">Version</div><div class="value" id="ov-version">—</div><div class="sub" id="ov-codename"></div></div>
+        <div class="stat-card card-blue"><div class="label">Uptime</div><div class="value" id="ov-uptime">—</div><div class="sub">since start</div></div>
+        <div class="stat-card card-blue"><div class="label">Python</div><div class="value" id="ov-python">—</div></div>
+        <div class="stat-card card-purple"><div class="label">Services</div><div class="value" id="ov-services">—</div></div>
+        <div class="stat-card card-purple"><div class="label">History Count</div><div class="value" id="ov-history">—</div></div>
+        <div class="stat-card card-blue"><div class="label">Proxy Count</div><div class="value" id="ov-proxies">—</div><div class="sub" id="ov-proxy-sub"></div></div>
+        <div class="stat-card card-green"><div class="label">Healthy Proxies</div><div class="value" id="ov-healthy" style="color:var(--live)">—</div></div>
+        <div class="stat-card card-red"><div class="label">Dead Proxies</div><div class="value" id="ov-dead" style="color:var(--dead)">—</div></div>
+        <div class="stat-card card-amber"><div class="label">DB Size</div><div class="value" id="ov-dbsize">—</div></div>
+        <div class="stat-card card-amber"><div class="label">Memory Usage</div><div class="value" id="ov-memory">—</div></div>
+      </div>
+      <!-- System Health Monitor -->
+      <div class="health-grid" id="health-monitor">
+        <div class="health-card"><div class="h-label">CPU Usage</div><div class="h-value" id="health-cpu">—</div></div>
+        <div class="health-card"><div class="h-label">Memory</div><div class="h-value" id="health-mem">—</div></div>
+        <div class="health-card"><div class="h-label">Checks/min</div><div class="h-value" id="health-cpm">—</div></div>
+        <div class="health-card"><div class="h-label">Uptime</div><div class="h-value" id="health-uptime">—</div></div>
       </div>
       <div class="action-bar">
         <button class="btn btn-secondary btn-sm" onclick="quickRestart()" id="btn-restart">
@@ -292,10 +394,33 @@ tr:hover td{background:rgba(255,255,255,0.02)}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
           Clear Logs
         </button>
+        <button class="btn btn-secondary btn-sm" onclick="backupDatabase()" id="btn-backup">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Backup Database
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="exportAllHistory()" id="btn-export-all">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export All History
+        </button>
         <button class="btn btn-secondary btn-sm" onclick="loadOverview()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
           Refresh
         </button>
+      </div>
+      <!-- Real-time Activity Log -->
+      <div class="activity-section">
+        <div class="activity-header">
+          <h3>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Recent Activity
+          </h3>
+          <label class="activity-toggle">
+            <input type="checkbox" id="activity-auto-refresh" checked onchange="toggleActivityRefresh()"> Auto-refresh
+          </label>
+        </div>
+        <div class="activity-list" id="activity-list">
+          <div class="empty-state"><p>Loading activity...</p></div>
+        </div>
       </div>
     </div>
 
@@ -331,6 +456,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
           </button>
         </div>
       </div>
+
       <div class="action-bar">
         <button class="btn btn-danger btn-sm" onclick="confirmAction('Clear dead results only?',()=>clearHistory(true))">Clear Dead</button>
         <button class="btn btn-danger btn-sm" onclick="confirmAction('Clear ALL history? This cannot be undone.',()=>clearHistory(false))">Clear All</button>
@@ -341,6 +467,42 @@ tr:hover td{background:rgba(255,255,255,0.02)}
           <tbody id="hist-tbody"><tr><td colspan="10" class="empty-state"><p>Loading...</p></td></tr></tbody>
         </table>
         <div class="pagination" id="hist-pagination"></div>
+      </div>
+    </div>
+
+    <!-- ═══ ANALYTICS TAB ═══ -->
+    <div class="tab-panel" id="panel-analytics">
+      <div class="analytics-grid">
+        <div class="chart-card">
+          <h4>Service Distribution</h4>
+          <div class="donut-container" id="chart-services">
+            <div class="empty-state"><p>Loading...</p></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h4>Status Breakdown</h4>
+          <div class="bar-chart" id="chart-status">
+            <div class="empty-state"><p>Loading...</p></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h4>Daily Check Volume (7 days)</h4>
+          <div class="sparkline-container" id="chart-daily">
+            <div class="empty-state"><p>Loading...</p></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h4>Top Countries</h4>
+          <div class="countries-list" id="chart-countries">
+            <div class="empty-state"><p>Loading...</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="cards-grid">
+        <div class="stat-card card-green"><div class="label">Hit Rate</div><div class="value" id="analytics-hitrate">—</div></div>
+        <div class="stat-card card-purple"><div class="label">Total Checks</div><div class="value" id="analytics-total">—</div></div>
+        <div class="stat-card card-blue"><div class="label">Live Accounts</div><div class="value" id="analytics-live" style="color:var(--live)">—</div></div>
+        <div class="stat-card card-red"><div class="label">Dead Accounts</div><div class="value" id="analytics-dead" style="color:var(--dead)">—</div></div>
       </div>
     </div>
 
@@ -432,7 +594,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
           <div class="settings-row"><span class="s-label">Python Version</span><span class="s-value" id="si-python">—</span></div>
           <div class="settings-row"><span class="s-label">Uptime</span><span class="s-value" id="si-uptime">—</span></div>
           <div class="settings-row"><span class="s-label">Active Services</span><span class="s-value" id="si-services">—</span></div>
-          <div class="settings-row"><span class="s-label">PIN Status</span><span class="s-value" id="si-pin" style="color:var(--live)">Active</span></div>
+          <div class="settings-row"><span class="s-label">Auth Mode</span><span class="s-value" id="si-pin" style="color:var(--live)">API Key</span></div>
         </div>
       </div>
 
@@ -495,10 +657,10 @@ let proxyTestPollTimer = null;
 // ═══════════════════════════════════════════════════════════════════
 // AUTH HELPERS
 // ═══════════════════════════════════════════════════════════════════
-function getPin() { return sessionStorage.getItem(API_PIN_KEY) || ''; }
+function getApiKey() { return sessionStorage.getItem(API_PIN_KEY) || ''; }
 
 function authHeaders() {
-  return { 'X-API-Key': getPin(), 'Content-Type': 'application/json' };
+  return { 'X-API-Key': getApiKey(), 'Content-Type': 'application/json' };
 }
 
 async function apiFetch(url, opts = {}) {
@@ -511,6 +673,8 @@ async function apiFetch(url, opts = {}) {
   }
   if (res.status === 429) {
     toast('Rate limit exceeded. Try again shortly.', 'warn');
+    const retryAfter = parseInt(res.headers.get('Retry-After') || '10', 10);
+    showRateLimitCooldown(retryAfter);
     throw new Error('Rate limited');
   }
   return res;
@@ -532,22 +696,23 @@ function showApp() {
 }
 
 async function doLogin() {
-  const pin = document.getElementById('login-pin').value.trim();
-  if (!pin) { showLoginError('Please enter an API Key'); return; }
+  const apiKey = document.getElementById('login-pin').value.trim();
+  if (!apiKey) { showLoginError('Please enter an API Key'); return; }
   const btn = document.getElementById('login-btn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Authenticating...';
   try {
     // Test with a protected endpoint to validate the API key
     const res2 = await fetch('/api/history?limit=1&offset=0', {
-      headers: { 'X-API-Key': pin }
+      headers: { 'X-API-Key': apiKey }
     });
     if (res2.status === 401) {
       showLoginError('Invalid API Key. Access denied.');
       return;
     }
-    sessionStorage.setItem(API_PIN_KEY, pin);
+    sessionStorage.setItem(API_PIN_KEY, apiKey);
     showApp();
+    initAfterLogin();
     loadOverview();
   } catch (e) {
     showLoginError('Connection error: ' + e.message);
@@ -566,6 +731,9 @@ function showLoginError(msg) {
 function doLogout() {
   sessionStorage.removeItem(API_PIN_KEY);
   if (proxyTestPollTimer) { clearInterval(proxyTestPollTimer); proxyTestPollTimer = null; }
+  if (_activityTimer) { clearInterval(_activityTimer); _activityTimer = null; }
+  if (_overviewRefreshTimer) { clearInterval(_overviewRefreshTimer); _overviewRefreshTimer = null; }
+  if (_sessionTimeout) { clearTimeout(_sessionTimeout); _sessionTimeout = null; }
   showLoginScreen();
   toast('Logged out', 'info');
 }
@@ -578,6 +746,7 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + tab));
   if (tab === 'overview') loadOverview();
   else if (tab === 'history') loadHistory();
+  else if (tab === 'analytics') loadAnalytics();
   else if (tab === 'proxies') loadProxies();
   else if (tab === 'apikeys') loadApiKeys();
   else if (tab === 'settings') loadSettings();
@@ -719,6 +888,9 @@ async function loadOverview() {
     document.getElementById('ov-healthy').textContent = fmtNumber(proxy.healthy);
     document.getElementById('ov-dead').textContent = fmtNumber(proxy.dead);
 
+    // Update proxy tab badge
+    updateProxyBadge(proxy.healthy || 0, proxy.total || 0);
+
     // Try to get extended system info from admin endpoint
     try {
       const sysRes = await apiFetch('/api/admin/system', {
@@ -731,6 +903,9 @@ async function loadOverview() {
       if (sys.history_count != null) document.getElementById('ov-history').textContent = fmtNumber(sys.history_count);
       if (sys.proxy_count != null) document.getElementById('ov-proxies').textContent = fmtNumber(sys.proxy_count);
     } catch { /* admin endpoint may not be available */ }
+
+    // Load system health monitor
+    loadHealthMonitor();
   } catch (e) {
     if (e.message !== 'Unauthorized') toast('Failed to load overview: ' + e.message, 'error');
   }
@@ -874,9 +1049,12 @@ function exportHistoryCSV() {
   const status = document.getElementById('hist-status').value;
   const type = document.getElementById('hist-type').value;
   const params = new URLSearchParams({ search, status, type });
-  // Open as download with auth in URL would be a workaround, but we use fetch+blob
+  // Try server-side export first, fallback to client-side CSV build
   apiFetch('/api/history/export_csv?' + params)
-    .then(r => r.blob())
+    .then(r => {
+      if (!r.ok) throw new Error('Server export not available');
+      return r.blob();
+    })
     .then(blob => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -886,7 +1064,33 @@ function exportHistoryCSV() {
       URL.revokeObjectURL(url);
       toast('CSV exported', 'success');
     })
-    .catch(e => { if (e.message !== 'Unauthorized') toast('Export failed: ' + e.message, 'error'); });
+    .catch(() => {
+      // Fallback: build CSV client-side
+      toast('Building CSV client-side...', 'info');
+      apiFetch('/api/history?' + new URLSearchParams({ limit: 99999, offset: 0, search, status, type }))
+        .then(r => r.json())
+        .then(data => {
+          const items = data.items || [];
+          if (items.length === 0) { toast('No data to export', 'warn'); return; }
+          const headers = ['id','created_at','type','status','plan','billing','country','route','email','raw_cookie','token_url'];
+          const csvRows = [headers.join(',')];
+          items.forEach(r => {
+            csvRows.push(headers.map(h => {
+              let v = (r[h] || '').toString().replace(/"/g, '""');
+              return '"' + v + '"';
+            }).join(','));
+          });
+          const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'suite_history_' + Date.now() + '.csv';
+          a.click();
+          URL.revokeObjectURL(url);
+          toast('CSV exported (' + items.length + ' rows)', 'success');
+        })
+        .catch(e => toast('Export failed: ' + e.message, 'error'));
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1110,19 +1314,21 @@ async function doAddProxies() {
 }
 
 async function proxySave() {
-  // Read current proxy file content and save (trigger reload)
+  // Direct save and reload
+  const btn = document.querySelector('[onclick="proxySave()"]');
+  if (btn) { btn.classList.add('loading'); btn.innerHTML = '<span class="spinner"></span> Saving...'; }
   try {
-    const res = await apiFetch('/api/proxies/export?mode=all');
-    const text = await res.text();
-    const res2 = await apiFetch('/api/proxies/save', {
+    const res = await apiFetch('/api/proxies/save', {
       method: 'POST',
-      body: JSON.stringify({ text })
+      body: JSON.stringify({ text: '' })
     });
-    const data = await res2.json();
-    toast('Proxies saved and reloaded. Count: ' + data.count, 'success');
+    const data = await res.json();
+    toast('Proxies saved and reloaded. Count: ' + (data.count || 0), 'success');
     loadProxies();
   } catch (e) {
     if (e.message !== 'Unauthorized') toast('Error saving proxies: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.classList.remove('loading'); btn.innerHTML = 'Save Proxies'; }
   }
 }
 
@@ -1196,8 +1402,11 @@ async function loadApiKeys() {
     const keys = data.keys || [];
     if (keys.length === 0) {
       tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><p>No API keys found. Create one to get started.</p></td></tr>';
+      updateKeysBadge(0);
       return;
     }
+    const activeCount = keys.filter(k => k.is_active).length;
+    updateKeysBadge(activeCount);
     tbody.innerHTML = keys.map(k => `
       <tr>
         <td style="font-family:'JetBrains Mono',monospace;font-size:.75rem;color:var(--text-muted)">${k.id}</td>
@@ -1320,6 +1529,333 @@ async function clearLogs() {
 // ═══════════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════════
+let _activityTimer = null;
+let _overviewRefreshTimer = null;
+let _sessionTimeout = null;
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 min
+
+function resetSessionTimeout() {
+  if (_sessionTimeout) clearTimeout(_sessionTimeout);
+  _sessionTimeout = setTimeout(() => {
+    if (getApiKey()) {
+      toast('Session timed out due to inactivity', 'warn');
+      doLogout();
+    }
+  }, SESSION_TIMEOUT_MS);
+}
+
+function updateMaskedKey() {
+  const key = getApiKey();
+  const el = document.getElementById('header-masked-key');
+  if (el) {
+    if (key && key.length >= 4) {
+      el.textContent = '🔑 ••••' + key.slice(-4);
+      el.title = 'Active API Key: ••••' + key.slice(-4);
+    } else {
+      el.textContent = '';
+    }
+  }
+}
+
+function initAfterLogin() {
+  updateMaskedKey();
+  resetSessionTimeout();
+  // Start activity log polling
+  loadActivityLog();
+  toggleActivityRefresh();
+  // Start overview auto-refresh every 60s when tab is visible
+  if (_overviewRefreshTimer) clearInterval(_overviewRefreshTimer);
+  _overviewRefreshTimer = setInterval(() => {
+    if (!document.hidden && getApiKey()) {
+      const activePanel = document.querySelector('.tab-panel.active');
+      if (activePanel && activePanel.id === 'panel-overview') {
+        loadOverview();
+      }
+    }
+  }, 60000);
+}
+
+// Activity log
+async function loadActivityLog() {
+  try {
+    const res = await apiFetch('/api/history?limit=10&offset=0');
+    const data = await res.json();
+    const el = document.getElementById('activity-list');
+    const items = data.items || [];
+    if (items.length === 0) {
+      el.innerHTML = '<div class="empty-state"><p>No recent activity</p></div>';
+      return;
+    }
+    el.innerHTML = items.map(r => {
+      const t = r.created_at ? new Date(r.created_at) : null;
+      const timeStr = t ? t.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—';
+      const email = r.email || '—';
+      const masked = email.length > 6 ? email.substring(0, 3) + '***' + email.substring(email.indexOf('@') || email.length - 4) : email;
+      return '<div class="activity-item">' +
+        '<span class="a-time">' + timeStr + '</span>' +
+        '<span class="a-service">' + escHtml(r.type || '—') + '</span>' +
+        statusBadge(r.status) +
+        '<span class="a-email" title="' + escHtml(email) + '">' + escHtml(masked) + '</span>' +
+        '</div>';
+    }).join('');
+    // Update tab badge
+    updateTabBadges(data.total);
+  } catch (e) {
+    // Silently ignore activity log errors
+  }
+}
+
+function toggleActivityRefresh() {
+  const checked = document.getElementById('activity-auto-refresh')?.checked;
+  if (_activityTimer) { clearInterval(_activityTimer); _activityTimer = null; }
+  if (checked) {
+    _activityTimer = setInterval(() => {
+      if (!document.hidden && getApiKey()) loadActivityLog();
+    }, 15000);
+  }
+}
+
+// Tab badge updates
+function updateTabBadges(histTotal) {
+  const hb = document.getElementById('tab-badge-history');
+  if (hb && histTotal != null) hb.textContent = histTotal > 999 ? Math.floor(histTotal/1000) + 'k' : histTotal;
+}
+
+function updateProxyBadge(healthy, total) {
+  const pb = document.getElementById('tab-badge-proxies');
+  if (pb) pb.textContent = healthy + '/' + total;
+}
+
+function updateKeysBadge(count) {
+  const kb = document.getElementById('tab-badge-apikeys');
+  if (kb) kb.textContent = count;
+}
+
+// System health monitor
+async function loadHealthMonitor() {
+  try {
+    const res = await apiFetch('/api/admin/system', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'info' })
+    });
+    const sys = await res.json();
+    document.getElementById('health-cpu').textContent = sys.cpu_percent != null ? sys.cpu_percent + '%' : '—';
+    document.getElementById('health-mem').textContent = sys.memory_usage ? fmtBytes(sys.memory_usage) : '—';
+    document.getElementById('health-uptime').textContent = sys.uptime ? fmtUptime(sys.uptime) : '—';
+  } catch { /* silently ignore */ }
+  // Calculate checks/min from recent history timestamps
+  try {
+    const res = await apiFetch('/api/history?limit=30&offset=0');
+    const data = await res.json();
+    const items = data.items || [];
+    if (items.length >= 2) {
+      const newest = new Date(items[0].created_at).getTime();
+      const oldest = new Date(items[items.length - 1].created_at).getTime();
+      const spanMin = (newest - oldest) / 60000;
+      const cpm = spanMin > 0 ? (items.length / spanMin).toFixed(1) : '0';
+      document.getElementById('health-cpm').textContent = cpm;
+    } else {
+      document.getElementById('health-cpm').textContent = '0';
+    }
+  } catch { /* silently ignore */ }
+}
+
+// Analytics tab
+async function loadAnalytics() {
+  try {
+    const res = await apiFetch('/api/analytics');
+    const an = await res.json();
+    // Hit rate
+    const hr = an.hit_rate;
+    document.getElementById('analytics-hitrate').textContent = hr != null ? (typeof hr === 'number' ? (hr * 100).toFixed(1) + '%' : hr) : '—';
+    // Status counts
+    const sc = an.status_counts || {};
+    const totalChecks = Object.values(sc).reduce((a, b) => a + b, 0);
+    document.getElementById('analytics-total').textContent = fmtNumber(totalChecks);
+    document.getElementById('analytics-live').textContent = fmtNumber(sc.LIVE || sc.live || 0);
+    document.getElementById('analytics-dead').textContent = fmtNumber(sc.DEAD || sc.dead || 0);
+    // Status bar chart
+    renderStatusBars(sc, totalChecks);
+    // Service donut
+    renderServiceDonut(an.services || {});
+    // Daily sparkline
+    renderDailySparkline(an.daily_stats || []);
+    // Countries
+    renderCountries(an.countries || {});
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Failed to load analytics: ' + e.message, 'error');
+  }
+}
+
+function renderStatusBars(sc, total) {
+  const el = document.getElementById('chart-status');
+  if (!total) { el.innerHTML = '<div class="empty-state"><p>No data</p></div>'; return; }
+  const colors = { LIVE: 'var(--live)', DEAD: 'var(--dead)', HOLD: 'var(--hold)', ERROR: 'var(--dead)', PREMIUM: 'var(--premium)', FREE: 'var(--live)' };
+  let html = '';
+  Object.entries(sc).sort((a, b) => b[1] - a[1]).forEach(([k, v]) => {
+    const pct = ((v / total) * 100).toFixed(1);
+    const color = colors[k.toUpperCase()] || 'var(--text-muted)';
+    html += '<div class="bar-row"><span class="bar-label">' + escHtml(k) + '</span>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + color + '">' + pct + '%</div></div>' +
+      '<span class="bar-value">' + fmtNumber(v) + '</span></div>';
+  });
+  el.innerHTML = html;
+}
+
+function renderServiceDonut(services) {
+  const el = document.getElementById('chart-services');
+  const entries = Object.entries(services).sort((a, b) => b[1] - a[1]);
+  if (entries.length === 0) { el.innerHTML = '<div class="empty-state"><p>No data</p></div>'; return; }
+  const total = entries.reduce((a, b) => a + b[1], 0);
+  const colors = ['#3b82f6','#22c55e','#ef4444','#eab308','#a855f7','#06b6d4','#f97316','#ec4899'];
+  // Build SVG donut
+  let svg = '<svg viewBox="0 0 120 120" width="110" height="110">';
+  let cum = 0;
+  entries.forEach(([, v], i) => {
+    const pct = v / total;
+    const angle = pct * 360;
+    const large = angle > 180 ? 1 : 0;
+    const startRad = (cum * Math.PI) / 180;
+    const endRad = ((cum + angle) * Math.PI) / 180;
+    const r = 45;
+    const cx = 60, cy = 60;
+    const x1 = cx + r * Math.sin(startRad);
+    const y1 = cy - r * Math.cos(startRad);
+    const x2 = cx + r * Math.sin(endRad);
+    const y2 = cy - r * Math.cos(endRad);
+    if (entries.length === 1) {
+      svg += '<circle cx="60" cy="60" r="45" fill="none" stroke="' + colors[i % colors.length] + '" stroke-width="18"/>';
+    } else {
+      svg += '<path d="M' + x1 + ' ' + y1 + ' A' + r + ' ' + r + ' 0 ' + large + ' 1 ' + x2 + ' ' + y2 + '" fill="none" stroke="' + colors[i % colors.length] + '" stroke-width="18"/>';
+    }
+    cum += angle;
+  });
+  svg += '<circle cx="60" cy="60" r="36" fill="var(--surface)"/>';
+  svg += '<text x="60" y="64" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="700" font-family="JetBrains Mono">' + entries.length + '</text>';
+  svg += '</svg>';
+  // Legend
+  let legend = '<div class="donut-legend">';
+  entries.slice(0, 8).forEach(([k, v], i) => {
+    const pct = ((v / total) * 100).toFixed(1);
+    legend += '<div class="donut-legend-item"><div class="donut-legend-dot" style="background:' + colors[i % colors.length] + '"></div>' +
+      '<span>' + escHtml(k) + ' <span style="color:var(--text-muted)">' + pct + '%</span></span></div>';
+  });
+  legend += '</div>';
+  el.innerHTML = svg + legend;
+}
+
+function renderDailySparkline(dailyStats) {
+  const el = document.getElementById('chart-daily');
+  if (!dailyStats || dailyStats.length === 0) { el.innerHTML = '<div class="empty-state"><p>No data</p></div>'; return; }
+  const last7 = dailyStats.slice(-7);
+  const max = Math.max(...last7.map(d => d.count || d.total || 0), 1);
+  el.innerHTML = last7.map(d => {
+    const val = d.count || d.total || 0;
+    const h = Math.max(4, (val / max) * 100);
+    const label = d.date || d.day || '';
+    return '<div class="spark-bar" style="height:' + h + '%"><div class="spark-tip">' + label + ': ' + val + '</div></div>';
+  }).join('');
+}
+
+function renderCountries(countries) {
+  const el = document.getElementById('chart-countries');
+  const entries = Object.entries(countries).sort((a, b) => b[1] - a[1]);
+  if (entries.length === 0) { el.innerHTML = '<div class="empty-state"><p>No data</p></div>'; return; }
+  el.innerHTML = entries.slice(0, 15).map(([k, v]) =>
+    '<div class="country-row"><span class="c-name">' + escHtml(k) + '</span><span class="c-count">' + fmtNumber(v) + '</span></div>'
+  ).join('');
+}
+
+// Backup database
+async function backupDatabase() {
+  const btn = document.getElementById('btn-backup');
+  if (btn) { btn.classList.add('loading'); btn.innerHTML = '<span class="spinner"></span> Backing up...'; }
+  try {
+    const res = await apiFetch('/api/admin/system', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'backup' })
+    });
+    const data = await res.json();
+    toast(data.message || 'Backup created successfully', 'success');
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Backup failed: ' + e.message, 'error');
+  } finally {
+    if (btn) {
+      btn.classList.remove('loading');
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Backup Database';
+    }
+  }
+}
+
+// Export all history one-click
+async function exportAllHistory() {
+  const btn = document.getElementById('btn-export-all');
+  if (btn) { btn.classList.add('loading'); btn.innerHTML = '<span class="spinner"></span> Exporting...'; }
+  try {
+    const res = await apiFetch('/api/history?' + new URLSearchParams({ limit: 99999, offset: 0 }));
+    const data = await res.json();
+    const items = data.items || [];
+    if (items.length === 0) { toast('No data to export', 'warn'); return; }
+    const headers = ['id','created_at','type','status','plan','billing','country','route','email','raw_cookie','token_url'];
+    const csvRows = [headers.join(',')];
+    items.forEach(r => {
+      csvRows.push(headers.map(h => {
+        let v = (r[h] || '').toString().replace(/"/g, '""');
+        return '"' + v + '"';
+      }).join(','));
+    });
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'suite_history_all_' + Date.now() + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('Exported ' + items.length + ' records', 'success');
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Export failed: ' + e.message, 'error');
+  } finally {
+    if (btn) {
+      btn.classList.remove('loading');
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export All History';
+    }
+  }
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeModal(); return; }
+  if (e.ctrlKey && !e.shiftKey && !e.altKey) {
+    const tabMap = { '1': 'overview', '2': 'history', '3': 'analytics', '4': 'proxies', '5': 'apikeys', '6': 'settings' };
+    if (tabMap[e.key]) { e.preventDefault(); switchTab(tabMap[e.key]); }
+  }
+  // Reset session timeout on any keypress
+  if (getApiKey()) resetSessionTimeout();
+});
+
+// Reset session timeout on mouse activity
+document.addEventListener('click', () => { if (getApiKey()) resetSessionTimeout(); });
+
+// Rate limit cooldown visual
+let _cooldownBar = null;
+function showRateLimitCooldown(seconds) {
+  if (_cooldownBar) _cooldownBar.remove();
+  _cooldownBar = document.createElement('div');
+  _cooldownBar.className = 'cooldown-bar';
+  _cooldownBar.style.width = '100%';
+  document.body.appendChild(_cooldownBar);
+  const start = Date.now();
+  const dur = seconds * 1000;
+  const tick = () => {
+    const elapsed = Date.now() - start;
+    const pct = Math.max(0, 100 - (elapsed / dur) * 100);
+    _cooldownBar.style.width = pct + '%';
+    if (pct > 0) requestAnimationFrame(tick);
+    else _cooldownBar.remove();
+  };
+  requestAnimationFrame(tick);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   // Enter key on login
   document.getElementById('login-pin').addEventListener('keydown', e => {
@@ -1327,17 +1863,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Check if already authed
-  const pin = getPin();
-  if (pin) {
+  const apiKey = getApiKey();
+  if (apiKey) {
     try {
       const res = await fetch('/api/history?limit=1&offset=0', {
-        headers: { 'X-API-Key': pin }
+        headers: { 'X-API-Key': apiKey }
       });
       if (res.status === 401) {
         sessionStorage.removeItem(API_PIN_KEY);
         showLoginScreen();
       } else {
         showApp();
+        initAfterLogin();
         loadOverview();
       }
     } catch {
