@@ -166,6 +166,18 @@ function showToast(msg, type) {
   --primary-glow: rgba(2, 132, 199, 0.25);
   --border-focus: #0284c7;
 }
+.openai-theme {
+  --primary: #10a37f;
+  --primary-hover: #0e8e6d;
+  --primary-glow: rgba(16, 163, 127, 0.25);
+  --border-focus: #10a37f;
+}
+.primevideo-theme {
+  --primary: #00a8e1;
+  --primary-hover: #0091c8;
+  --primary-glow: rgba(0, 168, 225, 0.25);
+  --border-focus: #00a8e1;
+}
 
 * {
   box-sizing: border-box;
@@ -186,6 +198,7 @@ body {
   overflow-x: hidden;
   line-height: 1.5;
   font-size: 13.5px;
+  padding-top: 60px;
 }
 
 /* Custom Scrollbars */
@@ -207,8 +220,10 @@ body {
 /* TOPBAR */
 .topbar {
   height: 60px;
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 1000;
   background: var(--bg-topbar);
   backdrop-filter: blur(16px);
@@ -219,6 +234,12 @@ body {
   justify-content: space-between;
   padding: 0 20px;
   gap: 14px;
+  transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.topbar.scrolled {
+  background: rgba(9, 12, 20, 0.96);
+  box-shadow: 0 2px 20px -2px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(59, 130, 246, 0.08);
+  border-bottom-color: rgba(255, 255, 255, 0.06);
 }
 
 .topbar-left {
@@ -378,22 +399,33 @@ body {
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
   height: calc(100vh - 60px);
-  position: sticky;
+  position: fixed;
   top: 60px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  left: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 900;
 }
+.sidebar.collapsed {
+  width: 68px;
+}
 .sidebar-nav {
-  padding: 16px 10px;
+  padding: 16px 10px 90px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
 }
+.sidebar-nav::-webkit-scrollbar { width: 4px; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+.sidebar-nav::-webkit-scrollbar-track { background: transparent; }
 .nav-section-label {
   font-size: 10px;
   font-weight: 700;
@@ -468,13 +500,22 @@ body {
 .service-dot.green { background: #1DB954; box-shadow: 0 0 6px #1DB954; }
 .service-dot.blue { background: #0284c7; box-shadow: 0 0 6px #0284c7; }
 
-/* Sidebar Footer */
+/* Sidebar Footer — pinned to bottom */
 .sidebar-footer {
   padding: 12px 10px;
   border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex-shrink: 0;
+  background: var(--bg-sidebar);
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  z-index: 2;
+  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .sidebar-collapse-btn {
   display: flex;
@@ -486,6 +527,11 @@ body {
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
+  user-select: none;
+}
+.sidebar-collapse-btn svg {
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
 }
 .sidebar-collapse-btn:hover {
   background: rgba(255, 255, 255, 0.05);
@@ -512,10 +558,34 @@ body {
 .sidebar.collapsed .sidebar-item {
   justify-content: center;
   padding: 11px 0;
+  position: relative;
 }
 .sidebar.collapsed .sidebar-collapse-btn {
   justify-content: center;
   padding: 8px 0;
+}
+.sidebar.collapsed .sidebar-collapse-btn svg {
+  transform: rotate(180deg);
+}
+.sidebar.collapsed .sidebar-footer {
+  width: 68px;
+}
+.sidebar.collapsed .sidebar-item:hover::after {
+  content: attr(title);
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #1a1e2e;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  margin-left: 8px;
 }
 
 /* Mobile Sidebar & Overlay */
@@ -683,6 +753,13 @@ body {
   .sidebar-collapse-btn {
     display: none !important;
   }
+  .sidebar-footer {
+    position: static !important;
+    width: auto !important;
+  }
+  .main-content {
+    margin-left: 0 !important;
+  }
   .sidebar-mobile-header {
     display: flex;
   }
@@ -695,6 +772,9 @@ body {
 }
 
 @media (max-width: 768px) {
+  body {
+    padding-top: 52px;
+  }
   .mobile-bottom-nav {
     display: flex;
   }
@@ -722,6 +802,7 @@ body {
   }
   .main-content {
     padding: 12px 10px calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+    margin-left: 0 !important;
   }
   .stats-overview-grid {
     grid-template-columns: repeat(2, 1fr) !important;
@@ -814,6 +895,11 @@ body {
   max-width: 1440px;
   margin: 0 auto;
   width: 100%;
+  margin-left: 250px;
+  transition: margin-left 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.sidebar.collapsed ~ .main-content {
+  margin-left: 68px;
 }
 
 /* VIEW HEADER */
@@ -2056,7 +2142,8 @@ html, body {
   #disney-login-cookie, #disney-bulk-input,
   #cr-login-cookie, #cr-bulk-input,
   #evpn-login-cookie, #evpn-bulk-input,
-  #spotify-bulk-input, #outlook-bulk-input,
+  #spotify-bulk-input, #outlook-bulk-input, #openai-bulk-input,
+  #pv-bulk-input,
   #bulk-input {
     min-height: 120px;
   }
@@ -2348,6 +2435,9 @@ html, body {
 
 /* ── 360px: VERY SMALL PHONES ── */
 @media (max-width: 360px) {
+  body {
+    padding-top: 48px;
+  }
   .main-content {
     padding: 6px 4px calc(72px + env(safe-area-inset-bottom, 0px)) !important;
   }
@@ -2370,11 +2460,842 @@ html, body {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   NF-SAWAVA MOBILE OPTIMIZATION OVERRIDES v2.0
+   Premium dark SaaS dashboard — Vercel/Linear/Datadog inspired
+   Appended after all existing styles to override mobile breakpoints
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── GLOBAL CONTRAST & COLOR FIXES ── */
+:root {
+  --text-dim: #6B7A90;
+  --bg-body: #080B12;
+  --bg-card: #111827;
+  --bg-card-hover: #162036;
+  --shadow-card: 0 2px 12px -2px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.meta-text {
+  color: var(--text-muted) !important;
+}
+.stat-card-label {
+  color: var(--text-secondary) !important;
+}
+.hub-metric-label {
+  color: var(--text-muted) !important;
+}
+.stat-pill .label {
+  color: var(--text-muted) !important;
+}
+
+/* ── MICRO-INTERACTIONS & ANIMATIONS ── */
+@keyframes refreshSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.refreshing svg,
+.refreshing .refresh-icon {
+  animation: refreshSpin 0.8s linear infinite;
+}
+
+.stat-card {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.2s ease,
+              box-shadow 0.25s ease;
+}
+.stat-card:active {
+  transform: translateY(0) scale(0.98) !important;
+}
+
+.service-hub-card:active {
+  transform: translateY(0) scale(0.98) !important;
+}
+
+button:active,
+.btn-primary:active,
+.btn-secondary:active,
+.hub-launch-btn:active,
+.mobile-nav-item:active {
+  opacity: 0.85;
+  transform: scale(0.97);
+}
+
+.tab-btn,
+.check-mode-tab,
+.checker-pill {
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .stat-card:hover,
+  .service-hub-card:hover {
+    transform: none !important;
+  }
+}
+
+/* ── 768px: PHONES & SMALL TABLETS ── */
+@media (max-width: 768px) {
+
+  /* BODY: proper top padding for taller header */
+  body {
+    padding-top: 62px !important;
+  }
+
+  /* TOPBAR: taller, more breathable */
+  .topbar {
+    height: 62px !important;
+    padding: 0 14px !important;
+    gap: 10px !important;
+    background: rgba(8, 11, 18, 0.92) !important;
+  }
+
+  /* BRAND: proportional to new header */
+  .brand-icon-box {
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 8px !important;
+  }
+  .brand-icon-box svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+  .brand-title {
+    font-size: 15px !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.3px !important;
+  }
+  .brand-highlight {
+    font-size: 15px !important;
+  }
+  .brand {
+    gap: 8px !important;
+  }
+
+  /* SYSTEM PULSE: compact green dot style */
+  .system-pulse-pill {
+    padding: 4px 10px !important;
+    font-size: 10px !important;
+    border-radius: 20px !important;
+    gap: 5px !important;
+    font-weight: 600 !important;
+  }
+
+  /* MAIN CONTENT: tighter, maximize width */
+  .main-content {
+    padding: 10px 12px calc(70px + env(safe-area-inset-bottom, 0px)) !important;
+    margin-left: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* VIEW HEADER: compact, efficient layout */
+  .view-header {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    margin-bottom: 12px !important;
+    padding-bottom: 10px !important;
+  }
+  .view-header-title {
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+  .view-header-title h2 {
+    font-size: 20px !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.4px !important;
+    margin-bottom: 2px !important;
+    line-height: 1.2 !important;
+  }
+  .view-header-title p {
+    font-size: 11.5px !important;
+    color: var(--text-muted) !important;
+    line-height: 1.3 !important;
+  }
+  .view-header-actions {
+    flex-shrink: 0 !important;
+  }
+  .view-header-actions .btn-primary,
+  .view-header-actions .btn-secondary,
+  .view-header-actions button {
+    height: 38px !important;
+    padding: 0 14px !important;
+    font-size: 11.5px !important;
+    border-radius: 8px !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  /* STATS OVERVIEW GRID: forced 2 columns, compact */
+  .stats-overview-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    margin-bottom: 14px !important;
+  }
+
+  /* STAT CARDS: compact & dense */
+  .stat-card {
+    padding: 14px 15px !important;
+    border-radius: 14px !important;
+  }
+  .stat-card-header {
+    margin-bottom: 6px !important;
+  }
+  .stat-card-label {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.1px !important;
+  }
+  .stat-card-icon {
+    width: 22px !important;
+    height: 22px !important;
+    border-radius: 6px !important;
+  }
+  .stat-card-icon svg {
+    width: 13px !important;
+    height: 13px !important;
+  }
+  .stat-card-val {
+    font-size: 26px !important;
+    font-weight: 700 !important;
+    margin-bottom: 4px !important;
+    letter-spacing: -0.6px !important;
+    line-height: 1.1 !important;
+  }
+  .stat-card-meta {
+    font-size: 10px !important;
+    gap: 5px !important;
+  }
+  .meta-tag {
+    font-size: 8.5px !important;
+    padding: 1px 5px !important;
+    border-radius: 3px !important;
+    letter-spacing: 0.2px !important;
+  }
+  .mini-progress-bar {
+    height: 4px !important;
+    margin-top: 6px !important;
+  }
+
+  /* DASHBOARD SECTION HEADERS: tighter */
+  .dash-section-header {
+    margin: 16px 0 10px !important;
+  }
+  .dash-section-title {
+    font-size: 14px !important;
+  }
+  .dash-section-sub {
+    font-size: 11px !important;
+  }
+
+  /* SERVICE HUB CARDS: compact mobile */
+  .services-hub-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+    margin-bottom: 16px !important;
+  }
+  .service-hub-card {
+    padding: 14px 16px !important;
+    border-radius: 14px !important;
+  }
+  .service-hub-header {
+    margin-bottom: 8px !important;
+  }
+  .service-hub-brand {
+    gap: 10px !important;
+  }
+  .service-hub-icon {
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 9px !important;
+    font-size: 17px !important;
+  }
+  .service-hub-title {
+    font-size: 13.5px !important;
+  }
+  .service-hub-sub {
+    font-size: 10.5px !important;
+  }
+  .service-hub-desc {
+    font-size: 11.5px !important;
+    margin-bottom: 10px !important;
+    line-height: 1.4 !important;
+  }
+  .service-hub-metrics {
+    padding: 7px 8px !important;
+    gap: 4px !important;
+    margin-bottom: 10px !important;
+    border-radius: 8px !important;
+  }
+  .hub-metric-item .hub-metric-num {
+    font-size: 13px !important;
+  }
+  .hub-metric-item .hub-metric-label {
+    font-size: 9px !important;
+  }
+  .service-hub-footer {
+    gap: 8px !important;
+  }
+
+  /* BOTTOM NAVIGATION: refined */
+  .mobile-bottom-nav {
+    height: 64px !important;
+    background: rgba(8, 11, 18, 0.97) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+    padding: 0 6px !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  }
+  .mobile-nav-item {
+    gap: 4px !important;
+    font-size: 10px !important;
+    font-weight: 500 !important;
+    padding: 8px 4px !important;
+    border-radius: 10px !important;
+    min-height: 44px !important;
+    color: var(--text-dim) !important;
+    position: relative !important;
+  }
+  .mobile-nav-item svg {
+    width: 21px !important;
+    height: 21px !important;
+    stroke-width: 1.8 !important;
+    color: inherit !important;
+  }
+  .mobile-nav-item.active {
+    color: #fff !important;
+  }
+  .mobile-nav-item.active svg {
+    color: var(--primary) !important;
+    transform: scale(1.05) !important;
+    filter: drop-shadow(0 0 6px rgba(229, 9, 20, 0.35)) !important;
+  }
+  .mobile-nav-item.active::after {
+    content: '' !important;
+    position: absolute !important;
+    top: 2px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 18px !important;
+    height: 2px !important;
+    border-radius: 2px !important;
+    background: var(--primary) !important;
+  }
+
+  /* TOAST: position above bottom nav */
+  #toast {
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 12px !important;
+    left: 12px !important;
+    max-width: none !important;
+    border-radius: 10px !important;
+    font-size: 12px !important;
+    padding: 10px 14px !important;
+  }
+
+  /* CARD TELEMETRY ROW: single column */
+  .card-telemetry-row {
+    gap: 10px !important;
+  }
+
+  /* CHARTS: compact */
+  .chart-card {
+    padding: 14px !important;
+    border-radius: 12px !important;
+  }
+  .chart-card label {
+    font-size: 12px !important;
+    margin-bottom: 10px !important;
+  }
+
+  /* CARDS: refined borders */
+  .card {
+    border-radius: 14px !important;
+    padding: 14px !important;
+  }
+
+  /* TABLES: ensure scrollability */
+  .table-wrap {
+    border-radius: 10px !important;
+    margin-top: 8px !important;
+  }
+}
+
+/* ── 480px: STANDARD PHONES — CRITICAL 2-COLUMN OVERRIDE ── */
+@media (max-width: 480px) {
+
+  /* FORCE 2 columns — override existing 1fr rule */
+  .stats-overview-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    margin-bottom: 12px !important;
+  }
+
+  /* Slightly smaller stat values to fit 2-col */
+  .stat-card {
+    padding: 12px 13px !important;
+    border-radius: 12px !important;
+  }
+  .stat-card-val {
+    font-size: 24px !important;
+    font-weight: 700 !important;
+    margin-bottom: 3px !important;
+  }
+  .stat-card-header {
+    margin-bottom: 5px !important;
+  }
+  .stat-card-label {
+    font-size: 10.5px !important;
+  }
+  .stat-card-icon {
+    width: 20px !important;
+    height: 20px !important;
+    border-radius: 5px !important;
+  }
+  .stat-card-icon svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+  .stat-card-meta {
+    font-size: 9.5px !important;
+  }
+  .meta-tag {
+    font-size: 8px !important;
+    padding: 1px 4px !important;
+  }
+  .meta-text {
+    font-size: 9.5px !important;
+    max-width: 80px !important;
+  }
+
+  /* VIEW HEADER: stack on small phones */
+  .view-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+    margin-bottom: 10px !important;
+    padding-bottom: 8px !important;
+  }
+  .view-header-title h2 {
+    font-size: 18px !important;
+  }
+  .view-header-title p {
+    font-size: 11px !important;
+  }
+  .view-header-actions {
+    width: 100% !important;
+  }
+  .view-header-actions button,
+  .view-header-actions .btn-primary {
+    width: 100% !important;
+    justify-content: center !important;
+    height: 40px !important;
+    font-size: 12px !important;
+  }
+
+  /* SERVICE HUB: more compact */
+  .service-hub-card {
+    padding: 12px 14px !important;
+  }
+  .service-hub-icon {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 15px !important;
+  }
+  .service-hub-title {
+    font-size: 13px !important;
+  }
+
+  /* BOTTOM NAV: slightly shorter */
+  .mobile-bottom-nav {
+    height: 60px !important;
+  }
+  .mobile-nav-item {
+    font-size: 9.5px !important;
+    gap: 3px !important;
+  }
+  .mobile-nav-item svg {
+    width: 20px !important;
+    height: 20px !important;
+  }
+
+  /* MAIN CONTENT */
+  .main-content {
+    padding: 8px 10px calc(66px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* DASH SECTION */
+  .dash-section-header {
+    margin: 14px 0 8px !important;
+  }
+
+  /* TOAST above nav */
+  #toast {
+    bottom: calc(66px + env(safe-area-inset-bottom, 0px)) !important;
+    font-size: 11.5px !important;
+  }
+}
+
+/* ── 430px: MODERN LARGE PHONES (iPhone Pro Max, Pixel etc.) ── */
+@media (min-width: 390px) and (max-width: 430px) {
+  .stats-overview-grid {
+    gap: 10px !important;
+  }
+  .stat-card {
+    padding: 14px 15px !important;
+  }
+  .stat-card-val {
+    font-size: 26px !important;
+  }
+}
+
+/* ── 360px: SMALL PHONES ── */
+@media (max-width: 360px) {
+
+  body {
+    padding-top: 56px !important;
+  }
+
+  .topbar {
+    height: 56px !important;
+    padding: 0 10px !important;
+    gap: 6px !important;
+  }
+
+  .brand-icon-box {
+    width: 26px !important;
+    height: 26px !important;
+  }
+  .brand-icon-box svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  .brand-title {
+    font-size: 13px !important;
+  }
+  .brand-highlight {
+    font-size: 13px !important;
+  }
+  .brand {
+    gap: 6px !important;
+  }
+
+  .system-pulse-pill {
+    padding: 2px 7px !important;
+    font-size: 9px !important;
+  }
+
+  /* MAIN CONTENT: absolute minimum padding */
+  .main-content {
+    padding: 6px 6px calc(66px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* STATS GRID: 2 columns, extra compact */
+  .stats-overview-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 6px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .stat-card {
+    padding: 10px 11px !important;
+    border-radius: 10px !important;
+  }
+  .stat-card-header {
+    margin-bottom: 4px !important;
+  }
+  .stat-card-label {
+    font-size: 10px !important;
+  }
+  .stat-card-icon {
+    width: 18px !important;
+    height: 18px !important;
+    border-radius: 4px !important;
+  }
+  .stat-card-icon svg {
+    width: 11px !important;
+    height: 11px !important;
+  }
+  .stat-card-val {
+    font-size: 22px !important;
+    margin-bottom: 2px !important;
+  }
+  .stat-card-meta {
+    font-size: 9px !important;
+    gap: 4px !important;
+  }
+  .meta-tag {
+    font-size: 7.5px !important;
+    padding: 0.5px 3px !important;
+  }
+  .meta-text {
+    font-size: 9px !important;
+    max-width: 60px !important;
+  }
+  .mini-progress-bar {
+    height: 3px !important;
+    margin-top: 4px !important;
+  }
+
+  /* VIEW HEADER */
+  .view-header {
+    margin-bottom: 8px !important;
+    padding-bottom: 6px !important;
+    gap: 6px !important;
+  }
+  .view-header-title h2 {
+    font-size: 16px !important;
+  }
+  .view-header-title p {
+    font-size: 10.5px !important;
+  }
+
+  /* BOTTOM NAV: compact */
+  .mobile-bottom-nav {
+    height: 56px !important;
+  }
+  .mobile-nav-item {
+    font-size: 9px !important;
+    gap: 2px !important;
+    padding: 6px 2px !important;
+  }
+  .mobile-nav-item svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+  .mobile-nav-item.active::after {
+    width: 14px !important;
+  }
+
+  /* SERVICE HUB: ultra compact */
+  .service-hub-card {
+    padding: 10px 12px !important;
+    border-radius: 10px !important;
+  }
+  .service-hub-icon {
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 7px !important;
+    font-size: 14px !important;
+  }
+  .service-hub-title {
+    font-size: 12.5px !important;
+  }
+  .service-hub-desc {
+    font-size: 11px !important;
+    margin-bottom: 8px !important;
+  }
+  .service-hub-metrics {
+    padding: 6px 7px !important;
+    gap: 3px !important;
+    margin-bottom: 8px !important;
+  }
+  .hub-metric-item .hub-metric-num {
+    font-size: 12px !important;
+  }
+  .hub-metric-item .hub-metric-label {
+    font-size: 8.5px !important;
+  }
+
+  /* CARD: extra compact */
+  .card {
+    padding: 10px 10px !important;
+    border-radius: 10px !important;
+  }
+
+  /* DASH SECTIONS */
+  .dash-section-header {
+    margin: 12px 0 6px !important;
+  }
+  .dash-section-title {
+    font-size: 13px !important;
+  }
+  .dash-section-sub {
+    font-size: 10px !important;
+  }
+
+  /* TOAST */
+  #toast {
+    bottom: calc(62px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 8px !important;
+    left: 8px !important;
+    font-size: 11px !important;
+    padding: 8px 12px !important;
+  }
+}
+
+/* ── 320px: VERY SMALL / LEGACY PHONES ── */
+@media (max-width: 320px) {
+
+  body {
+    padding-top: 52px !important;
+  }
+
+  .topbar {
+    height: 52px !important;
+    padding: 0 8px !important;
+  }
+
+  .brand-icon-box {
+    width: 24px !important;
+    height: 24px !important;
+  }
+  .brand-title {
+    font-size: 12px !important;
+  }
+  .system-pulse-pill {
+    padding: 2px 5px !important;
+    font-size: 8.5px !important;
+  }
+
+  .main-content {
+    padding: 4px 4px calc(60px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .stats-overview-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 4px !important;
+  }
+  .stat-card {
+    padding: 8px 9px !important;
+    border-radius: 8px !important;
+  }
+  .stat-card-val {
+    font-size: 20px !important;
+  }
+  .stat-card-label {
+    font-size: 9.5px !important;
+  }
+  .stat-card-meta {
+    display: none !important;
+  }
+
+  .mobile-bottom-nav {
+    height: 52px !important;
+  }
+  .mobile-nav-item {
+    font-size: 8px !important;
+  }
+  .mobile-nav-item svg {
+    width: 17px !important;
+    height: 17px !important;
+  }
+
+  .view-header-title h2 {
+    font-size: 15px !important;
+  }
+  .service-hub-card {
+    padding: 8px 10px !important;
+  }
+}
+
+/* ── 431-767px: LARGE PHONES / PHABLETS ── */
+@media (min-width: 431px) and (max-width: 767px) {
+  .stats-overview-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+  .stat-card {
+    padding: 16px 18px !important;
+    border-radius: 16px !important;
+  }
+  .stat-card-val {
+    font-size: 28px !important;
+  }
+  .stat-card-label {
+    font-size: 12px !important;
+  }
+  .stat-card-icon {
+    width: 24px !important;
+    height: 24px !important;
+  }
+  .stat-card-icon svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  /* VIEW HEADER: side by side on phablets */
+  .view-header {
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+  .view-header-title h2 {
+    font-size: 22px !important;
+  }
+  .view-header-actions {
+    width: auto !important;
+  }
+  .view-header-actions button {
+    width: auto !important;
+  }
+
+  .services-hub-grid {
+    gap: 12px !important;
+  }
+  .service-hub-card {
+    padding: 16px 18px !important;
+  }
+}
+
+/* ── PREVENT HORIZONTAL OVERFLOW GLOBALLY ── */
+@media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+  }
+  .main-content,
+  .stats-overview-grid,
+  .services-hub-grid,
+  .card,
+  .service-hub-card,
+  .stat-card,
+  .view-header {
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
+  /* Ensure stat values don't truncate */
+  .stat-card-val {
+    white-space: nowrap !important;
+    overflow: visible !important;
+  }
+}
+
 </style>
 </head>
 <body>
 
 <div id="toast"><span>✓</span> <span id="toast-msg">Pesan</span></div>
+
+<!-- DASHBOARD PIN LOCK SCREEN -->
+<div id="dashboard-lock-screen" style="display:none; position:fixed; inset:0; background:var(--bg-main, #0a0e1a); z-index:99999; align-items:center; justify-content:center; padding:20px;">
+  <div style="background:var(--bg-card, #111827); border:1px solid rgba(59,130,246,0.2); border-radius:16px; padding:36px 28px; max-width:380px; width:100%; text-align:center; box-shadow:0 25px 60px rgba(0,0,0,0.6);">
+    <div style="width:64px; height:64px; background:rgba(59,130,246,0.1); border-radius:16px; display:inline-flex; align-items:center; justify-content:center; margin-bottom:18px;">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    </div>
+    <h2 style="font-size:20px; font-weight:800; margin-bottom:6px; color:#fff;">Dashboard Terkunci</h2>
+    <p style="font-size:13px; color:var(--text-muted, #9ca3af); margin-bottom:22px;">Masukkan PIN untuk membuka dashboard</p>
+    <input type="password" id="dashboard-pin-unlock" placeholder="PIN" style="width:100%; padding:14px 18px; background:rgba(255,255,255,0.05); color:#fff; border:1px solid rgba(255,255,255,0.12); border-radius:10px; font-size:18px; text-align:center; letter-spacing:8px; margin-bottom:14px; outline:none;" maxlength="32" onkeydown="if(event.key==='Enter')unlockDashboard()">
+    <button onclick="unlockDashboard()" style="width:100%; padding:13px; background:linear-gradient(135deg,#3b82f6,#2563eb); color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:700; cursor:pointer; transition:all .2s;">Unlock</button>
+    <div id="dashboard-pin-error" style="color:#f43f5e; font-size:12px; font-weight:600; margin-top:12px; display:none;">PIN Salah!</div>
+  </div>
+</div>
 
 <!-- AUTH MODAL - appears when API key needed for checker -->
 <div id="pin-modal" style="display:none;">
@@ -2527,61 +3448,65 @@ html, body {
 
   <div class="sidebar-nav">
     <div class="nav-section-label">OVERVIEW</div>
-    <button type="button" class="sidebar-item tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
+    <button type="button" class="sidebar-item tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')" title="Dashboard">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
       <span class="item-text">Dashboard</span>
     </button>
-    <button type="button" class="sidebar-item tab-btn" data-tab="single" onclick="switchTab('single')">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
-      <span class="item-text">Account Checkers</span>
-      <span class="sidebar-badge">6</span>
-    </button>
-
     <div class="nav-section-label">CHECKER MODULES</div>
-    <button type="button" class="sidebar-item tab-btn" data-tab="single" onclick="switchTab('single')">
+    <button type="button" class="sidebar-item tab-btn" data-tab="single" onclick="switchTab('single')" title="Netflix Token Suite">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="15" x="2" y="4.5" rx="2"/><polyline points="8 10 12 13 16 10"/></svg>
       <span class="item-text">Netflix Token Suite</span>
       <span class="service-dot red"></span>
     </button>
-    <button type="button" class="sidebar-item tab-btn" data-tab="bulk" onclick="switchTab('bulk')">
+    <button type="button" class="sidebar-item tab-btn" data-tab="bulk" onclick="switchTab('bulk')" title="Netflix Bulk Check">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
       <span class="item-text">Netflix Bulk Check</span>
       <span class="service-dot red"></span>
     </button>
-    <button type="button" class="sidebar-item tab-btn" data-tab="disney" onclick="switchTab('disney')">
+    <button type="button" class="sidebar-item tab-btn" data-tab="disney" onclick="switchTab('disney')" title="Disney+ BAMTech">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/></svg>
       <span class="item-text">Disney+ BAMTech</span>
       <span class="service-dot teal"></span>
     </button>
-    <button type="button" class="sidebar-item tab-btn" data-tab="crunchyroll" onclick="switchTab('crunchyroll')">
+    <button type="button" class="sidebar-item tab-btn" data-tab="crunchyroll" onclick="switchTab('crunchyroll')" title="Crunchyroll Anime">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6a6 6 0 1 0 6 6 6 6 0 0 0-6-6Z"/><circle cx="12" cy="12" r="2"/></svg>
       <span class="item-text">Crunchyroll Anime</span>
       <span class="service-dot orange"></span>
     </button>
-    <button type="button" class="sidebar-item tab-btn" data-tab="expressvpn" onclick="switchTab('expressvpn')">
+    <button type="button" class="sidebar-item tab-btn" data-tab="expressvpn" onclick="switchTab('expressvpn')" title="ExpressVPN Auth">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       <span class="item-text">ExpressVPN Auth</span>
       <span class="service-dot crimson"></span>
     </button>
-    <button type="button" class="sidebar-item tab-btn" data-tab="spotify" onclick="switchTab('spotify')">
+    <button type="button" class="sidebar-item tab-btn" data-tab="spotify" onclick="switchTab('spotify')" title="Spotify Suite">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
       <span class="item-text">Spotify Suite</span>
       <span class="service-dot green"></span>
     </button>
-    <button type="button" class="sidebar-item tab-btn" data-tab="outlook" onclick="switchTab('outlook')">
+    <button type="button" class="sidebar-item tab-btn" data-tab="outlook" onclick="switchTab('outlook')" title="Outlook / Hotmail">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
       <span class="item-text">Outlook / Hotmail</span>
       <span class="service-dot blue"></span>
     </button>
+    <button type="button" class="sidebar-item tab-btn" data-tab="openai" onclick="switchTab('openai')" title="OpenAI / ChatGPT">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 0-4 4v1H6a4 4 0 0 0 0 8h1v3a4 4 0 0 0 8 0v-1h2a4 4 0 0 0 0-8h-1V6a4 4 0 0 0-4-4z"/></svg>
+      <span class="item-text">OpenAI / ChatGPT</span>
+      <span class="service-dot green"></span>
+    </button>
+    <button type="button" class="sidebar-item tab-btn" data-tab="primevideo" onclick="switchTab('primevideo')" title="Prime Video">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      <span class="item-text">Prime Video</span>
+      <span class="service-dot blue"></span>
+    </button>
 
     <div class="nav-section-label">DATA & NETWORK</div>
-    <button type="button" class="sidebar-item" onclick="window.open('/admin','_blank')">
+    <button type="button" class="sidebar-item" onclick="window.open('/admin','_blank')" title="Admin Panel">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       <span class="item-text">🛡️ Admin Panel</span>
     </button>
 
     <div class="nav-section-label">SYSTEM</div>
-    <button type="button" class="sidebar-item tab-btn" data-tab="settings" onclick="switchTab('settings')">
+    <button type="button" class="sidebar-item tab-btn" data-tab="settings" onclick="switchTab('settings')" title="Settings & Security">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       <span class="item-text">Settings & Security</span>
     </button>
@@ -2889,6 +3814,60 @@ html, body {
         </div>
       </div>
 
+      <!-- 7. OpenAI / ChatGPT -->
+      <div class="service-hub-card">
+        <div class="service-hub-header">
+          <div class="service-hub-brand">
+            <div class="service-hub-icon" style="background:rgba(16,163,127,0.1); border-color:rgba(16,163,127,0.3); color:#10a37f;">🤖</div>
+            <div>
+              <div class="service-hub-title">OpenAI / ChatGPT</div>
+              <div class="service-hub-sub">Cookie Checker & Plan Detection</div>
+            </div>
+          </div>
+          <span class="service-hub-status-badge badge-active">Active</span>
+        </div>
+        <div class="service-hub-desc">Verify ChatGPT session cookies. Detects Free, Plus, Pro, Team & Enterprise plans. Supports JSON, Netscape & raw token formats.</div>
+        <div class="service-hub-metrics">
+          <div class="hub-metric-item"><div class="hub-metric-num" id="hub-stat-oai-checks">0</div><div class="hub-metric-label">Checks</div></div>
+          <div class="hub-metric-item"><div class="hub-metric-num text-emerald" id="hub-stat-oai-live">0</div><div class="hub-metric-label">Live</div></div>
+          <div class="hub-metric-item"><div class="hub-metric-num text-rose" id="hub-stat-oai-bad">0</div><div class="hub-metric-label">Dead</div></div>
+        </div>
+        <div class="service-hub-footer" style="display:flex; flex-direction:column; gap:6px;">
+          <button type="button" class="hub-launch-btn" onclick="switchTab('openai')">Open Checker →</button>
+          <button type="button" class="btn-grab-account" onclick="grabRandomLiveAccount('openai', this)" title="Ambil Akun Live OpenAI secara acak dari database">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Ambil Akun Live</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 8. Prime Video -->
+      <div class="service-hub-card">
+        <div class="service-hub-header">
+          <div class="service-hub-brand">
+            <div class="service-hub-icon" style="background:rgba(0,168,225,0.1); border-color:rgba(0,168,225,0.3); color:#00a8e1;">▶️</div>
+            <div>
+              <div class="service-hub-title">Prime Video</div>
+              <div class="service-hub-sub">Cookie Checker & Subscription Detection</div>
+            </div>
+          </div>
+          <span class="service-hub-status-badge badge-active">Active</span>
+        </div>
+        <div class="service-hub-desc">Validate Amazon Prime Video session cookies. Detects Prime subscription status, account region & profile information.</div>
+        <div class="service-hub-metrics">
+          <div class="hub-metric-item"><div class="hub-metric-num" id="hub-stat-pv-checks">0</div><div class="hub-metric-label">Checks</div></div>
+          <div class="hub-metric-item"><div class="hub-metric-num text-emerald" id="hub-stat-pv-live">0</div><div class="hub-metric-label">Live</div></div>
+          <div class="hub-metric-item"><div class="hub-metric-num text-rose" id="hub-stat-pv-bad">0</div><div class="hub-metric-label">Dead</div></div>
+        </div>
+        <div class="service-hub-footer" style="display:flex; flex-direction:column; gap:6px;">
+          <button type="button" class="hub-launch-btn" onclick="switchTab('primevideo')">Open Checker →</button>
+          <button type="button" class="btn-grab-account" onclick="grabRandomLiveAccount('primevideo', this)" title="Ambil Akun Live PrimeVideo secara acak dari database">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Ambil Akun Live</span>
+          </button>
+        </div>
+      </div>
+
       
     </div>
 
@@ -2916,7 +3895,6 @@ html, body {
           <div style="font-weight:700; font-size:13.5px; color:#fff; display:flex; align-items:center; gap:8px;">
             <span>🌐</span> Proxy Network Health
           </div>
-          <button class="btn-subtle btn-sm" onclick="switchTab('proxymanager')">Manage Pool →</button>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px;">
           <div class="meta-box"><div class="label">Total In Pool</div><div class="val text-violet" id="dash-tele-total">10,534</div></div>
@@ -2940,7 +3918,7 @@ html, body {
         <span>All Checkers</span>
       </button>
       <div class="checker-quick-tabs">
-        <button type="button" class="checker-pill active" onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill " onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill " onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill " onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill " onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill " onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill " onclick="switchTab('outlook')">Outlook</button>
+        <button type="button" class="checker-pill active" onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill " onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill " onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill " onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill " onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill " onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill " onclick="switchTab('outlook')">Outlook</button><button type="button" class="checker-pill " onclick="switchTab('openai')">OpenAI</button><button type="button" class="checker-pill " onclick="switchTab('primevideo')">PrimeVideo</button>
       </div>
     </div>
     
@@ -2965,7 +3943,7 @@ html, body {
         <span>All Checkers</span>
       </button>
       <div class="checker-quick-tabs">
-        <button type="button" class="checker-pill " onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill " onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill active" onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill " onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill " onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill " onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill " onclick="switchTab('outlook')">Outlook</button>
+        <button type="button" class="checker-pill " onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill " onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill active" onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill " onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill " onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill " onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill " onclick="switchTab('outlook')">Outlook</button><button type="button" class="checker-pill " onclick="switchTab('openai')">OpenAI</button><button type="button" class="checker-pill " onclick="switchTab('primevideo')">PrimeVideo</button>
       </div>
     </div>
     
@@ -3104,6 +4082,23 @@ html, body {
 
       <div id="disney-bulk-combo-form">
         <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Combo Check</label>
+
+        <!-- File Upload Zone for Disney Combo -->
+        <div id="disney-combo-drop-zone" style="border:2px dashed var(--border); border-radius:var(--radius-md); padding:16px; text-align:center; margin-bottom:8px; cursor:pointer; transition:all 0.2s; background:var(--bg-subtle);"
+             onclick="document.getElementById('disney-combo-file-input').click()"
+             ondragover="event.preventDefault(); this.style.borderColor='#1ce783'; this.style.background='rgba(28,231,131,0.08)';"
+             ondragleave="this.style.borderColor='var(--border)'; this.style.background='var(--bg-subtle)';"
+             ondrop="event.preventDefault(); this.style.borderColor='var(--border)'; this.style.background='var(--bg-subtle)'; handleDisneyComboFiles(event.dataTransfer.files);">
+          <div style="font-size:24px; margin-bottom:4px;">📁</div>
+          <div style="font-size:11.5px; font-weight:600; color:var(--text-main);">Drag & Drop Combo Files</div>
+          <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">atau klik untuk browse • .txt (email:password per baris)</div>
+          <div id="disney-combo-file-info" style="font-size:11px; color:#1ce783; margin-top:6px; font-weight:600; display:none;"></div>
+          <input type="file" id="disney-combo-file-input" multiple accept=".txt,.csv" style="display:none;" onchange="handleDisneyComboFiles(this.files)">
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+          <span style="font-size:11px; color:var(--text-dim);">— atau paste manual di bawah —</span>
+        </div>
+
         <textarea id="disney-bulk-input" placeholder="Paste combo list (email:password per baris)..." style="height:120px;"></textarea>
         <div style="display:flex; gap:8px; margin-top:8px;">
           <button id="disney-bulk-btn" class="btn-primary" style="flex:2;" onclick="runDisneyBulk()">Mulai Bulk Check</button>
@@ -3113,7 +4108,25 @@ html, body {
 
       <div id="disney-bulk-cookie-form" style="display:none;">
         <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:#1ce783;">🍪 Bulk Cookie Check</label>
-        <textarea id="disney-bulk-cookie-input" placeholder="Paste cookies (satu cookie per baris)...&#10;Setiap baris = satu akun Disney+&#10;Format: Netscape .txt, JSON, key=value, atau raw token" style="height:140px;"></textarea>
+
+        <!-- File Upload Zone for Disney Cookie -->
+        <div id="disney-cookie-drop-zone" style="border:2px dashed var(--border); border-radius:var(--radius-md); padding:16px; text-align:center; margin-bottom:8px; cursor:pointer; transition:all 0.2s; background:var(--bg-subtle);"
+             onclick="document.getElementById('disney-cookie-file-input').click()"
+             ondragover="event.preventDefault(); this.style.borderColor='#1ce783'; this.style.background='rgba(28,231,131,0.08)';"
+             ondragleave="this.style.borderColor='var(--border)'; this.style.background='var(--bg-subtle)';"
+             ondrop="event.preventDefault(); this.style.borderColor='var(--border)'; this.style.background='var(--bg-subtle)'; handleDisneyCookieFiles(event.dataTransfer.files);">
+          <div style="font-size:24px; margin-bottom:4px;">🍪</div>
+          <div style="font-size:11.5px; font-weight:600; color:var(--text-main);">Drag & Drop Cookie Files</div>
+          <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">atau klik untuk browse • .txt, .json, folder (1 file = 1 akun)</div>
+          <div id="disney-cookie-file-info" style="font-size:11px; color:#1ce783; margin-top:6px; font-weight:600; display:none;"></div>
+          <input type="file" id="disney-cookie-file-input" multiple accept=".txt,.json,.cookie,.cookies" style="display:none;" onchange="handleDisneyCookieFiles(this.files)">
+          <input type="file" id="disney-cookie-folder-input" webkitdirectory directory style="display:none;" onchange="handleDisneyCookieFiles(this.files)">
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+          <span style="font-size:11px; color:var(--text-dim);">— atau paste manual di bawah —</span>
+        </div>
+
+        <textarea id="disney-bulk-cookie-input" placeholder="Paste cookies Disney+ di sini...&#10;Satu blok Netscape/JSON = 1 akun&#10;Pisah antar akun dengan baris kosong (Enter 2x) atau ---" style="height:140px;"></textarea>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
           <div class="toggle-wrap" onclick="document.getElementById('disney-bulk-cookie-proxy').click()">
             <input type="checkbox" id="disney-bulk-cookie-proxy" onclick="event.stopPropagation()">
@@ -3149,7 +4162,7 @@ html, body {
         <span>All Checkers</span>
       </button>
       <div class="checker-quick-tabs">
-        <button type="button" class="checker-pill " onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill " onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill " onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill active" onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill " onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill " onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill " onclick="switchTab('outlook')">Outlook</button>
+        <button type="button" class="checker-pill " onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill " onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill " onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill active" onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill " onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill " onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill " onclick="switchTab('outlook')">Outlook</button><button type="button" class="checker-pill " onclick="switchTab('openai')">OpenAI</button><button type="button" class="checker-pill " onclick="switchTab('primevideo')">PrimeVideo</button>
       </div>
     </div>
     
@@ -3291,6 +4304,23 @@ html, body {
 
       <div id="cr-bulk-combo-form">
         <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Combo Check</label>
+
+        <!-- File Upload Zone for Combo -->
+        <div id="cr-combo-drop-zone" style="border:2px dashed var(--border); border-radius:var(--radius-md); padding:16px; text-align:center; margin-bottom:8px; cursor:pointer; transition:all 0.2s; background:var(--bg-subtle);"
+             onclick="document.getElementById('cr-combo-file-input').click()"
+             ondragover="event.preventDefault(); this.style.borderColor='var(--primary)'; this.style.background='rgba(244,117,33,0.08)';"
+             ondragleave="this.style.borderColor='var(--border)'; this.style.background='var(--bg-subtle)';"
+             ondrop="event.preventDefault(); this.style.borderColor='var(--border)'; this.style.background='var(--bg-subtle)'; handleCrComboFiles(event.dataTransfer.files);">
+          <div style="font-size:24px; margin-bottom:4px;">📁</div>
+          <div style="font-size:11.5px; font-weight:600; color:var(--text-main);">Drag & Drop Combo Files</div>
+          <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">atau klik untuk browse • .txt (email:password per baris)</div>
+          <div id="cr-combo-file-info" style="font-size:11px; color:#f47521; margin-top:6px; font-weight:600; display:none;"></div>
+          <input type="file" id="cr-combo-file-input" multiple accept=".txt,.csv" style="display:none;" onchange="handleCrComboFiles(this.files)">
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+          <span style="font-size:11px; color:var(--text-dim);">— atau paste manual di bawah —</span>
+        </div>
+
         <textarea id="cr-bulk-input" placeholder="Paste combo list (email:password per baris)..." style="height:120px;"></textarea>
         <div style="display:flex; gap:8px; margin-top:8px;">
           <button id="cr-bulk-btn" class="btn-primary" style="flex:2;" onclick="runCrBulk()">Mulai Bulk Check</button>
@@ -3300,7 +4330,25 @@ html, body {
 
       <div id="cr-bulk-cookie-form" style="display:none;">
         <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:#f47521;">🍪 Bulk Cookie Check</label>
-        <textarea id="cr-bulk-cookie-input" placeholder="Paste cookies (satu cookie per baris)...&#10;Setiap baris = satu akun Crunchyroll&#10;Format: Netscape .txt, JSON, key=value, atau raw token" style="height:140px;"></textarea>
+
+        <!-- File Upload Zone for Cookie -->
+        <div id="cr-cookie-drop-zone" style="border:2px dashed var(--border); border-radius:var(--radius-md); padding:16px; text-align:center; margin-bottom:8px; cursor:pointer; transition:all 0.2s; background:var(--bg-subtle);"
+             onclick="document.getElementById('cr-cookie-file-input').click()"
+             ondragover="event.preventDefault(); this.style.borderColor='#f47521'; this.style.background='rgba(244,117,33,0.08)';"
+             ondragleave="this.style.borderColor='var(--border)'; this.style.background='var(--bg-subtle)';"
+             ondrop="event.preventDefault(); this.style.borderColor='var(--border)'; this.style.background='var(--bg-subtle)'; handleCrCookieFiles(event.dataTransfer.files);">
+          <div style="font-size:24px; margin-bottom:4px;">🍪</div>
+          <div style="font-size:11.5px; font-weight:600; color:var(--text-main);">Drag & Drop Cookie Files</div>
+          <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">atau klik untuk browse • .txt, .json, folder (1 file = 1 akun)</div>
+          <div id="cr-cookie-file-info" style="font-size:11px; color:#f47521; margin-top:6px; font-weight:600; display:none;"></div>
+          <input type="file" id="cr-cookie-file-input" multiple accept=".txt,.json,.cookie,.cookies" style="display:none;" onchange="handleCrCookieFiles(this.files)">
+          <input type="file" id="cr-cookie-folder-input" webkitdirectory directory style="display:none;" onchange="handleCrCookieFiles(this.files)">
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+          <span style="font-size:11px; color:var(--text-dim);">— atau paste manual di bawah —</span>
+        </div>
+
+        <textarea id="cr-bulk-cookie-input" placeholder="Paste cookies Crunchyroll di sini...&#10;Satu blok Netscape/JSON = 1 akun&#10;Pisah antar akun dengan baris kosong (Enter 2x) atau ---&#10;Contoh: paste file .txt cookies langsung" style="height:140px;"></textarea>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
           <div class="toggle-wrap" onclick="document.getElementById('cr-bulk-cookie-proxy').click()">
             <input type="checkbox" id="cr-bulk-cookie-proxy" onclick="event.stopPropagation()">
@@ -3336,7 +4384,7 @@ html, body {
         <span>All Checkers</span>
       </button>
       <div class="checker-quick-tabs">
-        <button type="button" class="checker-pill " onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill " onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill " onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill " onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill active" onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill " onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill " onclick="switchTab('outlook')">Outlook</button>
+        <button type="button" class="checker-pill " onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill " onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill " onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill " onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill active" onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill " onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill " onclick="switchTab('outlook')">Outlook</button><button type="button" class="checker-pill " onclick="switchTab('openai')">OpenAI</button><button type="button" class="checker-pill " onclick="switchTab('primevideo')">PrimeVideo</button>
       </div>
     </div>
     
@@ -3474,7 +4522,7 @@ html, body {
         <span>All Checkers</span>
       </button>
       <div class="checker-quick-tabs">
-        <button type="button" class="checker-pill " onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill " onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill " onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill " onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill " onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill active" onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill " onclick="switchTab('outlook')">Outlook</button>
+        <button type="button" class="checker-pill " onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill " onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill " onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill " onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill " onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill active" onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill " onclick="switchTab('outlook')">Outlook</button><button type="button" class="checker-pill " onclick="switchTab('openai')">OpenAI</button><button type="button" class="checker-pill " onclick="switchTab('primevideo')">PrimeVideo</button>
       </div>
     </div>
     
@@ -3723,6 +4771,275 @@ html, body {
     </div>
   </div>
 
+  <!-- PANEL: OPENAI / CHATGPT -->
+    <div id="panel-openai" class="section-panel">
+    <div class="checker-top-bar">
+      <button type="button" class="checker-back-btn" onclick="switchTab('dashboard')" title="Back to Dashboard">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        <span>All Checkers</span>
+      </button>
+      <div class="checker-quick-tabs">
+        <button type="button" class="checker-pill " onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill " onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill " onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill " onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill " onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill " onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill " onclick="switchTab('outlook')">Outlook</button><button type="button" class="checker-pill active" onclick="switchTab('openai')">OpenAI</button><button type="button" class="checker-pill " onclick="switchTab('primevideo')">PrimeVideo</button>
+      </div>
+    </div>
+    
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <div style="font-size:20px;">🤖</div>
+      <div>
+        <div style="font-weight:700; font-size:16px; color:var(--primary);">OpenAI / ChatGPT Cookie Checker</div>
+        <div style="font-size:11px; color:var(--text-muted);">Validate ChatGPT session cookies. Supports JSON array, Netscape .txt, key=value & raw token formats.</div>
+      </div>
+    </div>
+
+    <!-- Single OpenAI Check -->
+    <div class="card" style="padding:20px; margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div style="font-size:13.5px; font-weight:700; color:#fff; display:flex; align-items:center; gap:8px;">
+          <span>OpenAI / ChatGPT</span>
+          <span class="badge" style="background:rgba(16,163,127,0.12); color:#10a37f; border:1px solid rgba(16,163,127,0.25); font-size:10px;">Session Token</span>
+        </div>
+        <span class="pill-tag" style="color:var(--text-muted); font-size:11px;">Single Cookie Check</span>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="font-size:11.5px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; display:block;">ChatGPT Cookie</label>
+        <textarea id="openai-cookie-input" placeholder="Paste cookie di sini...&#10;&#10;Format yang didukung:&#10;• JSON array: [{&quot;name&quot;:&quot;__Secure-next-auth.session-token&quot;,&quot;value&quot;:&quot;...&quot;}]&#10;• Netscape .txt (tab-separated)&#10;• Key=Value: __Secure-next-auth.session-token=eyJ...&#10;• Raw token value (string panjang)" style="height:120px;"></textarea>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+        <div class="toggle-wrap" onclick="document.getElementById('openai-proxy-toggle').click()">
+          <input type="checkbox" id="openai-proxy-toggle" onclick="event.stopPropagation()">
+          <span style="font-size:11.5px; color:var(--text-secondary);">Pakai Proxy Rotasi</span>
+        </div>
+        <span style="font-size:11px; color:var(--text-dim);">Plus · Pro · Team · Enterprise detection</span>
+      </div>
+
+      <button type="button" id="openai-single-btn" class="btn-primary" onclick="runOpenAISingle()" style="width:100%;">
+        <span class="btn-spinner"><svg class="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span>
+        <span id="openai-single-btn-text">CHECK COOKIE</span>
+      </button>
+
+      <div id="openai-single-out" class="card-out"></div>
+    </div>
+
+    <!-- OpenAI Stats Dashboard -->
+    <div id="openai-stats-dashboard" class="card" style="padding:16px; margin-bottom:14px; display:none;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <div style="font-weight:700; font-size:13px; color:var(--primary);">📊 Session Stats</div>
+        <button class="btn-secondary" style="padding:3px 10px; font-size:10px;" onclick="resetOpenAIStats()">Reset</button>
+      </div>
+      <div class="checker-stats-flex" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+        <div style="position:relative;">
+          <canvas id="openai-donut-chart" width="100" height="100"></canvas>
+          <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center;">
+            <span id="openai-donut-total" style="font-size:20px; font-weight:800; color:var(--text-primary);">0</span>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; flex:1; min-width:180px;">
+          <div style="text-align:center;">
+            <div id="openai-stat-live" style="font-size:22px; font-weight:800; color:#10b981;">0</div>
+            <div style="font-size:10px; color:var(--text-muted);">LIVE (Paid)</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="openai-stat-free" style="font-size:22px; font-weight:800; color:#38bdf8;">0</div>
+            <div style="font-size:10px; color:var(--text-muted);">FREE</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="openai-stat-dead" style="font-size:22px; font-weight:800; color:#f43f5e;">0</div>
+            <div style="font-size:10px; color:var(--text-muted);">DEAD</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="openai-stat-error" style="font-size:22px; font-weight:800; color:#f59e0b;">0</div>
+            <div style="font-size:10px; color:var(--text-muted);">ERROR</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+          <span style="color:var(--text-muted);">Hit Rate</span>
+          <span id="openai-hit-rate" style="font-weight:700; color:var(--primary);">0%</span>
+        </div>
+        <div style="background:var(--bg-subtle); border-radius:6px; height:6px; overflow:hidden;">
+          <div id="openai-hit-rate-bar" style="height:100%; width:0%; border-radius:6px; transition:width 0.4s; background:linear-gradient(90deg, #10b981, #10a37f);"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bulk OpenAI Check -->
+    <div class="card" style="padding:16px;">
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Cookie Checker</label>
+
+      <!-- File Upload Zone -->
+      <div id="openai-drop-zone" style="border:2px dashed var(--border); border-radius:var(--radius-md); padding:20px; text-align:center; margin-bottom:10px; cursor:pointer; transition:all 0.2s; background:var(--bg-subtle);"
+           onclick="document.getElementById('openai-file-input').click()"
+           ondragover="event.preventDefault(); this.style.borderColor='var(--primary)'; this.style.background='rgba(16,163,127,0.08)';"
+           ondragleave="this.style.borderColor='var(--border)'; this.style.background='var(--bg-subtle)';"
+           ondrop="event.preventDefault(); this.style.borderColor='var(--border)'; this.style.background='var(--bg-subtle)'; handleOpenAIFiles(event.dataTransfer.files);">
+        <div style="font-size:28px; margin-bottom:6px;">📁</div>
+        <div style="font-size:12px; font-weight:600; color:var(--text-main);">Drag & Drop Cookie Files</div>
+        <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">atau klik untuk browse • Supports .txt, .json, .cookie, folder/multi-file</div>
+        <div id="openai-file-info" style="font-size:11px; color:var(--primary); margin-top:8px; font-weight:600; display:none;"></div>
+        <input type="file" id="openai-file-input" multiple accept=".txt,.json,.cookie,.cookies" style="display:none;" onchange="handleOpenAIFiles(this.files)">
+        <input type="file" id="openai-folder-input" webkitdirectory directory style="display:none;" onchange="handleOpenAIFiles(this.files)">
+      </div>
+
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <span style="font-size:11px; color:var(--text-dim);">— atau paste manual di bawah —</span>
+      </div>
+
+      <textarea id="openai-bulk-input" placeholder="Paste cookies di sini:&#10;&#10;Format per entry (pisahkan antar cookie dengan baris kosong):&#10;• JSON array: [{&quot;name&quot;:&quot;__Secure-next-auth.session-token&quot;,...}]&#10;• Netscape .txt (tab-separated)&#10;• Key=Value: __Secure-next-auth.session-token=eyJ...&#10;• Raw token values (satu per baris)" style="height:120px;"></textarea>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+        <button id="openai-bulk-btn" class="btn-primary" style="flex:2;" onclick="runOpenAIBulk()">Mulai Bulk Check</button>
+        <button class="btn-secondary" style="flex:1;" onclick="stopOpenAIBulk()">⏹ Stop</button>
+        <button class="btn-secondary" style="flex:1;" onclick="exportOpenAIHits()">📥 Export Hits</button>
+        <div id="openai-bulk-stats" style="font-size:12px; font-weight:600; color:var(--text-muted);"></div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+        <button class="btn-secondary" style="flex:1;" onclick="exportOpenAIAll()">📋 Export All</button>
+      </div>
+      <div id="openai-bulk-progress" style="margin-top:8px; display:none;">
+        <div style="background:var(--bg-subtle); border-radius:6px; height:6px; overflow:hidden;">
+          <div id="openai-progress-bar" style="background:var(--primary); height:100%; width:0%; transition:width 0.3s;"></div>
+        </div>
+      </div>
+      <div id="openai-bulk-out" style="max-height:400px; overflow-y:auto; margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- PANEL: PRIME VIDEO -->
+    <div id="panel-primevideo" class="section-panel">
+    <div class="checker-top-bar">
+      <button type="button" class="checker-back-btn" onclick="switchTab('dashboard')" title="Back to Dashboard">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        <span>All Checkers</span>
+      </button>
+      <div class="checker-quick-tabs">
+        <button type="button" class="checker-pill " onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill " onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill " onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill " onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill " onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill " onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill " onclick="switchTab('outlook')">Outlook</button><button type="button" class="checker-pill " onclick="switchTab('openai')">OpenAI</button><button type="button" class="checker-pill active" onclick="switchTab('primevideo')">PrimeVideo</button>
+      </div>
+    </div>
+    
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <div style="font-size:20px;">▶️</div>
+      <div>
+        <div style="font-weight:700; font-size:16px; color:var(--primary);">Prime Video Cookie Checker</div>
+        <div style="font-size:11px; color:var(--text-muted);">Validate Amazon Prime Video session cookies. Supports JSON array, Netscape .txt, key=value & raw cookie formats.</div>
+      </div>
+    </div>
+
+    <!-- Single PrimeVideo Check -->
+    <div class="card" style="padding:20px; margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div style="font-size:13.5px; font-weight:700; color:#fff; display:flex; align-items:center; gap:8px;">
+          <span>Prime Video</span>
+          <span class="badge" style="background:rgba(0,168,225,0.12); color:#00a8e1; border:1px solid rgba(0,168,225,0.25); font-size:10px;">Session Cookie</span>
+        </div>
+        <span class="pill-tag" style="color:var(--text-muted); font-size:11px;">Single Cookie Check</span>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="font-size:11.5px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; display:block;">PrimeVideo Cookie</label>
+        <textarea id="pv-cookie-input" placeholder="Paste cookie di sini...&#10;&#10;Format yang didukung:&#10;• JSON array: [{&quot;name&quot;:&quot;session-token&quot;,&quot;value&quot;:&quot;...&quot;}]&#10;• Netscape .txt (tab-separated)&#10;• Key=Value: session-token=xxx; ubid-main=yyy&#10;• Raw cookie header string" style="height:120px;"></textarea>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+        <div class="toggle-wrap" onclick="document.getElementById('pv-proxy-toggle').click()">
+          <input type="checkbox" id="pv-proxy-toggle" onclick="event.stopPropagation()">
+          <span style="font-size:11.5px; color:var(--text-secondary);">Pakai Proxy Rotasi</span>
+        </div>
+        <span style="font-size:11px; color:var(--text-dim);">Prime · Free detection</span>
+      </div>
+
+      <button type="button" id="pv-single-btn" class="btn-primary" onclick="runPVSingle()" style="width:100%;">
+        <span class="btn-spinner"><svg class="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span>
+        <span id="pv-single-btn-text">CHECK COOKIE</span>
+      </button>
+
+      <div id="pv-single-out" class="card-out"></div>
+    </div>
+
+    <!-- PrimeVideo Stats Dashboard -->
+    <div id="pv-stats-dashboard" class="card" style="padding:16px; margin-bottom:14px; display:none;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <div style="font-weight:700; font-size:13px; color:var(--primary);">📊 Session Stats</div>
+        <button class="btn-secondary" style="padding:3px 10px; font-size:10px;" onclick="resetPVStats()">Reset</button>
+      </div>
+      <div class="checker-stats-flex" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+        <div style="position:relative;">
+          <canvas id="pv-donut-chart" width="100" height="100"></canvas>
+          <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center;">
+            <span id="pv-donut-total" style="font-size:20px; font-weight:800; color:var(--text-primary);">0</span>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; flex:1; min-width:180px;">
+          <div style="text-align:center;">
+            <div id="pv-stat-live" style="font-size:22px; font-weight:800; color:#10b981;">0</div>
+            <div style="font-size:10px; color:var(--text-muted);">LIVE (Prime)</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="pv-stat-free" style="font-size:22px; font-weight:800; color:#38bdf8;">0</div>
+            <div style="font-size:10px; color:var(--text-muted);">FREE</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="pv-stat-dead" style="font-size:22px; font-weight:800; color:#f43f5e;">0</div>
+            <div style="font-size:10px; color:var(--text-muted);">DEAD</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="pv-stat-error" style="font-size:22px; font-weight:800; color:#f59e0b;">0</div>
+            <div style="font-size:10px; color:var(--text-muted);">ERROR</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+          <span style="color:var(--text-muted);">Hit Rate</span>
+          <span id="pv-hit-rate" style="font-weight:700; color:var(--primary);">0%</span>
+        </div>
+        <div style="background:var(--bg-subtle); border-radius:6px; height:6px; overflow:hidden;">
+          <div id="pv-hit-rate-bar" style="height:100%; width:0%; border-radius:6px; transition:width 0.4s; background:linear-gradient(90deg, #10b981, #00a8e1);"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bulk PrimeVideo Check -->
+    <div class="card" style="padding:16px;">
+      <label style="font-size:12px; font-weight:600; margin-bottom:6px; display:block; color:var(--primary);">Bulk Cookie Checker</label>
+
+      <!-- File Upload Zone -->
+      <div id="pv-drop-zone" style="border:2px dashed var(--border); border-radius:var(--radius-md); padding:20px; text-align:center; margin-bottom:10px; cursor:pointer; transition:all 0.2s; background:var(--bg-subtle);"
+           onclick="document.getElementById('pv-file-input').click()"
+           ondragover="event.preventDefault(); this.style.borderColor='var(--primary)'; this.style.background='rgba(0,168,225,0.08)';"
+           ondragleave="this.style.borderColor='var(--border)'; this.style.background='var(--bg-subtle)';"
+           ondrop="event.preventDefault(); this.style.borderColor='var(--border)'; this.style.background='var(--bg-subtle)'; handlePVFiles(event.dataTransfer.files);">
+        <div style="font-size:28px; margin-bottom:6px;">📁</div>
+        <div style="font-size:12px; font-weight:600; color:var(--text-main);">Drag & Drop Cookie Files</div>
+        <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">atau klik untuk browse • Supports .txt, .json, .cookie, folder/multi-file</div>
+        <div id="pv-file-info" style="font-size:11px; color:var(--primary); margin-top:8px; font-weight:600; display:none;"></div>
+        <input type="file" id="pv-file-input" multiple accept=".txt,.json,.cookie,.cookies" style="display:none;" onchange="handlePVFiles(this.files)">
+      </div>
+
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <span style="font-size:11px; color:var(--text-dim);">— atau paste manual di bawah —</span>
+      </div>
+
+      <textarea id="pv-bulk-input" placeholder="Paste cookies di sini:&#10;&#10;Format per entry (pisahkan antar cookie dengan baris kosong):&#10;• JSON array: [{&quot;name&quot;:&quot;session-token&quot;,...}]&#10;• Netscape .txt (tab-separated)&#10;• Key=Value: session-token=xxx; ubid-main=yyy&#10;• Raw cookie header" style="height:120px;"></textarea>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+        <button id="pv-bulk-btn" class="btn-primary" style="flex:2;" onclick="runPVBulk()">Mulai Bulk Check</button>
+        <button class="btn-secondary" style="flex:1;" onclick="stopPVBulk()">⏹ Stop</button>
+        <button class="btn-secondary" style="flex:1;" onclick="exportPVHits()">📥 Export Hits</button>
+        <div id="pv-bulk-stats" style="font-size:12px; font-weight:600; color:var(--text-muted);"></div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+        <button class="btn-secondary" style="flex:1;" onclick="exportPVAll()">📋 Export All</button>
+      </div>
+      <div id="pv-bulk-progress" style="margin-top:8px; display:none;">
+        <div style="background:var(--bg-subtle); border-radius:6px; height:6px; overflow:hidden;">
+          <div id="pv-progress-bar" style="background:var(--primary); height:100%; width:0%; transition:width 0.3s;"></div>
+        </div>
+      </div>
+      <div id="pv-bulk-out" style="max-height:400px; overflow-y:auto; margin-top:12px;"></div>
+    </div>
+  </div>
+
   <!-- PANEL 2: BULK -->
     <div id="panel-bulk" class="section-panel">
     <div class="checker-top-bar">
@@ -3731,7 +5048,7 @@ html, body {
         <span>All Checkers</span>
       </button>
       <div class="checker-quick-tabs">
-        <button type="button" class="checker-pill " onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill active" onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill " onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill " onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill " onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill " onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill " onclick="switchTab('outlook')">Outlook</button>
+        <button type="button" class="checker-pill " onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill active" onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill " onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill " onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill " onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill " onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill " onclick="switchTab('outlook')">Outlook</button><button type="button" class="checker-pill " onclick="switchTab('openai')">OpenAI</button><button type="button" class="checker-pill " onclick="switchTab('primevideo')">PrimeVideo</button>
       </div>
     </div>
     
@@ -3862,6 +5179,7 @@ html, body {
         <option value="spotify">🟢 Spotify</option>
         <option value="outlook">🔵 Outlook</option>
         <option value="hotmail">🔵 Hotmail</option>
+        <option value="openai">🟢 OpenAI</option>
       </select>
       <select id="hist-filter-status" onchange="resetPageAndLoad()" style="flex:1; margin-bottom:0;">
         <option value="">Semua Status</option>
@@ -4258,6 +5576,47 @@ html, body {
           <button class="btn-primary" onclick="window.open('/admin','_blank')">🛡️ Buka Admin Panel</button>
         </div>
       </div>
+
+      <!-- Recheck Status Cookie/Account -->
+      <div class="card">
+        <div style="font-weight:700; font-size:14px; margin-bottom:6px; display:flex; align-items:center; gap:8px;">
+          <span>🔄</span> Recheck Status Cookie
+        </div>
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">
+          Periksa ulang status seluruh cookie/akun di history. Otomatis update status LIVE/DEAD/HOLD berdasarkan pengecekan terbaru.
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <select id="recheck-filter" style="flex:1; margin-bottom:0;">
+            <option value="all">Semua Record</option>
+            <option value="LIVE">Hanya LIVE</option>
+            <option value="DEAD">Hanya DEAD</option>
+            <option value="HOLD">Hanya HOLD</option>
+          </select>
+          <select id="recheck-type" style="flex:1; margin-bottom:0;">
+            <option value="all">Semua Service</option>
+            <option value="netflix">Netflix</option>
+            <option value="disney">Disney+</option>
+            <option value="crunchyroll">Crunchyroll</option>
+            <option value="spotify">Spotify</option>
+            <option value="openai">OpenAI</option>
+            <option value="outlook">Outlook</option>
+            <option value="expressvpn">ExpressVPN</option>
+            <option value="primevideo">Prime Video</option>
+          </select>
+          <button class="btn-primary" id="btn-recheck-all" onclick="recheckAllHistory()">🔄 Recheck Semua</button>
+        </div>
+        <div id="recheck-progress" style="display:none; margin-top:12px;">
+          <div style="font-size:12px; color:var(--text-secondary); margin-bottom:6px;">
+            <span id="recheck-status-text">Memproses...</span>
+          </div>
+          <div style="width:100%; height:8px; background:var(--border); border-radius:4px; overflow:hidden;">
+            <div id="recheck-bar" style="height:100%; width:0%; background:var(--accent); border-radius:4px; transition:width 0.3s;"></div>
+          </div>
+          <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">
+            <span id="recheck-stats"></span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -4344,6 +5703,56 @@ async function verifyPin() {
 }
 
 
+// ═══ DASHBOARD PIN LOCK ═══
+async function checkDashboardPinLock() {
+  try {
+    const res = await fetch('/api/dashboard-pin/status');
+    const data = await res.json();
+    if (data.enabled) {
+      // Check if already unlocked this session
+      if (sessionStorage.getItem('dashboard_unlocked') === '1') return;
+      // Show lock screen
+      const lockScreen = document.getElementById('dashboard-lock-screen');
+      lockScreen.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+      setTimeout(() => document.getElementById('dashboard-pin-unlock').focus(), 200);
+    }
+  } catch(e) {
+    // If API fails, don't lock
+  }
+}
+
+async function unlockDashboard() {
+  const pin = document.getElementById('dashboard-pin-unlock').value.trim();
+  const errEl = document.getElementById('dashboard-pin-error');
+  if (!pin) { errEl.style.display = 'block'; errEl.innerText = 'Masukkan PIN!'; return; }
+  try {
+    const res = await fetch('/api/dashboard-pin/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: pin })
+    });
+    const data = await res.json();
+    if (data.valid) {
+      sessionStorage.setItem('dashboard_unlocked', '1');
+      document.getElementById('dashboard-lock-screen').style.display = 'none';
+      document.body.style.overflow = '';
+      errEl.style.display = 'none';
+    } else {
+      errEl.style.display = 'block';
+      errEl.innerText = 'PIN Salah!';
+      document.getElementById('dashboard-pin-unlock').value = '';
+      document.getElementById('dashboard-pin-unlock').focus();
+    }
+  } catch(e) {
+    errEl.style.display = 'block';
+    errEl.innerText = 'Error: ' + e.message;
+  }
+}
+
+// Check PIN lock on page load
+checkDashboardPinLock();
+
 // managePin removed - API Key management is now in /admin panel
 
 // Audio synthesize
@@ -4403,7 +5812,11 @@ let historyAutoRefresh = null;
 
 
 function switchTab(tab) {
-  const tabs = ['dashboard', 'checkers', 'single', 'disney', 'crunchyroll', 'expressvpn', 'spotify', 'outlook', 'bulk', 'history', 'analytics', 'proxymanager', 'settings'];
+  // Auto-close mobile sidebar when switching tabs
+  if (window.innerWidth <= 992) {
+    toggleMobileSidebar(false);
+  }
+  const tabs = ['dashboard', 'checkers', 'single', 'disney', 'crunchyroll', 'expressvpn', 'spotify', 'outlook', 'openai', 'primevideo', 'bulk', 'history', 'analytics', 'proxymanager', 'settings'];
 
   // Toggle active on all matching buttons
   document.querySelectorAll('.tab-btn').forEach((btn) => {
@@ -4455,9 +5868,9 @@ function switchTab(tab) {
   // Theme switching
   const container = document.querySelector('.container');
   if (container) {
-    container.classList.remove('disney-theme', 'crunchyroll-theme', 'expressvpn-theme', 'spotify-theme', 'outlook-theme');
+    container.classList.remove('disney-theme', 'crunchyroll-theme', 'expressvpn-theme', 'spotify-theme', 'outlook-theme', 'openai-theme', 'primevideo-theme');
   }
-  document.body.classList.remove('disney-body', 'crunchyroll-body', 'expressvpn-body', 'spotify-body', 'outlook-body');
+  document.body.classList.remove('disney-body', 'crunchyroll-body', 'expressvpn-body', 'spotify-body', 'outlook-body', 'openai-body', 'primevideo-body');
   if (tab === 'disney') {
     if (container) container.classList.add('disney-theme');
     document.body.classList.add('disney-body');
@@ -4473,6 +5886,12 @@ function switchTab(tab) {
   } else if (tab === 'outlook') {
     if (container) container.classList.add('outlook-theme');
     document.body.classList.add('outlook-body');
+  } else if (tab === 'openai') {
+    if (container) container.classList.add('openai-theme');
+    document.body.classList.add('openai-body');
+  } else if (tab === 'primevideo') {
+    if (container) container.classList.add('primevideo-theme');
+    document.body.classList.add('primevideo-body');
   }
 
   // Clear history auto-refresh when switching away
@@ -4482,7 +5901,7 @@ function switchTab(tab) {
     fetchDashboardData();
   }
   if (tab === 'checkers') {
-    refreshDashboardCards();
+    fetchDashboardData();
   }
   if (tab === 'history') {
     loadHistory();
@@ -5423,6 +6842,7 @@ function renderHistoryTable(data) {
       <td>
         <div style="display:flex; gap:6px; align-items:center;">
           ${r.raw_cookie ? `<button class="btn-outline-sm" onclick="copyHistoryCookie(${r.id})">${copyLabel}</button>` : '-'}
+          <button class="btn-outline-sm" style="color:#f43f5e; border-color:rgba(244,63,94,0.3);" onclick="deleteHistoryItem(${r.id})" title="Hapus record ini">🗑</button>
         </div>
       </td>
     </tr>
@@ -5477,6 +6897,105 @@ async function clearDbHistory(onlyDead = false) {
   showToast(onlyDead ? 'Riwayat DEAD berhasil dibersihkan' : 'Seluruh database dibersihkan');
   curPage = 1;
   loadHistory();
+}
+
+async function deleteHistoryItem(id) {
+  if (!confirm('Hapus record #' + id + ' dari history?')) return;
+  try {
+    var res = await fetch('/api/history/delete', {
+      method: 'POST',
+      headers: getAuthHeaders({'Content-Type': 'application/json'}),
+      body: JSON.stringify({ id: id })
+    });
+    var data = await res.json();
+    if (data.status === 'ok') {
+      showToast('Record #' + id + ' berhasil dihapus');
+      loadHistory();
+    } else {
+      showToast('Gagal menghapus: ' + (data.reason || 'Unknown error'));
+    }
+  } catch(e) {
+    showToast('Error: ' + e.message);
+  }
+}
+
+async function recheckHistoryItem(id) {
+  try {
+    const res = await fetch('/api/history/recheck', {
+      method: 'POST',
+      headers: getAuthHeaders({'Content-Type': 'application/json'}),
+      body: JSON.stringify({ id: id })
+    });
+    return await res.json();
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
+async function recheckBatch(ids) {
+  try {
+    const res = await fetch('/api/history/recheck', {
+      method: 'POST',
+      headers: getAuthHeaders({'Content-Type': 'application/json'}),
+      body: JSON.stringify({ ids: ids })
+    });
+    const data = await res.json();
+    return data.results || [];
+  } catch(e) {
+    return ids.map(id => ({ id, error: e.message }));
+  }
+}
+
+async function recheckAllHistory() {
+  const btn = document.getElementById('btn-recheck-all');
+  const progress = document.getElementById('recheck-progress');
+  const bar = document.getElementById('recheck-bar');
+  const statusText = document.getElementById('recheck-status-text');
+  const statsText = document.getElementById('recheck-stats');
+  const filterStatus = document.getElementById('recheck-filter').value;
+  const filterType = document.getElementById('recheck-type').value;
+
+  // Pastikan API key ada
+  let apiKey = sessionStorage.getItem('suite_api_key') || '';
+  if (!apiKey) {
+    apiKey = prompt('Masukkan API Key untuk melanjutkan:');
+    if (!apiKey) { showToast('API Key diperlukan untuk recheck'); return; }
+    sessionStorage.setItem('suite_api_key', apiKey.trim());
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Memproses...';
+  progress.style.display = 'block';
+  bar.style.width = '0%';
+  statusText.textContent = 'Menjalankan bulk recheck di server...';
+  statsText.textContent = '';
+
+  try {
+    const res = await fetch('/api/history/recheck', {
+      method: 'POST',
+      headers: getAuthHeaders({'Content-Type': 'application/json'}),
+      body: JSON.stringify({ bulk: true, status: filterStatus, type: filterType })
+    });
+    const data = await res.json();
+
+    if (data.error) {
+      showToast('Error: ' + data.error);
+      statusText.textContent = 'Error: ' + data.error;
+    } else {
+      const r = data;
+      bar.style.width = '100%';
+      statusText.textContent = `Selesai! ${r.total} record di-recheck.`;
+      statsText.textContent = `✅ ${r.ok} OK | 🔄 ${r.changed} berubah (${r.to_live} → LIVE, ${r.to_dead} → DEAD) | ❌ ${r.errors} error`;
+      showToast(`Recheck selesai: ${r.changed} berubah dari ${r.total} record`);
+      loadHistory();
+    }
+  } catch(e) {
+    showToast('Recheck error: ' + e.message);
+    statusText.textContent = 'Error: ' + e.message;
+  }
+
+  btn.disabled = false;
+  btn.textContent = '🔄 Recheck Semua';
 }
 
 // Analytics Charts
@@ -5701,6 +7220,129 @@ function normalize_country_js(code) {
 let disneyBulkRunning = false;
 let disneyBulkAbort = false;
 let disneyBulkResults = [];
+let disneyComboFileQueue = [];
+let disneyCookieFileQueue = [];
+
+// ═══════ Disney+ Combo File Handler ═══════
+function handleDisneyComboFiles(files) {
+  if (!files || !files.length) return;
+  const fileInfo = document.getElementById('disney-combo-file-info');
+  const textarea = document.getElementById('disney-bulk-input');
+  disneyComboFileQueue = [];
+  let processed = 0;
+  const total = files.length;
+  fileInfo.style.display = 'block';
+  fileInfo.textContent = `⏳ Memuat ${total} file...`;
+
+  Array.from(files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const content = e.target.result.trim();
+      if (!content) { processed++; return; }
+      const lines = content.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#') && l.includes(':'));
+      lines.forEach(l => disneyComboFileQueue.push(l));
+      processed++;
+      if (processed === total) {
+        fileInfo.textContent = `✅ ${total} file dimuat → ${disneyComboFileQueue.length} combo ditemukan`;
+        fileInfo.style.color = '#1ce783';
+        textarea.value = disneyComboFileQueue.join('\n');
+        showToast(`${disneyComboFileQueue.length} combos dari ${total} file siap dicheck`);
+      }
+    };
+    reader.onerror = () => {
+      processed++;
+      if (processed === total) { fileInfo.textContent = '⚠️ Beberapa file gagal dimuat'; fileInfo.style.color = 'var(--dead)'; }
+    };
+    reader.readAsText(file, 'utf-8');
+  });
+}
+
+// ═══════ Disney+ Cookie File Handler ═══════
+function handleDisneyCookieFiles(files) {
+  if (!files || !files.length) return;
+  const fileInfo = document.getElementById('disney-cookie-file-info');
+  const textarea = document.getElementById('disney-bulk-cookie-input');
+  disneyCookieFileQueue = [];
+  let processed = 0;
+  const total = files.length;
+  fileInfo.style.display = 'block';
+  fileInfo.textContent = `⏳ Memuat ${total} file...`;
+
+  const dsnKey = /refresh_token|id_token|swid/i;
+
+  Array.from(files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const content = e.target.result.trim();
+      if (!content) { processed++; return; }
+
+      if (file.name.endsWith('.json')) {
+        try {
+          const arr = JSON.parse(content);
+          if (Array.isArray(arr) && arr.length > 0) {
+            if (arr[0] && arr[0].name) {
+              disneyCookieFileQueue.push(JSON.stringify(arr));
+            } else {
+              arr.forEach(item => {
+                const val = typeof item === 'string' ? item.trim() : JSON.stringify(item);
+                if (val) disneyCookieFileQueue.push(val);
+              });
+            }
+          }
+        } catch(ex) {
+          disneyCookieFileQueue.push(content);
+        }
+      } else {
+        const allLines = content.split('\n');
+        const hasNetscape = allLines.some(l => l.trim().split('\t').length >= 7);
+
+        if (hasNetscape) {
+          const blocks = [];
+          let currentBlock = [];
+          for (const rawLine of allLines) {
+            const line = rawLine.trim();
+            if ((line.toLowerCase().startsWith('# netscape http cookie file') || /^={5,}$/.test(line)) && currentBlock.length > 0) {
+              const cookieLines = currentBlock.filter(l => l && !l.startsWith('#') && !l.startsWith('=') && l.split('\t').length >= 7);
+              if (cookieLines.length > 0) blocks.push(currentBlock.join('\n'));
+              currentBlock = [];
+            }
+            currentBlock.push(line);
+          }
+          if (currentBlock.length > 0) {
+            const cookieLines = currentBlock.filter(l => l && !l.startsWith('#') && !l.startsWith('=') && l.split('\t').length >= 7);
+            if (cookieLines.length > 0) blocks.push(currentBlock.join('\n'));
+          }
+          if (blocks.length === 0) {
+            disneyCookieFileQueue.push(content);
+          } else {
+            blocks.forEach(b => disneyCookieFileQueue.push(b));
+          }
+        } else {
+          if (dsnKey.test(content)) {
+            disneyCookieFileQueue.push(content);
+          } else {
+            const cleanLines = allLines.map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+            cleanLines.forEach(l => disneyCookieFileQueue.push(l));
+          }
+        }
+      }
+
+      processed++;
+      if (processed === total) {
+        const totalCookies = disneyCookieFileQueue.length;
+        fileInfo.textContent = `✅ ${total} file dimuat → ${totalCookies} akun ditemukan`;
+        fileInfo.style.color = '#1ce783';
+        textarea.value = disneyCookieFileQueue.join('\n\n---\n\n');
+        showToast(`${totalCookies} cookies dari ${total} file siap dicheck`);
+      }
+    };
+    reader.onerror = () => {
+      processed++;
+      if (processed === total) { fileInfo.textContent = '⚠️ Beberapa file gagal dimuat'; fileInfo.style.color = 'var(--dead)'; }
+    };
+    reader.readAsText(file, 'utf-8');
+  });
+}
 
 function disneyStatusColor(status) {
   const m = { LIVE: '#10b981', BAD: '#f43f5e', DEAD: '#f43f5e', HOLD: '#f59e0b', ERROR: '#f59e0b' };
@@ -5872,16 +7514,26 @@ function switchCrBulkMode(mode) {
 // ═══════ Disney+ Bulk Cookie Check ═══════
 async function runDisneyBulkCookie() {
   const raw = document.getElementById('disney-bulk-cookie-input').value.trim();
-  if (!raw) return showToast('Paste cookies dulu');
+  if (!raw && disneyCookieFileQueue.length === 0) return showToast('Paste cookies atau upload file dulu');
   if (disneyBulkRunning) return;
 
   let cookies;
-  if (raw.includes('\n\n')) {
-    cookies = raw.split(/\n\n+/).map(c => c.trim()).filter(c => c);
-  } else if (raw.includes('---')) {
-    cookies = raw.split(/^-{3,}$/m).map(c => c.trim()).filter(c => c);
+  // Prioritize file queue if files were loaded
+  if (disneyCookieFileQueue.length > 0) {
+    cookies = [...disneyCookieFileQueue];
   } else {
-    cookies = raw.split('\n').map(c => c.trim()).filter(c => c);
+    // Detect the cookie-key that identifies each Disney account block
+    const dsnKey = /id_token|refresh_token|swid/i;
+    if (raw.includes('\n\n') && raw.split(/\n\n+/).filter(c => dsnKey.test(c)).length > 1) {
+      cookies = raw.split(/\n\n+/).map(c => c.trim()).filter(c => c);
+    } else if (/^-{3,}$/m.test(raw) && raw.split(/^-{3,}$/m).filter(c => dsnKey.test(c)).length > 1) {
+      cookies = raw.split(/^-{3,}$/m).map(c => c.trim()).filter(c => c);
+    } else if (/^={3,}$/m.test(raw) && raw.split(/^={3,}$/m).filter(c => dsnKey.test(c)).length > 1) {
+      cookies = raw.split(/^={3,}$/m).map(c => c.trim()).filter(c => c);
+    } else {
+      // Treat entire text as ONE cookie block (multi-line Netscape format = 1 account)
+      cookies = [raw];
+    }
   }
   if (!cookies.length) return showToast('Tidak ada cookie valid');
 
@@ -5939,21 +7591,29 @@ async function runDisneyBulkCookie() {
   await Promise.all(Array.from({length: concurrency}, () => worker()));
   statsEl.innerText = `✅ Selesai: ${done}/${total} — ${live} Live | ${bad} Bad | ${errors} Error`;
   disneyBulkRunning = false;
+  disneyCookieFileQueue = [];
 }
-
-// ═══════ Crunchyroll Bulk Cookie Check ═══════
 async function runCrBulkCookie() {
   const raw = document.getElementById('cr-bulk-cookie-input').value.trim();
-  if (!raw) return showToast('Paste cookies dulu');
+  if (!raw && crCookieFileQueue.length === 0) return showToast('Paste cookies atau upload file dulu');
   if (crBulkRunning) return;
 
   let cookies;
-  if (raw.includes('\n\n')) {
-    cookies = raw.split(/\n\n+/).map(c => c.trim()).filter(c => c);
-  } else if (raw.includes('---')) {
-    cookies = raw.split(/^-{3,}$/m).map(c => c.trim()).filter(c => c);
+  // Prioritize file queue if files were loaded
+  if (crCookieFileQueue.length > 0) {
+    cookies = [...crCookieFileQueue];
   } else {
-    cookies = raw.split('\n').map(c => c.trim()).filter(c => c);
+    // Multi-cookie separators: double newline, --- divider, or ======= divider
+    if (raw.includes('\n\n') && raw.split(/\n\n+/).filter(c => c.trim()).length > 1 && /etp_rt.*\n\n.*etp_rt/is.test(raw)) {
+      cookies = raw.split(/\n\n+/).map(c => c.trim()).filter(c => c);
+    } else if (/^-{3,}$/m.test(raw) && raw.split(/^-{3,}$/m).filter(c => /etp_rt/i.test(c)).length > 1) {
+      cookies = raw.split(/^-{3,}$/m).map(c => c.trim()).filter(c => c);
+    } else if (/^={3,}$/m.test(raw) && raw.split(/^={3,}$/m).filter(c => /etp_rt/i.test(c)).length > 1) {
+      cookies = raw.split(/^={3,}$/m).map(c => c.trim()).filter(c => c);
+    } else {
+      // Treat entire text as ONE cookie block (multi-line Netscape format = 1 account)
+      cookies = [raw];
+    }
   }
   if (!cookies.length) return showToast('Tidak ada cookie valid');
 
@@ -6011,6 +7671,7 @@ async function runCrBulkCookie() {
   await Promise.all(Array.from({length: concurrency}, () => worker()));
   statsEl.innerText = `✅ Selesai: ${done}/${total} — ${live} Live | ${bad} Bad | ${errors} Error`;
   crBulkRunning = false;
+  crCookieFileQueue = [];
 }
 
 async function runDisneySingle() {
@@ -6061,10 +7722,16 @@ async function runDisneySingle() {
 
 async function runDisneyBulk() {
   const raw = document.getElementById('disney-bulk-input').value.trim();
-  if (!raw) return showToast('Paste combo list dulu');
+  if (!raw && disneyComboFileQueue.length === 0) return showToast('Paste combo list atau upload file dulu');
   if (disneyBulkRunning) return;
 
-  const lines = raw.split('\n').map(l => l.trim()).filter(l => l && l.includes(':'));
+  let lines = [];
+  if (disneyComboFileQueue.length > 0) {
+    lines = [...disneyComboFileQueue];
+  }
+  if (raw && disneyComboFileQueue.length === 0) {
+    lines = raw.split('\n').map(l => l.trim()).filter(l => l && l.includes(':'));
+  }
   if (!lines.length) return showToast('Tidak ada combo valid');
 
   disneyBulkRunning = true;
@@ -6156,6 +7823,7 @@ async function runDisneyBulk() {
   await Promise.all(workers);
 
   disneyBulkRunning = false;
+  disneyComboFileQueue = [];
   if (disneyBulkAbort) statsEl.innerHTML += ' · <span style="color:#f59e0b;">STOPPED</span>';
   else statsEl.innerHTML += ' · <span style="color:#10b981;">DONE</span>';
 }
@@ -6195,6 +7863,134 @@ document.getElementById('disney-password')?.addEventListener('keydown', e => {
 let crBulkRunning = false;
 let crBulkAbort = false;
 let crBulkResults = [];
+let crComboFileQueue = [];
+let crCookieFileQueue = [];
+
+// ═══════ Crunchyroll Combo File Handler ═══════
+function handleCrComboFiles(files) {
+  if (!files || !files.length) return;
+  const fileInfo = document.getElementById('cr-combo-file-info');
+  const textarea = document.getElementById('cr-bulk-input');
+  crComboFileQueue = [];
+  let processed = 0;
+  const total = files.length;
+  fileInfo.style.display = 'block';
+  fileInfo.textContent = `⏳ Memuat ${total} file...`;
+
+  Array.from(files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const content = e.target.result.trim();
+      if (!content) { processed++; return; }
+      // Each non-empty, non-comment line containing : is a combo
+      const lines = content.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#') && l.includes(':'));
+      lines.forEach(l => crComboFileQueue.push(l));
+      processed++;
+      if (processed === total) {
+        fileInfo.textContent = `✅ ${total} file dimuat → ${crComboFileQueue.length} combo ditemukan`;
+        fileInfo.style.color = '#f47521';
+        textarea.value = crComboFileQueue.join('\n');
+        showToast(`${crComboFileQueue.length} combos dari ${total} file siap dicheck`);
+      }
+    };
+    reader.onerror = () => {
+      processed++;
+      if (processed === total) { fileInfo.textContent = '⚠️ Beberapa file gagal dimuat'; fileInfo.style.color = 'var(--dead)'; }
+    };
+    reader.readAsText(file, 'utf-8');
+  });
+}
+
+// ═══════ Crunchyroll Cookie File Handler ═══════
+function handleCrCookieFiles(files) {
+  if (!files || !files.length) return;
+  const fileInfo = document.getElementById('cr-cookie-file-info');
+  const textarea = document.getElementById('cr-bulk-cookie-input');
+  crCookieFileQueue = [];
+  let processed = 0;
+  const total = files.length;
+  fileInfo.style.display = 'block';
+  fileInfo.textContent = `⏳ Memuat ${total} file...`;
+
+  Array.from(files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const content = e.target.result.trim();
+      if (!content) { processed++; return; }
+
+      if (file.name.endsWith('.json')) {
+        try {
+          const arr = JSON.parse(content);
+          if (Array.isArray(arr) && arr.length > 0) {
+            if (arr[0] && arr[0].name) {
+              // JSON cookie array = 1 account
+              crCookieFileQueue.push(JSON.stringify(arr));
+            } else {
+              arr.forEach(item => {
+                const val = typeof item === 'string' ? item.trim() : JSON.stringify(item);
+                if (val) crCookieFileQueue.push(val);
+              });
+            }
+          }
+        } catch(ex) {
+          crCookieFileQueue.push(content);
+        }
+      } else {
+        // .txt / .cookie — detect Netscape format
+        const allLines = content.split('\n');
+        const hasNetscape = allLines.some(l => l.trim().split('\t').length >= 7);
+
+        if (hasNetscape) {
+          // Split multi-account Netscape files by "# Netscape HTTP Cookie File" header or ======= divider
+          const blocks = [];
+          let currentBlock = [];
+          for (const rawLine of allLines) {
+            const line = rawLine.trim();
+            if ((line.toLowerCase().startsWith('# netscape http cookie file') || /^={5,}$/.test(line)) && currentBlock.length > 0) {
+              const cookieLines = currentBlock.filter(l => l && !l.startsWith('#') && !l.startsWith('=') && l.split('\t').length >= 7);
+              if (cookieLines.length > 0) blocks.push(currentBlock.join('\n'));
+              currentBlock = [];
+            }
+            currentBlock.push(line);
+          }
+          if (currentBlock.length > 0) {
+            const cookieLines = currentBlock.filter(l => l && !l.startsWith('#') && !l.startsWith('=') && l.split('\t').length >= 7);
+            if (cookieLines.length > 0) blocks.push(currentBlock.join('\n'));
+          }
+          // If only 1 block or no explicit separators, treat entire file as 1 account
+          if (blocks.length === 0) {
+            crCookieFileQueue.push(content);
+          } else {
+            blocks.forEach(b => crCookieFileQueue.push(b));
+          }
+        } else {
+          // Plain text: if contains etp_rt=, treat as single cookie block
+          if (/etp_rt/i.test(content)) {
+            crCookieFileQueue.push(content);
+          } else {
+            // Each line is a separate etp_rt token
+            const cleanLines = allLines.map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+            cleanLines.forEach(l => crCookieFileQueue.push(l));
+          }
+        }
+      }
+
+      processed++;
+      if (processed === total) {
+        const totalCookies = crCookieFileQueue.length;
+        fileInfo.textContent = `✅ ${total} file dimuat → ${totalCookies} akun ditemukan`;
+        fileInfo.style.color = '#f47521';
+        textarea.value = crCookieFileQueue.join('\n\n---\n\n');
+        showToast(`${totalCookies} cookies dari ${total} file siap dicheck`);
+      }
+    };
+    reader.onerror = () => {
+      processed++;
+      if (processed === total) { fileInfo.textContent = '⚠️ Beberapa file gagal dimuat'; fileInfo.style.color = 'var(--dead)'; }
+    };
+    reader.readAsText(file, 'utf-8');
+  });
+}
 
 function renderCrResult(data, mode = 'single') {
   const statusMap = { LIVE: ['✅','#10b981','rgba(16,185,129,0.1)'], BAD: ['❌','#f43f5e','rgba(244,63,94,0.1)'], FREE: ['🆓','#38bdf8','rgba(56,189,248,0.1)'], ERROR: ['⚠️','#f59e0b','rgba(245,158,11,0.1)'] };
@@ -6289,9 +8085,18 @@ async function runCrSingle() {
 
 async function runCrBulk() {
   const raw = document.getElementById('cr-bulk-input').value.trim();
-  if (!raw) return showToast('Paste combo list dulu');
+  if (!raw && crComboFileQueue.length === 0) return showToast('Paste combo list atau upload file dulu');
   if (crBulkRunning) return;
-  const lines = raw.split('\n').map(l => l.trim()).filter(l => l && l.includes(':'));
+  let lines = [];
+  if (crComboFileQueue.length > 0) {
+    lines = [...crComboFileQueue];
+  }
+  // Also include textarea content
+  if (raw) {
+    const textLines = raw.split('\n').map(l => l.trim()).filter(l => l && l.includes(':'));
+    // Merge but avoid duplicates from file queue already filling textarea
+    if (crComboFileQueue.length === 0) lines = textLines;
+  }
   if (!lines.length) return showToast('Tidak ada combo valid');
   crBulkRunning = true; crBulkAbort = false; crBulkResults = [];
   const outEl = document.getElementById('cr-bulk-out');
@@ -6351,6 +8156,7 @@ async function runCrBulk() {
   const workers = Array.from({ length: Math.min(concurrency, lines.length) }, () => worker());
   await Promise.all(workers);
   crBulkRunning = false;
+  crComboFileQueue = [];
   if (crBulkAbort) statsEl.innerHTML += ' · <span style="color:#f59e0b;">STOPPED</span>';
   else statsEl.innerHTML += ' · <span style="color:#10b981;">DONE</span>';
 }
@@ -6410,7 +8216,7 @@ function updateCrStats(status) {
     { val: crStats.bad,   color: '#f43f5e' },
     { val: crStats.error, color: '#f59e0b' },
   ]);
-  if (typeof refreshDashboardCards === "function") refreshDashboardCards();
+  scheduleDashboardRefresh();
 }
 
 function resetCrStats() {
@@ -6455,7 +8261,7 @@ function updateDisneyStats(status) {
     { val: disneyStats.bad,   color: '#f43f5e' },
     { val: disneyStats.error, color: '#94a3b8' },
   ]);
-  if (typeof refreshDashboardCards === "function") refreshDashboardCards();
+  scheduleDashboardRefresh();
 }
 
 function resetDisneyStats() {
@@ -6590,7 +8396,7 @@ function updateEvpnStats(status) {
     { val: evpnStats.free,    color: '#38bdf8' },
     { val: evpnStats.bad,     color: '#f43f5e' },
   ]);
-  if (typeof refreshDashboardCards === "function") refreshDashboardCards();
+  scheduleDashboardRefresh();
 }
 
 function resetEvpnStats() {
@@ -6836,7 +8642,7 @@ function updateSpotifyStats(status) {
     { val: spotifyStats.dead,  color: '#f43f5e' },
     { val: spotifyStats.error, color: '#f59e0b' },
   ]);
-  if (typeof refreshDashboardCards === "function") refreshDashboardCards();
+  scheduleDashboardRefresh();
 }
 
 function resetSpotifyStats() {
@@ -7231,7 +9037,7 @@ function updateOutlookStats(status) {
     { val: outlookStats.bad,    color: '#f43f5e' },
     { val: outlookStats.locked, color: '#f59e0b' },
   ]);
-  if (typeof refreshDashboardCards === "function") refreshDashboardCards();
+  scheduleDashboardRefresh();
 }
 
 function resetOutlookStats() {
@@ -7399,6 +9205,675 @@ function exportOutlookAll() {
   a.click(); showToast(`${outlookBulkResults.length} results exported`);
 }
 
+
+
+// ── OpenAI / ChatGPT Cookie Checker ──────────────────────────────
+let openAIBulkRunning = false;
+let openAIBulkAbort = false;
+let openAIBulkResults = [];
+let openAIFileQueue = [];
+const openAIStats = { live: 0, free: 0, dead: 0, error: 0 };
+
+function openAIStatusColor(status) {
+  const m = { LIVE: '#10b981', FREE: '#38bdf8', DEAD: '#f43f5e', ERROR: '#f59e0b' };
+  return m[status] || 'var(--text-muted)';
+}
+
+function openAIStatusBg(status) {
+  const m = { LIVE: 'rgba(16,185,129,0.1)', FREE: 'rgba(56,189,248,0.1)', DEAD: 'rgba(244,63,94,0.1)', ERROR: 'rgba(245,158,11,0.1)' };
+  return m[status] || 'rgba(132,139,159,0.1)';
+}
+
+function renderOpenAIResult(data, mode) {
+  mode = mode || 'single';
+  var color = openAIStatusColor(data.status);
+  var si = { LIVE: '\u2705', FREE: '\ud83c\udd93', DEAD: '\u274c', ERROR: '\u26a0\ufe0f' };
+  var statusIcon = si[data.status] || '\u2753';
+  var sl = { LIVE: 'Premium Account', FREE: 'Free Account', DEAD: 'Cookie Expired / Invalid', ERROR: 'Check Failed' };
+  var statusLabel = sl[data.status] || data.status;
+
+  if (data.status === 'LIVE' || data.status === 'FREE') {
+    var cardClass = data.status === 'FREE' ? 'card-out hold' : 'card-out live';
+    var divClass = mode === 'bulk' ? '' : cardClass;
+    var divStyle = mode === 'bulk' ? 'padding:16px; border-left:4px solid ' + color + '; background:' + openAIStatusBg(data.status) + '; margin-bottom:10px; border-radius:var(--radius-lg);' : '';
+    var emailSafe = (data.email || '').replace(/'/g, "\\'");
+    var planSafe = (data.plan || '').replace(/'/g, "\\'");
+    return '<div class="' + divClass + '" style="' + divStyle + '">' +
+      '<div class="card-header-status" style="color:' + color + ';">' +
+        '<span>' + statusIcon + '</span> <span>' + statusLabel + '</span>' +
+        '<span style="margin-left:auto; font-size:11px; color:var(--text-muted); font-weight:500;">via ' + (data.route || 'Direct') + '</span>' +
+      '</div>' +
+      '<div class="grid-meta">' +
+        '<div class="meta-box"><span>Email</span><strong>' + (data.email || 'N/A') + '</strong></div>' +
+        '<div class="meta-box"><span>Plan</span><strong style="color:' + color + ';">' + (data.plan || 'N/A') + '</strong></div>' +
+        '<div class="meta-box"><span>Subscription</span><strong>' + (data.subscription_plan || 'N/A') + '</strong></div>' +
+        '<div class="meta-box"><span>Paid</span><strong>' + (data.is_paid ? '\u2705 Yes' : '\u274c No') + '</strong></div>' +
+        '<div class="meta-box"><span>Route</span><strong>' + (data.route || 'Direct') + '</strong></div>' +
+        '<div class="meta-box"><span>Status</span><strong style="color:' + color + ';">' + data.status + '</strong></div>' +
+      '</div>' +
+      '<div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">' +
+        "<button class=\"btn-secondary\" onclick=\"copyText('" + emailSafe + "', 'Email disalin!')\">📧 Copy Email</button>" +
+        "<button class=\"btn-secondary\" onclick=\"copyText('" + planSafe + "', 'Plan disalin!')\">📋 Copy Plan</button>" +
+      '</div>' +
+    '</div>';
+  }
+
+  var divClass2 = mode === 'bulk' ? '' : 'card-out dead';
+  var divStyle2 = mode === 'bulk' ? 'padding:10px; border-left:3px solid ' + color + '; background:' + openAIStatusBg(data.status) + '; margin-bottom:6px; border-radius:var(--radius-sm);' : '';
+  return '<div class="' + divClass2 + '" style="' + divStyle2 + '">' +
+    '<div class="card-header-status" style="color:' + color + ';">' +
+      '<span>' + statusIcon + '</span> <span>' + statusLabel + '</span>' +
+    '</div>' +
+    '<div style="color:var(--text-muted); font-size:12px;">' + (data.reason || data.email || 'Cookie tidak valid') + '</div>' +
+  '</div>';
+}
+
+function updateOpenAIStats(status) {
+  if (status === 'LIVE') openAIStats.live++;
+  else if (status === 'FREE') openAIStats.free++;
+  else if (status === 'DEAD') openAIStats.dead++;
+  else openAIStats.error++;
+
+  var dashboard = document.getElementById('openai-stats-dashboard');
+  if (dashboard) dashboard.style.display = 'block';
+
+  document.getElementById('openai-stat-live').textContent = openAIStats.live;
+  document.getElementById('openai-stat-free').textContent = openAIStats.free;
+  document.getElementById('openai-stat-dead').textContent = openAIStats.dead;
+  document.getElementById('openai-stat-error').textContent = openAIStats.error;
+
+  var total = openAIStats.live + openAIStats.free + openAIStats.dead + openAIStats.error;
+  document.getElementById('openai-donut-total').textContent = total;
+
+  var hitRate = total > 0 ? ((openAIStats.live + openAIStats.free) / total * 100) : 0;
+  document.getElementById('openai-hit-rate').textContent = hitRate.toFixed(1) + '%';
+  document.getElementById('openai-hit-rate-bar').style.width = hitRate + '%';
+
+  drawDonutChart('openai-donut-chart', [
+    { val: openAIStats.live,  color: '#10b981' },
+    { val: openAIStats.free,  color: '#38bdf8' },
+    { val: openAIStats.dead,  color: '#f43f5e' },
+    { val: openAIStats.error, color: '#f59e0b' }
+  ]);
+  scheduleDashboardRefresh();
+}
+
+function resetOpenAIStats() {
+  openAIStats.live = 0; openAIStats.free = 0; openAIStats.dead = 0; openAIStats.error = 0;
+  ['openai-stat-live','openai-stat-free','openai-stat-dead','openai-stat-error'].forEach(function(id) { document.getElementById(id).textContent = '0'; });
+  document.getElementById('openai-donut-total').textContent = '0';
+  document.getElementById('openai-hit-rate').textContent = '0%';
+  document.getElementById('openai-hit-rate-bar').style.width = '0%';
+  drawDonutChart('openai-donut-chart', []);
+  showToast('Stats direset');
+}
+
+async function runOpenAISingle() {
+  var cookie = document.getElementById('openai-cookie-input').value.trim();
+  if (!cookie) return showToast('Cookie wajib diisi');
+
+  var btn = document.getElementById('openai-single-btn');
+  var btnText = document.getElementById('openai-single-btn-text');
+  var outEl = document.getElementById('openai-single-out');
+  var useProxy = document.getElementById('openai-proxy-toggle') ? document.getElementById('openai-proxy-toggle').checked : false;
+
+  btn.disabled = true;
+  btnText.textContent = 'Checking...';
+  outEl.style.display = 'none';
+  outEl.className = 'card-out';
+  outEl.innerHTML = '';
+
+  try {
+    var res = await fetch('/api/openai/check', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ cookie: cookie, use_proxy: useProxy })
+    });
+    var data = await res.json();
+    outEl.innerHTML = renderOpenAIResult(data, 'single');
+    outEl.style.display = 'block';
+    updateOpenAIStats(data.status);
+    if (data.status === 'LIVE') playAlert('live');
+    else if (data.status === 'FREE') playAlert('hold');
+  } catch(e) {
+    outEl.className = 'card-out dead';
+    outEl.innerHTML = '<div class="card-header-status" style="color:var(--dead);"><span style="font-size:20px;">\u274c</span> <span>Request Gagal</span></div><div style="color:var(--text-muted); font-size:12.5px;">' + e.message + '</div>';
+    outEl.style.display = 'block';
+  }
+  btn.disabled = false;
+  btnText.textContent = 'CHECK COOKIE';
+}
+
+function handleOpenAIFiles(files) {
+  if (!files || !files.length) return;
+  var fileInfo = document.getElementById('openai-file-info');
+  var textarea = document.getElementById('openai-bulk-input');
+  openAIFileQueue = [];
+  var processed = 0;
+  var total = files.length;
+  fileInfo.style.display = 'block';
+  fileInfo.textContent = '\u23f3 Memuat ' + total + ' file...';
+
+  Array.from(files).forEach(function(file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var content = e.target.result.trim();
+      if (!content) { processed++; return; }
+
+      if (file.name.endsWith('.json')) {
+        try {
+          var arr = JSON.parse(content);
+          if (Array.isArray(arr) && arr.length > 0) {
+            if (arr[0] && arr[0].name) {
+              openAIFileQueue.push(JSON.stringify(arr));
+            } else {
+              arr.forEach(function(item) {
+                var val = typeof item === 'string' ? item.trim() : JSON.stringify(item);
+                if (val) openAIFileQueue.push(val);
+              });
+            }
+          }
+        } catch(ex) {
+          openAIFileQueue.push(content);
+        }
+      } else {
+        var allLines = content.split('\n');
+        var hasNetscape = allLines.some(function(l) { return l.trim().split('\t').length >= 7; });
+
+        if (hasNetscape) {
+          var blocks = [];
+          var currentBlock = [];
+          for (var i = 0; i < allLines.length; i++) {
+            var line = allLines[i].trim();
+            if (line.toLowerCase().startsWith('# netscape http cookie file') && currentBlock.length > 0) {
+              var cookieLines = currentBlock.filter(function(l) { return l && !l.startsWith('#') && l.split('\t').length >= 7; });
+              if (cookieLines.length > 0) blocks.push(cookieLines.join('\n'));
+              currentBlock = [];
+            }
+            currentBlock.push(line);
+          }
+          if (currentBlock.length > 0) {
+            var lastCookieLines = currentBlock.filter(function(l) { return l && !l.startsWith('#') && l.split('\t').length >= 7; });
+            if (lastCookieLines.length > 0) blocks.push(lastCookieLines.join('\n'));
+          }
+          if (blocks.length === 0) {
+            var fallbackLines = allLines.map(function(l) { return l.trim(); }).filter(function(l) { return l && !l.startsWith('#') && l.split('\t').length >= 7; });
+            if (fallbackLines.length > 0) blocks.push(fallbackLines.join('\n'));
+          }
+          blocks.forEach(function(b) { openAIFileQueue.push(b); });
+        } else {
+          var hasKeyVal = allLines.some(function(l) { return l.indexOf('__Secure-next-auth.session-token') >= 0; });
+          if (hasKeyVal) {
+            openAIFileQueue.push(content);
+          } else {
+            var cleanLines = allLines.map(function(l) { return l.trim(); }).filter(function(l) { return l && !l.startsWith('#'); });
+            cleanLines.forEach(function(l) { openAIFileQueue.push(l); });
+          }
+        }
+      }
+
+      processed++;
+      if (processed === total) {
+        var totalCookies = openAIFileQueue.length;
+        fileInfo.textContent = '\u2705 ' + total + ' file dimuat \u2192 ' + totalCookies + ' cookie ditemukan';
+        fileInfo.style.color = 'var(--primary)';
+        textarea.value = openAIFileQueue.join('\n\n');
+        showToast(totalCookies + ' cookies dari ' + total + ' file siap dicheck');
+      }
+    };
+    reader.onerror = function() {
+      processed++;
+      if (processed === total) {
+        fileInfo.textContent = '\u26a0\ufe0f Beberapa file gagal dimuat';
+        fileInfo.style.color = 'var(--dead)';
+      }
+    };
+    reader.readAsText(file);
+  });
+}
+
+async function runOpenAIBulk() {
+  var raw = document.getElementById('openai-bulk-input').value.trim();
+  if (!raw && openAIFileQueue.length === 0) return showToast('Paste cookies atau upload file dulu');
+  if (openAIBulkRunning) return;
+
+  var cookies = [];
+  if (openAIFileQueue.length > 0) {
+    cookies = openAIFileQueue.slice();
+  } else {
+    var blocks = raw.split(/\n\s*\n/).filter(function(b) { return b.trim(); });
+    if (blocks.length > 1) {
+      cookies = blocks.map(function(b) { return b.trim(); });
+    } else {
+      cookies = raw.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l; });
+    }
+  }
+  if (!cookies.length) return showToast('Tidak ada cookie valid');
+
+  openAIBulkRunning = true;
+  openAIBulkAbort = false;
+  openAIBulkResults = [];
+
+  var outEl = document.getElementById('openai-bulk-out');
+  var statsEl = document.getElementById('openai-bulk-stats');
+  var progressEl = document.getElementById('openai-bulk-progress');
+  var barEl = document.getElementById('openai-progress-bar');
+  var useProxy = document.getElementById('openai-proxy-toggle') ? document.getElementById('openai-proxy-toggle').checked : false;
+
+  outEl.innerHTML = '';
+  progressEl.style.display = 'block';
+  barEl.style.width = '0%';
+
+  var done = 0, live = 0, dead = 0, errors = 0;
+  var total = cookies.length;
+  var startTime = Date.now();
+  var currentIndex = 0;
+  var concurrency = 2;
+
+  async function worker() {
+    while (currentIndex < cookies.length && !openAIBulkAbort) {
+      var idx = currentIndex++;
+      var cookie = cookies[idx];
+      var retries = 0;
+      var success = false;
+      while (retries < 3 && !success) {
+        try {
+          var res = await fetch('/api/openai/check', {
+            method: 'POST',
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ cookie: cookie, use_proxy: useProxy })
+          });
+          if (res.status === 429) {
+            openAIBulkAbort = true;
+            showToast('Rate limit exceeded \u2014 stopping bulk');
+            break;
+          }
+          var data = await res.json();
+          success = true;
+          openAIBulkResults.push(data);
+          done++;
+          if (data.status === 'LIVE' || data.status === 'FREE') live++;
+          else if (data.status === 'DEAD') dead++;
+          else errors++;
+          outEl.innerHTML += renderOpenAIResult(data, 'bulk');
+          outEl.scrollTop = outEl.scrollHeight;
+          updateOpenAIStats(data.status);
+          if (data.status === 'LIVE') playAlert('live');
+          else if (data.status === 'FREE') playAlert('hold');
+        } catch(e) {
+          retries++;
+          if (retries >= 3) { done++; errors++; }
+          await new Promise(function(r) { setTimeout(r, 1000); });
+        }
+      }
+      var elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+      var pct = ((done / total) * 100).toFixed(1);
+      barEl.style.width = pct + '%';
+      statsEl.innerHTML = done + '/' + total + ' \u00b7 <span style="color:#10b981;">' + live + ' hits</span> \u00b7 <span style="color:#f43f5e;">' + dead + ' dead</span> \u00b7 <span style="color:#94a3b8;">' + errors + ' err</span> \u00b7 ' + elapsed + 's';
+    }
+  }
+
+  var workers = [];
+  for (var i = 0; i < concurrency; i++) workers.push(worker());
+  await Promise.all(workers);
+  openAIBulkRunning = false;
+  if (openAIBulkAbort) statsEl.innerHTML += ' \u00b7 <span style="color:#f59e0b;">STOPPED</span>';
+}
+
+function stopOpenAIBulk() { openAIBulkAbort = true; }
+
+function exportOpenAIHits() {
+  var hits = openAIBulkResults.filter(function(r) { return r.status === 'LIVE' || r.status === 'FREE'; });
+  if (!hits.length) return showToast('Belum ada hits untuk diexport');
+  var text = hits.map(function(h) { return (h.email || 'N/A') + ' | Plan: ' + (h.plan || 'N/A') + ' | Status: ' + h.status + ' | Route: ' + (h.route || 'Direct'); }).join('\n');
+  var blob = new Blob([text], { type: 'text/plain' });
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'openai_hits_' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click(); showToast(hits.length + ' hits exported');
+}
+
+function exportOpenAIAll() {
+  if (!openAIBulkResults.length) return showToast('Belum ada hasil');
+  var text = openAIBulkResults.map(function(h) { return (h.email || 'N/A') + ' | Plan: ' + (h.plan || 'N/A') + ' | Status: ' + h.status + ' | Reason: ' + (h.reason || 'N/A') + ' | Route: ' + (h.route || 'Direct'); }).join('\n');
+  var blob = new Blob([text], { type: 'text/plain' });
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'openai_all_' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click(); showToast(openAIBulkResults.length + ' results exported');
+}
+
+// ── Prime Video Checker JS ──────────────────────────────────────────
+let pvBulkRunning = false;
+let pvBulkAbort = false;
+let pvBulkResults = [];
+let pvFileQueue = [];
+const pvStats = { live: 0, free: 0, dead: 0, error: 0 };
+
+function pvStatusColor(status) {
+  const m = { LIVE: '#10b981', FREE: '#38bdf8', DEAD: '#f43f5e', ERROR: '#f59e0b' };
+  return m[status] || 'var(--text-muted)';
+}
+
+function pvStatusBg(status) {
+  const m = { LIVE: 'rgba(16,185,129,0.1)', FREE: 'rgba(56,189,248,0.1)', DEAD: 'rgba(244,63,94,0.1)', ERROR: 'rgba(245,158,11,0.1)' };
+  return m[status] || 'rgba(132,139,159,0.1)';
+}
+
+function renderPVResult(data, mode) {
+  mode = mode || 'single';
+  var color = pvStatusColor(data.status);
+  var si = { LIVE: '\u2705', FREE: '\ud83c\udd93', DEAD: '\u274c', ERROR: '\u26a0\ufe0f' };
+  var statusIcon = si[data.status] || '\u2753';
+  var sl = { LIVE: 'Prime Account', FREE: 'Free Account', DEAD: 'Cookie Expired / Invalid', ERROR: 'Check Failed' };
+  var statusLabel = sl[data.status] || data.status;
+
+  if (data.status === 'LIVE' || data.status === 'FREE') {
+    var cardClass = data.status === 'FREE' ? 'card-out hold' : 'card-out live';
+    var divClass = mode === 'bulk' ? '' : cardClass;
+    var divStyle = mode === 'bulk' ? 'padding:16px; border-left:4px solid ' + color + '; background:' + pvStatusBg(data.status) + '; margin-bottom:10px; border-radius:var(--radius-lg);' : '';
+    return '<div class="' + divClass + '" style="' + divStyle + '">' +
+      '<div class="card-header-status" style="color:' + color + ';">' +
+      '<span style="font-size:20px;">' + statusIcon + '</span> <span>' + statusLabel + '</span></div>' +
+      '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; font-size:12.5px;">' +
+      '<div class="meta-box"><div class="label">Plan</div><div class="val" style="color:' + color + ';">' + (data.plan || 'Unknown') + '</div></div>' +
+      '<div class="meta-box"><div class="label">Profile</div><div class="val">' + (data.profile || 'N/A') + '</div></div>' +
+      '<div class="meta-box"><div class="label">Region</div><div class="val">' + (data.region || 'N/A') + '</div></div>' +
+      '<div class="meta-box"><div class="label">Customer ID</div><div class="val" style="font-family:monospace; font-size:10px;">' + (data.customer_id || 'N/A') + '</div></div>' +
+      '</div>' +
+      '<div style="margin-top:10px; font-size:11px; color:var(--text-muted);">' +
+      '<span>\ud83c\udf10 Route: ' + (data.route || 'Direct') + '</span>' +
+      (data.reason ? ' · <span>' + data.reason + '</span>' : '') +
+      '</div></div>';
+  } else {
+    var deadClass = mode === 'bulk' ? '' : 'card-out dead';
+    var deadStyle = mode === 'bulk' ? 'padding:14px; border-left:4px solid ' + color + '; background:' + pvStatusBg(data.status) + '; margin-bottom:10px; border-radius:var(--radius-lg);' : '';
+    return '<div class="' + deadClass + '" style="' + deadStyle + '">' +
+      '<div class="card-header-status" style="color:' + color + ';">' +
+      '<span style="font-size:20px;">' + statusIcon + '</span> <span>' + statusLabel + '</span></div>' +
+      '<div style="color:var(--text-muted); font-size:12.5px; margin-top:8px;">' + (data.reason || 'Unknown error') + '</div>' +
+      (data.route ? '<div style="font-size:11px; color:var(--text-dim); margin-top:6px;">\ud83c\udf10 Route: ' + data.route + '</div>' : '') +
+      '</div>';
+  }
+}
+
+function updatePVStats(status) {
+  if (status === 'LIVE') pvStats.live++;
+  else if (status === 'FREE') pvStats.free++;
+  else if (status === 'DEAD') pvStats.dead++;
+  else pvStats.error++;
+
+  var total = pvStats.live + pvStats.free + pvStats.dead + pvStats.error;
+  document.getElementById('pv-stat-live').textContent = pvStats.live;
+  document.getElementById('pv-stat-free').textContent = pvStats.free;
+  document.getElementById('pv-stat-dead').textContent = pvStats.dead;
+  document.getElementById('pv-stat-error').textContent = pvStats.error;
+  document.getElementById('pv-donut-total').textContent = total;
+
+  var hitRate = total > 0 ? (((pvStats.live + pvStats.free) / total) * 100).toFixed(1) : '0';
+  document.getElementById('pv-hit-rate').textContent = hitRate + '%';
+  document.getElementById('pv-hit-rate-bar').style.width = hitRate + '%';
+
+  document.getElementById('pv-stats-dashboard').style.display = total > 0 ? 'block' : 'none';
+  drawDonutChart('pv-donut-chart', [
+    { val: pvStats.live,  color: '#10b981' },
+    { val: pvStats.free,  color: '#38bdf8' },
+    { val: pvStats.dead,  color: '#f43f5e' },
+    { val: pvStats.error, color: '#f59e0b' }
+  ]);
+  scheduleDashboardRefresh();
+}
+
+function resetPVStats() {
+  pvStats.live = 0; pvStats.free = 0; pvStats.dead = 0; pvStats.error = 0;
+  ['pv-stat-live','pv-stat-free','pv-stat-dead','pv-stat-error'].forEach(function(id) { document.getElementById(id).textContent = '0'; });
+  document.getElementById('pv-donut-total').textContent = '0';
+  document.getElementById('pv-hit-rate').textContent = '0%';
+  document.getElementById('pv-hit-rate-bar').style.width = '0%';
+  drawDonutChart('pv-donut-chart', []);
+  showToast('Stats direset');
+}
+
+async function runPVSingle() {
+  var cookie = document.getElementById('pv-cookie-input').value.trim();
+  if (!cookie) return showToast('Cookie wajib diisi');
+
+  var btn = document.getElementById('pv-single-btn');
+  var btnText = document.getElementById('pv-single-btn-text');
+  var outEl = document.getElementById('pv-single-out');
+  var useProxy = document.getElementById('pv-proxy-toggle') ? document.getElementById('pv-proxy-toggle').checked : false;
+
+  btn.disabled = true;
+  btnText.textContent = 'Checking...';
+  outEl.style.display = 'none';
+  outEl.className = 'card-out';
+  outEl.innerHTML = '';
+
+  try {
+    var res = await fetch('/api/primevideo/check', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ cookie: cookie, use_proxy: useProxy })
+    });
+    var data = await res.json();
+    outEl.innerHTML = renderPVResult(data, 'single');
+    outEl.style.display = 'block';
+    updatePVStats(data.status);
+    if (data.status === 'LIVE') playAlert('live');
+    else if (data.status === 'FREE') playAlert('hold');
+  } catch(e) {
+    outEl.className = 'card-out dead';
+    outEl.innerHTML = '<div class="card-header-status" style="color:var(--dead);"><span style="font-size:20px;">\u274c</span> <span>Request Gagal</span></div><div style="color:var(--text-muted); font-size:12.5px;">' + e.message + '</div>';
+    outEl.style.display = 'block';
+  }
+  btn.disabled = false;
+  btnText.textContent = 'CHECK COOKIE';
+}
+
+function handlePVFiles(files) {
+  if (!files || !files.length) return;
+  var fileInfo = document.getElementById('pv-file-info');
+  var textarea = document.getElementById('pv-bulk-input');
+  pvFileQueue = [];
+  var processed = 0;
+  var total = files.length;
+  fileInfo.style.display = 'block';
+  fileInfo.textContent = '\u23f3 Memuat ' + total + ' file...';
+
+  Array.from(files).forEach(function(file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var content = e.target.result.trim();
+      if (!content) { processed++; return; }
+
+      if (file.name.endsWith('.json')) {
+        try {
+          var arr = JSON.parse(content);
+          if (Array.isArray(arr) && arr.length > 0) {
+            if (arr[0] && arr[0].name) {
+              pvFileQueue.push(JSON.stringify(arr));
+            } else {
+              arr.forEach(function(item) {
+                var val = typeof item === 'string' ? item.trim() : JSON.stringify(item);
+                if (val) pvFileQueue.push(val);
+              });
+            }
+          }
+        } catch(ex) {
+          pvFileQueue.push(content);
+        }
+      } else {
+        // Check for '$' delimiter first (common PrimeVideo hit format)
+        if (content.indexOf('$') >= 0 && content.split('$').length > 2) {
+          var dollarBlocks = content.split('$').map(function(b) { return b.trim(); }).filter(function(b) { return b; });
+          dollarBlocks.forEach(function(block) { pvFileQueue.push(block); });
+        } else {
+        var allLines = content.split('\n');
+        var hasNetscape = allLines.some(function(l) { return l.trim().split('\t').length >= 7; });
+        if (hasNetscape) {
+          var blocks = [];
+          var currentBlock = [];
+          for (var i = 0; i < allLines.length; i++) {
+            var line = allLines[i].trim();
+            if (line.toLowerCase().startsWith('# netscape http cookie file') && currentBlock.length > 0) {
+              var cookieLines = currentBlock.filter(function(l) { return l && !l.startsWith('#') && l.split('\t').length >= 7; });
+              if (cookieLines.length > 0) blocks.push(cookieLines.join('\n'));
+              currentBlock = [];
+            }
+            currentBlock.push(line);
+          }
+          if (currentBlock.length > 0) {
+            var lastCookieLines = currentBlock.filter(function(l) { return l && !l.startsWith('#') && l.split('\t').length >= 7; });
+            if (lastCookieLines.length > 0) blocks.push(lastCookieLines.join('\n'));
+          }
+          if (blocks.length === 0) {
+            var fallbackLines = allLines.map(function(l) { return l.trim(); }).filter(function(l) { return l && !l.startsWith('#') && l.split('\t').length >= 7; });
+            if (fallbackLines.length > 0) blocks.push(fallbackLines.join('\n'));
+          }
+          blocks.forEach(function(b) { pvFileQueue.push(b); });
+        } else {
+          var hasKeyVal = allLines.some(function(l) { return l.indexOf('session-token') >= 0; });
+          if (hasKeyVal) {
+            pvFileQueue.push(content);
+          } else {
+            var cleanLines = allLines.map(function(l) { return l.trim(); }).filter(function(l) { return l && !l.startsWith('#'); });
+            cleanLines.forEach(function(l) { pvFileQueue.push(l); });
+          }
+        }
+        }
+      }
+
+      processed++;
+      if (processed === total) {
+        var totalCookies = pvFileQueue.length;
+        fileInfo.textContent = '\u2705 ' + total + ' file dimuat \u2192 ' + totalCookies + ' cookie ditemukan';
+        fileInfo.style.color = 'var(--primary)';
+        textarea.value = pvFileQueue.join('\n\n');
+        showToast(totalCookies + ' cookies dari ' + total + ' file siap dicheck');
+      }
+    };
+    reader.onerror = function() {
+      processed++;
+      if (processed === total) {
+        fileInfo.textContent = '\u26a0\ufe0f Beberapa file gagal dimuat';
+        fileInfo.style.color = 'var(--dead)';
+      }
+    };
+    reader.readAsText(file);
+  });
+}
+
+async function runPVBulk() {
+  var raw = document.getElementById('pv-bulk-input').value.trim();
+  if (!raw && pvFileQueue.length === 0) return showToast('Paste cookies atau upload file dulu');
+  if (pvBulkRunning) return;
+
+  var cookies = [];
+  if (pvFileQueue.length > 0) {
+    cookies = pvFileQueue.slice();
+  } else {
+    // Support '$' delimiter between accounts (common PrimeVideo hit format)
+    if (raw.indexOf('$') >= 0) {
+      cookies = raw.split('$').map(function(b) { return b.trim(); }).filter(function(b) { return b; });
+    } else {
+      var blocks = raw.split(/\n\s*\n/).filter(function(b) { return b.trim(); });
+      if (blocks.length > 1) {
+        cookies = blocks.map(function(b) { return b.trim(); });
+      } else {
+        cookies = raw.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l; });
+      }
+    }
+  }
+  if (!cookies.length) return showToast('Tidak ada cookie valid');
+
+  pvBulkRunning = true;
+  pvBulkAbort = false;
+  pvBulkResults = [];
+
+  var outEl = document.getElementById('pv-bulk-out');
+  var statsEl = document.getElementById('pv-bulk-stats');
+  var progressEl = document.getElementById('pv-bulk-progress');
+  var barEl = document.getElementById('pv-progress-bar');
+  var useProxy = document.getElementById('pv-proxy-toggle') ? document.getElementById('pv-proxy-toggle').checked : false;
+
+  outEl.innerHTML = '';
+  progressEl.style.display = 'block';
+  barEl.style.width = '0%';
+
+  var done = 0, live = 0, dead = 0, errors = 0;
+  var total = cookies.length;
+  var startTime = Date.now();
+  var currentIndex = 0;
+  var concurrency = 2;
+
+  async function worker() {
+    while (currentIndex < cookies.length && !pvBulkAbort) {
+      var idx = currentIndex++;
+      var cookie = cookies[idx];
+      var retries = 0;
+      var success = false;
+      while (retries < 3 && !success) {
+        try {
+          var res = await fetch('/api/primevideo/check', {
+            method: 'POST',
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ cookie: cookie, use_proxy: useProxy })
+          });
+          if (res.status === 429) {
+            pvBulkAbort = true;
+            showToast('Rate limit exceeded \u2014 stopping bulk');
+            break;
+          }
+          var data = await res.json();
+          success = true;
+          pvBulkResults.push(data);
+          done++;
+          if (data.status === 'LIVE' || data.status === 'FREE') live++;
+          else if (data.status === 'DEAD') dead++;
+          else errors++;
+          outEl.innerHTML += renderPVResult(data, 'bulk');
+          outEl.scrollTop = outEl.scrollHeight;
+          updatePVStats(data.status);
+          if (data.status === 'LIVE') playAlert('live');
+          else if (data.status === 'FREE') playAlert('hold');
+        } catch(e) {
+          retries++;
+          if (retries >= 3) { done++; errors++; }
+          await new Promise(function(r) { setTimeout(r, 1000); });
+        }
+      }
+      var elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+      var pct = ((done / total) * 100).toFixed(1);
+      barEl.style.width = pct + '%';
+      statsEl.innerHTML = done + '/' + total + ' \u00b7 <span style="color:#10b981;">' + live + ' hits</span> \u00b7 <span style="color:#f43f5e;">' + dead + ' dead</span> \u00b7 <span style="color:#94a3b8;">' + errors + ' err</span> \u00b7 ' + elapsed + 's';
+    }
+  }
+
+  var workers = [];
+  for (var i = 0; i < concurrency; i++) workers.push(worker());
+  await Promise.all(workers);
+  pvBulkRunning = false;
+  if (pvBulkAbort) statsEl.innerHTML += ' \u00b7 <span style="color:#f59e0b;">STOPPED</span>';
+}
+
+function stopPVBulk() { pvBulkAbort = true; }
+
+function exportPVHits() {
+  var hits = pvBulkResults.filter(function(r) { return r.status === 'LIVE' || r.status === 'FREE'; });
+  if (!hits.length) return showToast('Belum ada hits untuk diexport');
+  var text = hits.map(function(h) { return 'Profile: ' + (h.profile || 'N/A') + ' | Plan: ' + (h.plan || 'N/A') + ' | Region: ' + (h.region || 'N/A') + ' | Status: ' + h.status + ' | Route: ' + (h.route || 'Direct'); }).join('\n');
+  var blob = new Blob([text], { type: 'text/plain' });
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'primevideo_hits_' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click(); showToast(hits.length + ' hits exported');
+}
+
+function exportPVAll() {
+  if (!pvBulkResults.length) return showToast('Belum ada hasil');
+  var text = pvBulkResults.map(function(h) { return 'Profile: ' + (h.profile || 'N/A') + ' | Plan: ' + (h.plan || 'N/A') + ' | Region: ' + (h.region || 'N/A') + ' | Status: ' + h.status + ' | Reason: ' + (h.reason || 'N/A') + ' | Route: ' + (h.route || 'Direct'); }).join('\n');
+  var blob = new Blob([text], { type: 'text/plain' });
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'primevideo_all_' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click(); showToast(pvBulkResults.length + ' results exported');
+}
 
 // ── Proxy Manager Upgrade ──────────────────────────────────────────
 let pmState = {
@@ -8137,6 +10612,22 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
+// Topbar Scroll Shadow Controller
+(function initScrollShadow() {
+  const topbar = document.querySelector('.topbar');
+  if (!topbar) return;
+  let ticking = false;
+  window.addEventListener('scroll', function() {
+    if (!ticking) {
+      requestAnimationFrame(function() {
+        topbar.classList.toggle('scrolled', window.scrollY > 8);
+        ticking = false;
+      });
+      ticking = true;
+    }
+  }, { passive: true });
+})();
+
 // Sidebar Collapse Controller
 function toggleSidebarCollapse() {
   const sidebar = document.getElementById('app-sidebar');
@@ -8144,6 +10635,9 @@ function toggleSidebarCollapse() {
     sidebar.classList.toggle('collapsed');
     const isCollapsed = sidebar.classList.contains('collapsed');
     localStorage.setItem('sidebar_collapsed', isCollapsed ? '1' : '0');
+    // Update main-content margin via JS as fallback for sibling selector
+    const main = document.querySelector('.main-content');
+    if (main) main.style.marginLeft = isCollapsed ? '68px' : '250px';
   }
 }
 
@@ -8163,7 +10657,11 @@ function toggleMobileSidebar(force) {
 (function restoreSidebar() {
   if (localStorage.getItem('sidebar_collapsed') === '1' && window.innerWidth > 992) {
     const sidebar = document.getElementById('app-sidebar');
-    if (sidebar) sidebar.classList.add('collapsed');
+    if (sidebar) {
+      sidebar.classList.add('collapsed');
+      const main = document.querySelector('.main-content');
+      if (main) main.style.marginLeft = '68px';
+    }
   }
 })();
 
@@ -8220,6 +10718,16 @@ function updateViewHeader(tab) {
       subtitle: 'Microsoft protocol verification with accurate 2FA & phone lock detection',
       actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'dashboard\')">← Dashboard</button>'
     },
+    openai: {
+      title: 'OpenAI / ChatGPT Cookie Checker',
+      subtitle: 'Session-token validation & subscription plan detection (Free, Plus, Pro, Team, Enterprise)',
+      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'dashboard\')">← Dashboard</button>'
+    },
+    primevideo: {
+      title: 'Prime Video Cookie Checker',
+      subtitle: 'Amazon Prime Video session cookie validation & subscription status detection',
+      actions: '<button type="button" class="btn-subtle btn-sm" onclick="switchTab(\'dashboard\')">← Dashboard</button>'
+    },
     history: {
       title: 'History Database',
       subtitle: 'SQLite persistent verification history with real-time query & CSV export',
@@ -8250,6 +10758,14 @@ function updateViewHeader(tab) {
 
 // Global Dashboard Telemetry Aggregator
 let globalDbStats = { total: 0, live: 0, bad: 0, hold: 0, raw: {}, services: {} };
+let _dashRefreshTimer = null;
+
+// Debounced dashboard refresh — call after any check saves to DB.
+// Waits 800ms so rapid bulk checks batch into a single API call.
+function scheduleDashboardRefresh() {
+  if (_dashRefreshTimer) clearTimeout(_dashRefreshTimer);
+  _dashRefreshTimer = setTimeout(() => { _dashRefreshTimer = null; fetchDashboardData(); }, 800);
+}
 
 async function fetchDashboardData() {
   try {
@@ -8284,58 +10800,13 @@ async function fetchDashboardData() {
 }
 
 function refreshDashboardCards() {
-  let memChecks = 0;
-  let memLive = 0;
-  let memBad = 0;
-  let memHold = 0;
-
-  // Disney in-session
-  const dTot = (disneyStats.live || 0) + (disneyStats.hold || 0) + (disneyStats.bad || 0) + (disneyStats.error || 0);
-  memChecks += dTot;
-  memLive += (disneyStats.live || 0);
-  memHold += (disneyStats.hold || 0);
-  memBad += (disneyStats.bad || 0) + (disneyStats.error || 0);
-
-  // Crunchyroll in-session
-  const crTot = (crStats.live || 0) + (crStats.free || 0) + (crStats.bad || 0) + (crStats.error || 0);
-  memChecks += crTot;
-  memLive += (crStats.live || 0) + (crStats.free || 0);
-  memBad += (crStats.bad || 0) + (crStats.error || 0);
-
-  // ExpressVPN in-session
-  const evpnTot = (evpnStats.premium || 0) + (evpnStats.trial || 0) + (evpnStats.free || 0) + (evpnStats.bad || 0);
-  memChecks += evpnTot;
-  memLive += (evpnStats.premium || 0) + (evpnStats.trial || 0) + (evpnStats.free || 0);
-  memBad += (evpnStats.bad || 0);
-
-  // Spotify in-session
-  const spTot = (spotifyStats.live || 0) + (spotifyStats.free || 0) + (spotifyStats.dead || 0) + (spotifyStats.error || 0);
-  memChecks += spTot;
-  memLive += (spotifyStats.live || 0) + (spotifyStats.free || 0);
-  memBad += (spotifyStats.dead || 0) + (spotifyStats.error || 0);
-
-  // Outlook in-session
-  const outTot = (outlookStats.live || 0) + (outlookStats.twoFa || 0) + (outlookStats.bad || 0) + (outlookStats.locked || 0);
-  memChecks += outTot;
-  memLive += (outlookStats.live || 0);
-  memHold += (outlookStats.twoFa || 0) + (outlookStats.locked || 0);
-  memBad += (outlookStats.bad || 0);
-
-  // Netflix bulk in-session
-  if (bulkResults && bulkResults.length > 0) {
-    memChecks += bulkResults.length;
-    bulkResults.forEach(r => {
-      if (r.status === 'LIVE' || r.status === 'PREMIUM') memLive++;
-      else if (r.status === 'HOLD' || r.is_hold) memHold++;
-      else memBad++;
-    });
-  }
-
-  // Combined totals
-  const grandTotal = (globalDbStats.total || 0) + memChecks;
-  const grandLive = (globalDbStats.live || 0) + memLive;
-  const grandBad = (globalDbStats.bad || 0) + memBad;
-  const grandHold = (globalDbStats.hold || 0) + memHold;
+  // All results are saved to DB immediately on check, so DB stats are the
+  // single source of truth.  Re-fetch from /api/stats on every dashboard
+  // refresh so numbers stay current without double-counting session vars.
+  const grandTotal = globalDbStats.total || 0;
+  const grandLive  = globalDbStats.live  || 0;
+  const grandBad   = globalDbStats.bad   || 0;
+  const grandHold  = globalDbStats.hold  || 0;
   const hitRate = grandTotal > 0 ? ((grandLive / grandTotal) * 100).toFixed(1) : '0.0';
 
   // Update DOM elements
@@ -8371,84 +10842,80 @@ function refreshDashboardCards() {
 function updateServiceHubCards() {
   const s = globalDbStats.services || {};
 
-  // 1. Netflix (Combined Single Token + Bulk)
+  // All checkers save to DB immediately, so DB is the single source of truth.
+  // No session stats added — prevents double-counting.
+
+  // 1. Netflix
   const nfDb = s.netflix || { checks: 0, live: 0, bad: 0 };
-  let nfChecks = nfDb.checks || 0;
-  let nfLive = nfDb.live || 0;
-  let nfBad = nfDb.bad || 0;
-  if (bulkResults && bulkResults.length > 0) {
-    bulkResults.forEach(r => {
-      nfChecks++;
-      if (r.status === 'LIVE' || r.status === 'PREMIUM') nfLive++;
-      else if (r.status === 'DEAD' || r.status === 'BAD' || r.status === 'FAIL') nfBad++;
-    });
-  }
   const nfElChecks = document.getElementById('hub-stat-nf-checks');
   const nfElLive = document.getElementById('hub-stat-nf-live');
   const nfElBad = document.getElementById('hub-stat-nf-bad');
-  if (nfElChecks) nfElChecks.textContent = nfChecks.toLocaleString('id-ID');
-  if (nfElLive) nfElLive.textContent = nfLive.toLocaleString('id-ID');
-  if (nfElBad) nfElBad.textContent = nfBad.toLocaleString('id-ID');
+  if (nfElChecks) nfElChecks.textContent = (nfDb.checks || 0).toLocaleString('id-ID');
+  if (nfElLive) nfElLive.textContent = (nfDb.live || 0).toLocaleString('id-ID');
+  if (nfElBad) nfElBad.textContent = (nfDb.bad || 0).toLocaleString('id-ID');
 
   // 2. Disney+
   const dDb = s.disney || { checks: 0, live: 0, bad: 0 };
-  const dTot = (dDb.checks || 0) + (disneyStats.live || 0) + (disneyStats.hold || 0) + (disneyStats.bad || 0) + (disneyStats.error || 0);
-  const dLive = (dDb.live || 0) + (disneyStats.live || 0);
-  const dBad = (dDb.bad || 0) + (disneyStats.bad || 0) + (disneyStats.error || 0);
   const dElChecks = document.getElementById('hub-stat-disney-checks');
   const dElLive = document.getElementById('hub-stat-disney-live');
   const dElBad = document.getElementById('hub-stat-disney-bad');
-  if (dElChecks) dElChecks.textContent = dTot.toLocaleString('id-ID');
-  if (dElLive) dElLive.textContent = dLive.toLocaleString('id-ID');
-  if (dElBad) dElBad.textContent = dBad.toLocaleString('id-ID');
+  if (dElChecks) dElChecks.textContent = (dDb.checks || 0).toLocaleString('id-ID');
+  if (dElLive) dElLive.textContent = (dDb.live || 0).toLocaleString('id-ID');
+  if (dElBad) dElBad.textContent = (dDb.bad || 0).toLocaleString('id-ID');
 
   // 3. Crunchyroll
   const crDb = s.crunchyroll || { checks: 0, live: 0, bad: 0 };
-  const crTot = (crDb.checks || 0) + (crStats.live || 0) + (crStats.free || 0) + (crStats.bad || 0) + (crStats.error || 0);
-  const crLive = (crDb.live || 0) + (crStats.live || 0) + (crStats.free || 0);
-  const crBad = (crDb.bad || 0) + (crStats.bad || 0) + (crStats.error || 0);
   const crElChecks = document.getElementById('hub-stat-cr-checks');
   const crElLive = document.getElementById('hub-stat-cr-live');
   const crElBad = document.getElementById('hub-stat-cr-bad');
-  if (crElChecks) crElChecks.textContent = crTot.toLocaleString('id-ID');
-  if (crElLive) crElLive.textContent = crLive.toLocaleString('id-ID');
-  if (crElBad) crElBad.textContent = crBad.toLocaleString('id-ID');
+  if (crElChecks) crElChecks.textContent = (crDb.checks || 0).toLocaleString('id-ID');
+  if (crElLive) crElLive.textContent = (crDb.live || 0).toLocaleString('id-ID');
+  if (crElBad) crElBad.textContent = (crDb.bad || 0).toLocaleString('id-ID');
 
   // 4. ExpressVPN
   const evpnDb = s.expressvpn || { checks: 0, live: 0, bad: 0 };
-  const evpnTot = (evpnDb.checks || 0) + (evpnStats.premium || 0) + (evpnStats.trial || 0) + (evpnStats.free || 0) + (evpnStats.bad || 0);
-  const evpnLive = (evpnDb.live || 0) + (evpnStats.premium || 0) + (evpnStats.trial || 0) + (evpnStats.free || 0);
-  const evpnBad = (evpnDb.bad || 0) + (evpnStats.bad || 0);
   const evpnElChecks = document.getElementById('hub-stat-evpn-checks');
   const evpnElLive = document.getElementById('hub-stat-evpn-live');
   const evpnElBad = document.getElementById('hub-stat-evpn-bad');
-  if (evpnElChecks) evpnElChecks.textContent = evpnTot.toLocaleString('id-ID');
-  if (evpnElLive) evpnElLive.textContent = evpnLive.toLocaleString('id-ID');
-  if (evpnElBad) evpnElBad.textContent = evpnBad.toLocaleString('id-ID');
+  if (evpnElChecks) evpnElChecks.textContent = (evpnDb.checks || 0).toLocaleString('id-ID');
+  if (evpnElLive) evpnElLive.textContent = (evpnDb.live || 0).toLocaleString('id-ID');
+  if (evpnElBad) evpnElBad.textContent = (evpnDb.bad || 0).toLocaleString('id-ID');
 
   // 5. Spotify
   const spDb = s.spotify || { checks: 0, live: 0, bad: 0 };
-  const spTot = (spDb.checks || 0) + (spotifyStats.live || 0) + (spotifyStats.free || 0) + (spotifyStats.dead || 0) + (spotifyStats.error || 0);
-  const spLive = (spDb.live || 0) + (spotifyStats.live || 0) + (spotifyStats.free || 0);
-  const spBad = (spDb.bad || 0) + (spotifyStats.dead || 0) + (spotifyStats.error || 0);
   const spElChecks = document.getElementById('hub-stat-sp-checks');
   const spElLive = document.getElementById('hub-stat-sp-live');
   const spElBad = document.getElementById('hub-stat-sp-bad');
-  if (spElChecks) spElChecks.textContent = spTot.toLocaleString('id-ID');
-  if (spElLive) spElLive.textContent = spLive.toLocaleString('id-ID');
-  if (spElBad) spElBad.textContent = spBad.toLocaleString('id-ID');
+  if (spElChecks) spElChecks.textContent = (spDb.checks || 0).toLocaleString('id-ID');
+  if (spElLive) spElLive.textContent = (spDb.live || 0).toLocaleString('id-ID');
+  if (spElBad) spElBad.textContent = (spDb.bad || 0).toLocaleString('id-ID');
 
   // 6. Outlook
   const outDb = s.outlook || { checks: 0, live: 0, bad: 0 };
-  const outTot = (outDb.checks || 0) + (outlookStats.live || 0) + (outlookStats.twoFa || 0) + (outlookStats.bad || 0) + (outlookStats.locked || 0);
-  const outLive = (outDb.live || 0) + (outlookStats.live || 0);
-  const outBad = (outDb.bad || 0) + (outlookStats.bad || 0) + (outlookStats.locked || 0);
   const outElChecks = document.getElementById('hub-stat-out-checks') || document.getElementById('hub-stat-outlook-checks');
   const outElLive = document.getElementById('hub-stat-out-live') || document.getElementById('hub-stat-outlook-live');
   const outElBad = document.getElementById('hub-stat-out-bad') || document.getElementById('hub-stat-outlook-bad');
-  if (outElChecks) outElChecks.textContent = outTot.toLocaleString('id-ID');
-  if (outElLive) outElLive.textContent = outLive.toLocaleString('id-ID');
-  if (outElBad) outElBad.textContent = outBad.toLocaleString('id-ID');
+  if (outElChecks) outElChecks.textContent = (outDb.checks || 0).toLocaleString('id-ID');
+  if (outElLive) outElLive.textContent = (outDb.live || 0).toLocaleString('id-ID');
+  if (outElBad) outElBad.textContent = (outDb.bad || 0).toLocaleString('id-ID');
+
+  // 7. OpenAI / ChatGPT
+  const oaiDb = s.openai || { checks: 0, live: 0, bad: 0 };
+  const oaiElChecks = document.getElementById('hub-stat-oai-checks');
+  const oaiElLive = document.getElementById('hub-stat-oai-live');
+  const oaiElBad = document.getElementById('hub-stat-oai-bad');
+  if (oaiElChecks) oaiElChecks.textContent = (oaiDb.checks || 0).toLocaleString('id-ID');
+  if (oaiElLive) oaiElLive.textContent = (oaiDb.live || 0).toLocaleString('id-ID');
+  if (oaiElBad) oaiElBad.textContent = (oaiDb.bad || 0).toLocaleString('id-ID');
+
+  // 8. Prime Video
+  const pvDb = s.primevideo || { checks: 0, live: 0, bad: 0 };
+  const pvElChecks = document.getElementById('hub-stat-pv-checks');
+  const pvElLive = document.getElementById('hub-stat-pv-live');
+  const pvElBad = document.getElementById('hub-stat-pv-bad');
+  if (pvElChecks) pvElChecks.textContent = (pvDb.checks || 0).toLocaleString('id-ID');
+  if (pvElLive) pvElLive.textContent = (pvDb.live || 0).toLocaleString('id-ID');
+  if (pvElBad) pvElBad.textContent = (pvDb.bad || 0).toLocaleString('id-ID');
 }
 
 
@@ -8684,6 +11151,20 @@ function launchGrabModalService() {
     }
     switchTab('outlook');
     showToast('✓ Akun Outlook dimasukkan ke Checker!', 'success');
+  } else if (svc === 'openai' || svc === 'chatgpt') {
+    const sinp = document.getElementById('openai-cookie-input');
+    if (sinp) {
+      sinp.value = content;
+      switchTab('openai');
+      showToast('✓ Cookie OpenAI dimasukkan ke Checker!', 'success');
+    }
+  } else if (svc === 'primevideo' || svc === 'prime' || svc === 'amazon') {
+    const sinp = document.getElementById('pv-cookie-input');
+    if (sinp) {
+      sinp.value = content;
+      switchTab('primevideo');
+      showToast('✓ Cookie PrimeVideo dimasukkan ke Checker!', 'success');
+    }
   }
 }
 
