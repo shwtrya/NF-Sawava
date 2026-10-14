@@ -46,6 +46,10 @@ from modules.db import (
 from modules.sse import (
     register_sse_client, unregister_sse_client, broadcast_sse
 )
+
+from modules.batch_runner import (
+    start_batch_job, get_job_state, stop_batch_job, list_recent_jobs
+)
 from modules.auth import (
     is_rate_limited, create_dashboard_session_token,
     check_dashboard_token_authorized, touch_api_key,
@@ -421,6 +425,30 @@ async function handleLogin(e) {
             self.send_cors_headers()
             self.end_headers()
             self.wfile.write(json.dumps({"enabled": pin_set}).encode("utf-8"))
+
+        elif path.startswith("/api/bulk/status"):
+            job_id = qs.get("job_id", [""])[0]
+            st = get_job_state(job_id)
+            if not st:
+                self.send_response(404)
+                res = json.dumps({"error": "Job not found"}).encode("utf-8")
+            else:
+                self.send_response(200)
+                res = json.dumps(st).encode("utf-8")
+            self.send_header("Content-Type", "application/json")
+            self.send_cors_headers()
+            self.end_headers()
+            self.wfile.write(res)
+            return
+
+        elif path == "/api/bulk/jobs":
+            jobs = list_recent_jobs(15)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_cors_headers()
+            self.end_headers()
+            self.wfile.write(json.dumps({"jobs": jobs}).encode("utf-8"))
+            return
 
         elif path == "/api/proxies":
             # Load proxies outside proxy_lock to avoid lock inversion deadlock
@@ -1018,8 +1046,8 @@ async function handleLogin(e) {
                 self.end_headers()
                 self.wfile.write(json.dumps(result).encode("utf-8"))
 
-        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/openai/check", "/api/primevideo/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check", "/api/universal/detect", "/api/universal/parse", "/api/universal/check", "/api/proxies/save", "/api/proxies/test", "/api/proxies/test/stop", "/api/proxies/test_single", "/api/proxies/add", "/api/proxies/remove", "/api/proxies/auto-scrape", "/api/proxies/scraper-status", "/api/proxies/provider-config", "/api/proxies/sync-provider", "/api/notifications/config", "/api/notifications/test", "/api/notifications/bulk-summary", "/api/history/clear", "/api/history/delete", "/api/history/recheck", "/api/system/reload", "/api/dashboard-pin/set", "/api/dashboard-pin/verify", "/api/dashboard-pin/remove"):
-            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/openai/check", "/api/primevideo/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check", "/api/universal/detect", "/api/universal/parse", "/api/universal/check") else 50
+        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/openai/check", "/api/primevideo/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check", "/api/universal/detect", "/api/universal/parse", "/api/universal/check", "/api/bulk/start", "/api/bulk/stop", "/api/proxies/save", "/api/proxies/test", "/api/proxies/test/stop", "/api/proxies/test_single", "/api/proxies/add", "/api/proxies/remove", "/api/proxies/auto-scrape", "/api/proxies/scraper-status", "/api/proxies/provider-config", "/api/proxies/sync-provider", "/api/notifications/config", "/api/notifications/test", "/api/notifications/bulk-summary", "/api/history/clear", "/api/history/delete", "/api/history/recheck", "/api/system/reload", "/api/dashboard-pin/set", "/api/dashboard-pin/verify", "/api/dashboard-pin/remove"):
+            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/openai/check", "/api/primevideo/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check", "/api/universal/detect", "/api/universal/parse", "/api/universal/check", "/api/bulk/start", "/api/bulk/stop") else 50
             if is_rate_limited(client_ip, max_requests=rate_limit, window_seconds=10, bucket="api"):
                 self.send_response(429)
                 self.send_header("Content-Type", "application/json")
@@ -1128,6 +1156,47 @@ async function handleLogin(e) {
                 except Exception as e:
                     self.send_response(500)
                     res = json.dumps({"error": str(e), "status": "ERROR"}).encode("utf-8")
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(res)
+                return
+
+            if self.path == "/api/bulk/start":
+                try:
+                    p = json.loads(body.decode("utf-8")) if body else {}
+                    service = p.get("service", "universal")
+                    items = p.get("items", [])
+                    use_proxy = bool(p.get("use_proxy", True))
+                    concurrency = int(p.get("concurrency", 3))
+                    send_notif = bool(p.get("send_notification", True))
+
+                    job_id, err = start_batch_job(service, items, use_proxy=use_proxy, concurrency=concurrency, send_notif=send_notif)
+                    if err:
+                        self.send_response(400)
+                        res = json.dumps({"error": err, "status": "ERROR"}).encode("utf-8")
+                    else:
+                        self.send_response(200)
+                        res = json.dumps({"status": "RUNNING", "job_id": job_id, "total": len(items)}).encode("utf-8")
+                except Exception as e:
+                    self.send_response(500)
+                    res = json.dumps({"error": str(e), "status": "ERROR"}).encode("utf-8")
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(res)
+                return
+
+            if self.path == "/api/bulk/stop":
+                try:
+                    p = json.loads(body.decode("utf-8")) if body else {}
+                    job_id = p.get("job_id", "")
+                    ok = stop_batch_job(job_id)
+                    self.send_response(200 if ok else 404)
+                    res = json.dumps({"success": ok, "job_id": job_id}).encode("utf-8")
+                except Exception as e:
+                    self.send_response(500)
+                    res = json.dumps({"error": str(e)}).encode("utf-8")
                 self.send_header("Content-Type", "application/json")
                 self.send_cors_headers()
                 self.end_headers()

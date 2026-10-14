@@ -1,5 +1,7 @@
 import atexit
+import base64
 import csv
+import hashlib
 import io
 import logging
 import queue
@@ -7,9 +9,58 @@ import sqlite3
 import threading
 import time
 from datetime import datetime
-from modules.config import DB_FILE, _recheck_mode, get_config
+from cryptography.fernet import Fernet
+from modules.config import DB_FILE, _recheck_mode, get_config, save_config
 from modules.detector import get_cookie_fingerprint
 from modules.notifications import dispatch_live_notification
+
+_fernet_cipher = None
+_fernet_lock = threading.Lock()
+
+def get_db_cipher():
+    global _fernet_cipher
+    if _fernet_cipher is not None:
+        return _fernet_cipher
+    with _fernet_lock:
+        if _fernet_cipher is not None:
+            return _fernet_cipher
+        cfg = get_config()
+        key = cfg.get("db_encryption_key")
+        if not key:
+            seed = cfg.get("api_key") or cfg.get("dashboard_pin") or "nf_sawava_db_secret_seed"
+            key = base64.urlsafe_b64encode(hashlib.sha256(seed.encode("utf-8")).digest()).decode("utf-8")
+            cfg["db_encryption_key"] = key
+            try:
+                save_config(cfg)
+            except Exception as ex_cfg:
+                logging.debug(f"Save db_encryption_key note: {ex_cfg}")
+        _fernet_cipher = Fernet(key.encode("utf-8") if isinstance(key, str) else key)
+        return _fernet_cipher
+
+def encrypt_credential(text: str) -> str:
+    if not text:
+        return text
+    if str(text).startswith("enc:"):
+        return text
+    try:
+        cipher = get_db_cipher()
+        enc = cipher.encrypt(str(text).encode("utf-8")).decode("utf-8")
+        return f"enc:{enc}"
+    except Exception as e:
+        logging.warning(f"Credential encryption fallback: {e}")
+        return text
+
+def decrypt_credential(text: str) -> str:
+    if not text:
+        return text
+    if not str(text).startswith("enc:"):
+        return text
+    try:
+        cipher = get_db_cipher()
+        return cipher.decrypt(str(text)[4:].encode("utf-8")).decode("utf-8")
+    except Exception as e:
+        logging.warning(f"Credential decryption fallback: {e}")
+        return text
 
 db_lock = threading.Lock()
 db_write_queue = queue.Queue(maxsize=50000)
@@ -53,12 +104,13 @@ def _process_single_db_task(cursor, conn, task):
             p = data
             key = p.get("key")
             raw_cookie = p.get("raw_cookie", "")
+            raw_cookie_enc = encrypt_credential(raw_cookie)
             existing = None
             if key:
                 cursor.execute('SELECT id, plan, billing, country, token_url FROM history WHERE cookie_key = ? ORDER BY id DESC LIMIT 1', (key,))
                 existing = cursor.fetchone()
             if not existing and raw_cookie:
-                cursor.execute('SELECT id, plan, billing, country, token_url FROM history WHERE raw_cookie = ? ORDER BY id DESC LIMIT 1', (raw_cookie,))
+                cursor.execute('SELECT id, plan, billing, country, token_url FROM history WHERE raw_cookie = ? OR raw_cookie = ? ORDER BY id DESC LIMIT 1', (raw_cookie, raw_cookie_enc))
                 existing = cursor.fetchone()
 
             if existing:
@@ -84,7 +136,7 @@ def _process_single_db_task(cursor, conn, task):
                     WHERE id = ?
                 ''', (
                     p["now"], p["entry_type"], p["status"], final_plan, final_billing,
-                    final_country, p["route"], final_token, raw_cookie, key, p["email"],
+                    final_country, p["route"], final_token, raw_cookie_enc, key, p["email"],
                     existing_id
                 ))
                 if key:
@@ -96,7 +148,7 @@ def _process_single_db_task(cursor, conn, task):
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     p["now"], p["entry_type"], p["status"], p["plan"], p["billing"], p["country"],
-                    p["route"], p["token_url"], raw_cookie, key, p["email"]
+                    p["route"], p["token_url"], raw_cookie_enc, key, p["email"]
                 ))
                 logging.info(f"Save history: [{p['entry_type']}] {p['status']} - Plan: {p['plan']} - Country: {p['country']}")
 
@@ -472,7 +524,8 @@ def get_history(limit=50, offset=0, search='', status='', plan='', entry_type=''
             {
                 "id": r[0], "created_at": r[1], "type": r[2], "status": r[3],
                 "plan": r[4], "billing": r[5], "country": r[6], "route": r[7],
-                "token_url": r[8], "raw_cookie": r[9], "email": r[10] or ""
+                "token_url": r[8], "raw_cookie": decrypt_credential(r[9]) if r[9] else "",
+                "email": r[10] or ""
             }
             for r in rows
         ]
@@ -532,14 +585,40 @@ def export_history_csv(search='', status='', plan='', entry_type=''):
         writer = csv.writer(output)
         writer.writerow(["ID", "Waktu", "Service", "Status", "Plan", "Billing", "Negara", "Route", "Token URL", "Raw Cookie", "Email"])
         for r in rows:
+            r_list = list(r)
+            if r_list[9]:
+                r_list[9] = decrypt_credential(r_list[9])
             safe_row = []
-            for cell in r:
+            for cell in r_list:
                 s = str(cell) if cell is not None else ""
                 if s and s[0] in ("=", "+", "-", "@", "\t", "\r", "\n"):
                     s = "'" + s
                 safe_row.append(s)
             writer.writerow(safe_row)
         return output.getvalue()
+    finally:
+        conn.close()
+
+def migrate_encrypt_existing_history():
+    """Migrate any unencrypted credentials in history table to Fernet encrypted format."""
+    conn = get_db()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT id, raw_cookie FROM history WHERE raw_cookie IS NOT NULL AND raw_cookie != '' AND raw_cookie NOT LIKE 'enc:%'")
+        rows = c.fetchall()
+        if not rows:
+            return 0
+        updated = 0
+        for rid, raw in rows:
+            enc = encrypt_credential(raw)
+            c.execute("UPDATE history SET raw_cookie = ? WHERE id = ?", (enc, rid))
+            updated += 1
+        conn.commit()
+        logging.info(f"Encrypted {updated} historical credential rows.")
+        return updated
+    except Exception as e:
+        logging.error(f"Credential migration note: {e}")
+        return 0
     finally:
         conn.close()
 

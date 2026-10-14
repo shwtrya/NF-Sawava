@@ -71,7 +71,28 @@ def send_discord_alert(title, description, fields=None, color=0x10B981):
         logging.error(f"Discord notification error: {e}")
         return False, str(e)
 
-def dispatch_live_notification(service, email, plan, country, route=None):
+def dispatch_live_notification(*args, **kwargs):
+    if len(args) == 1 and isinstance(args[0], dict):
+        d = args[0]
+        service = kwargs.get("service") or d.get("service") or "Unknown"
+        email = d.get("email") or d.get("user") or d.get("account") or "-"
+        plan = d.get("plan") or d.get("product") or d.get("status_text") or "-"
+        country = d.get("country") or "-"
+        route = d.get("route") or "Direct"
+    elif len(args) >= 2 and isinstance(args[0], dict):
+        d = args[0]
+        service = args[2] if len(args) > 2 else (kwargs.get("service") or d.get("service") or "Unknown")
+        email = d.get("email") or d.get("user") or "-"
+        plan = d.get("plan") or d.get("product") or "-"
+        country = d.get("country") or "-"
+        route = d.get("route") or "Direct"
+    else:
+        service = args[0] if len(args) > 0 else kwargs.get("service", "Unknown")
+        email = args[1] if len(args) > 1 else kwargs.get("email", "-")
+        plan = args[2] if len(args) > 2 else kwargs.get("plan", "-")
+        country = args[3] if len(args) > 3 else kwargs.get("country", "-")
+        route = args[4] if len(args) > 4 else kwargs.get("route", "Direct")
+
     def _run():
         try:
             cfg = get_config()

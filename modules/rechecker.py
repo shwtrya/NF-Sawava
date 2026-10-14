@@ -9,7 +9,7 @@ from checkers.outlook import check_outlook_account
 from checkers.expressvpn import check_expressvpn_account
 from checkers.primevideo import check_primevideo_cookie
 from modules.config import _recheck_mode
-from modules.db import get_db, queue_db_write, save_history
+from modules.db import get_db, queue_db_write, decrypt_credential, save_history
 from modules.proxy_manager import get_random_proxy, mark_proxy_cooldown
 from modules.tls_engine import create_tls_session
 
@@ -24,6 +24,7 @@ def recheck_history_item(record_id, use_proxy=True):
         return {"error": "Record not found", "id": record_id}
 
     rec_id, rec_type, old_status, raw_cookie, rec_email = row
+    raw_cookie = decrypt_credential(raw_cookie)
     rec_type = (rec_type or "").lower()
     if not raw_cookie:
         return {"error": "No raw cookie/credential stored for this record", "id": rec_id}

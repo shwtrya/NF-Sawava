@@ -6326,6 +6326,14 @@ function clearUniversalInput() {
 
 function stopUniversalBatch() {
   univBatchRunning = false;
+  if (currentServerJobId) {
+    fetch('/api/bulk/stop', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ job_id: currentServerJobId })
+    }).catch(e => console.debug('Stop job err:', e));
+    currentServerJobId = null;
+  }
   const stopBtn = document.getElementById('universal-stop-btn');
   const startBtn = document.getElementById('universal-start-btn');
   if (stopBtn) stopBtn.style.display = 'none';
@@ -6334,6 +6342,85 @@ function stopUniversalBatch() {
     document.getElementById('universal-start-text').innerText = '🚀 Jalankan Universal Check';
   }
   showToast('Batch checking dihentikan.');
+}
+
+let currentServerJobId = null;
+
+async function pollServerBatchJob(jobId, total, detSvc) {
+  const startBtn = document.getElementById('universal-start-btn');
+  const stopBtn = document.getElementById('universal-stop-btn');
+  const tbody = document.getElementById('univ-results-tbody');
+  let renderedCount = 0;
+
+  const interval = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/bulk/status?job_id=${encodeURIComponent(jobId)}`, {
+        headers: getAuthHeaders()
+      });
+      if (!res.ok) {
+        clearInterval(interval);
+        return;
+      }
+      const data = await res.json();
+      const comp = data.completed || 0;
+      const live = data.live || 0;
+      const dead = data.dead || 0;
+      const pct = Math.round((comp / total) * 100);
+
+      document.getElementById('univ-stat-live').innerText = live;
+      document.getElementById('univ-stat-dead').innerText = dead;
+      document.getElementById('univ-stat-done').innerText = `${pct}%`;
+      document.getElementById('univ-progress-bar').style.width = `${pct}%`;
+      document.getElementById('univ-count-badge').innerText = `${comp} / ${total} Selesai`;
+
+      if (data.results && data.results.length > renderedCount) {
+        const newResults = data.results.slice(renderedCount);
+        newResults.forEach(r => {
+          const isLive = (r.status === 'LIVE' || r.status === 'OK');
+          const row = document.createElement('tr');
+          row.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+          row.style.background = isLive ? 'rgba(28,231,131,0.06)' : 'transparent';
+          const statusBadge = isLive
+            ? '<span class="badge" style="background:#1ce783; color:#04070b; font-weight:700;">LIVE</span>'
+            : '<span class="badge" style="background:#f43f5e; color:#fff;">DEAD</span>';
+          let detailDisplay = r.plan || '-';
+          if (r.country) detailDisplay += ` (${r.country})`;
+
+          row.innerHTML = `
+            <td style="padding:10px 8px; color:var(--text-muted);">${r.index}</td>
+            <td style="padding:10px 8px; font-weight:700; color:#c084fc;">${(detSvc || 'UNIVERSAL').toUpperCase()}</td>
+            <td style="padding:10px 8px; font-family:'JetBrains Mono',monospace; font-size:11.5px;">${escHtml(r.email || r.item)}</td>
+            <td style="padding:10px 8px;">${statusBadge}</td>
+            <td style="padding:10px 8px; color:#e2e8f0;">${escHtml(detailDisplay)}</td>
+            <td style="padding:10px 8px;">
+              <button type="button" class="btn-subtle" style="padding:2px 8px; font-size:11px;" onclick="navigator.clipboard.writeText(${JSON.stringify(r.item)}); showToast('Tersalin!');">Copy</button>
+            </td>
+          `;
+          if (tbody) tbody.prepend(row);
+          univBatchResults.push({
+            index: r.index,
+            service: detSvc,
+            item: r.item,
+            status: r.status,
+            result: { email: r.email, plan: r.plan, country: r.country }
+          });
+        });
+        renderedCount = data.results.length;
+      }
+
+      if (data.status === 'FINISHED' || data.status === 'STOPPED') {
+        clearInterval(interval);
+        univBatchRunning = false;
+        currentServerJobId = null;
+        if (startBtn) startBtn.disabled = false;
+        document.getElementById('universal-start-text').innerText = '🚀 Jalankan Universal Check';
+        if (stopBtn) stopBtn.style.display = 'none';
+        showToast(`⚡ Background Check Selesai! ${live} LIVE dari ${total} akun. Notif terkirim!`);
+      }
+    } catch (e) {
+      console.debug('Background poll tick:', e);
+    }
+  }, 1000);
 }
 
 async function startUniversalBatch() {
@@ -6386,13 +6473,47 @@ async function startUniversalBatch() {
   if (resContainer) resContainer.style.display = 'block';
   if (tbody) tbody.innerHTML = '';
 
-  let live = 0, dead = 0, completed = 0;
   const total = items.length;
   document.getElementById('univ-stat-total').innerText = total;
   document.getElementById('univ-stat-live').innerText = '0';
   document.getElementById('univ-stat-dead').innerText = '0';
   document.getElementById('univ-stat-done').innerText = '0%';
   document.getElementById('univ-progress-bar').style.width = '0%';
+
+  const bgMode = document.getElementById('universal-background-mode') && document.getElementById('universal-background-mode').checked;
+  if (bgMode) {
+    try {
+      const res = await fetch('/api/bulk/start', {
+        method: 'POST',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          service: det.service,
+          items: items,
+          use_proxy: use_proxy,
+          concurrency: concurrency,
+          send_notification: true
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'ERROR' || data.error) {
+        showToast('Gagal memulai background task: ' + (data.error || 'Unknown'));
+        startBtn.disabled = false;
+        document.getElementById('universal-start-text').innerText = '🚀 Jalankan Universal Check';
+        if (stopBtn) stopBtn.style.display = 'none';
+        return;
+      }
+      currentServerJobId = data.job_id;
+      showToast('⚡ Background Check aktif! Anda bisa bebas menutup tab/HP.');
+      pollServerBatchJob(currentServerJobId, total, det.service);
+      return;
+    } catch (e) {
+      showToast('Koneksi background task gagal: ' + e.message);
+      startBtn.disabled = false;
+      document.getElementById('universal-start-text').innerText = '🚀 Jalankan Universal Check';
+      if (stopBtn) stopBtn.style.display = 'none';
+      return;
+    }
+  }
 
   let currentIndex = 0;
 
