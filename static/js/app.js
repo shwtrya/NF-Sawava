@@ -278,7 +278,7 @@ function switchTab(tab) {
   if (window.innerWidth <= 992) {
     toggleMobileSidebar(false);
   }
-  const tabs = ['dashboard', 'checkers', 'single', 'disney', 'crunchyroll', 'expressvpn', 'spotify', 'outlook', 'openai', 'primevideo', 'bulk', 'history', 'analytics', 'proxymanager', 'settings'];
+  const tabs = ['dashboard', 'checkers', 'universal', 'single', 'disney', 'crunchyroll', 'expressvpn', 'spotify', 'outlook', 'openai', 'primevideo', 'bulk', 'history', 'analytics', 'proxymanager', 'settings'];
 
   // Toggle active on all matching buttons
   document.querySelectorAll('.tab-btn').forEach((btn) => {
@@ -293,6 +293,7 @@ function switchTab(tab) {
 
   // Toggle checker top bar pills — dynamic single source of truth
   const CHECKER_PILLS = [
+    { key: 'universal',   label: '✨ Universal' },
     { key: 'single',      label: 'Netflix Token' },
     { key: 'bulk',        label: 'Netflix Bulk' },
     { key: 'disney',      label: 'Disney+' },
@@ -6249,6 +6250,271 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initUniversalDetectors);
 } else {
   initUniversalDetectors();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// UNIVERSAL AUTO-DETECTION RUNNER & WORKSPACE
+// ═══════════════════════════════════════════════════════════════════
+let univBatchRunning = false;
+let univBatchResults = [];
+let univBatchItems = [];
+
+function detectUniversalDashboard() {
+  const el = document.getElementById('dash-universal-input');
+  const badge = document.getElementById('dash-universal-badge');
+  if (!el || !badge) return;
+  const text = el.value.trim();
+  if (!text) {
+    badge.innerHTML = '<span>🔍 Format: Menunggu input teks...</span>';
+    badge.style.color = 'var(--text-muted)';
+    return;
+  }
+  const det = window.UniversalDetector ? window.UniversalDetector.detect(text) : { service: 'unknown', count: 1, label: 'Text' };
+  const iconMap = {
+    netflix: '🔴', spotify: '🟢', disney: '🏰', crunchyroll: '🍥',
+    openai: '🤖', primevideo: '📦', outlook: '📧', expressvpn: '🛡️',
+    combo: '🔑', unknown: '✨'
+  };
+  const icon = iconMap[det.service] || '✨';
+  badge.innerHTML = `<span style="color:#c084fc; font-weight:700;">${icon} ${det.service.toUpperCase()}</span> <span style="opacity:0.4;">|</span> <span>${det.label}</span>`;
+}
+
+function detectUniversalFull() {
+  const el = document.getElementById('universal-input');
+  const badge = document.getElementById('universal-format-badge');
+  if (!el || !badge) return;
+  const text = el.value.trim();
+  if (!text) {
+    badge.innerHTML = '<span>🔍 Format: Menunggu input teks...</span>';
+    badge.style.color = 'var(--text-muted)';
+    return;
+  }
+  const det = window.UniversalDetector ? window.UniversalDetector.detect(text) : { service: 'unknown', count: 1, label: 'Text' };
+  const iconMap = {
+    netflix: '🔴', spotify: '🟢', disney: '🏰', crunchyroll: '🍥',
+    openai: '🤖', primevideo: '📦', outlook: '📧', expressvpn: '🛡️',
+    combo: '🔑', unknown: '✨'
+  };
+  const icon = iconMap[det.service] || '✨';
+  badge.innerHTML = `<span style="color:#c084fc; font-weight:700; font-size:13px;">${icon} ${det.service.toUpperCase()}</span> <span style="opacity:0.4;">|</span> <span>Format: ${det.label}</span>`;
+}
+
+async function runUniversalFromDashboard() {
+  const el = document.getElementById('dash-universal-input');
+  const text = el ? el.value.trim() : '';
+  if (!text) {
+    showToast('Paste data akun atau cookie terlebih dahulu');
+    return;
+  }
+  const fullEl = document.getElementById('universal-input');
+  if (fullEl) fullEl.value = text;
+  switchTab('universal');
+  detectUniversalFull();
+  startUniversalBatch();
+}
+
+function clearUniversalInput() {
+  const el = document.getElementById('universal-input');
+  if (el) el.value = '';
+  detectUniversalFull();
+  const resContainer = document.getElementById('universal-results-container');
+  if (resContainer) resContainer.style.display = 'none';
+  const statsBar = document.getElementById('universal-stats-bar');
+  if (statsBar) statsBar.style.display = 'none';
+  univBatchResults = [];
+}
+
+function stopUniversalBatch() {
+  univBatchRunning = false;
+  const stopBtn = document.getElementById('universal-stop-btn');
+  const startBtn = document.getElementById('universal-start-btn');
+  if (stopBtn) stopBtn.style.display = 'none';
+  if (startBtn) {
+    startBtn.disabled = false;
+    document.getElementById('universal-start-text').innerText = '🚀 Jalankan Universal Check';
+  }
+  showToast('Batch checking dihentikan.');
+}
+
+async function startUniversalBatch() {
+  const el = document.getElementById('universal-input');
+  const text = el ? el.value.trim() : '';
+  if (!text) {
+    showToast('Masukkan data akun / cookie terlebih dahulu');
+    return;
+  }
+
+  const det = window.UniversalDetector ? window.UniversalDetector.detect(text) : { service: 'unknown', format: 'unknown' };
+  const use_proxy = document.getElementById('universal-proxy').checked;
+  const concurrency = parseInt(document.getElementById('universal-threads').value, 10) || 3;
+
+  let items = [];
+  if (det.format === 'combo') {
+    const comboRegex = /^[^\s:;|,]+@[^\s:;|,]+\.[^\s:;|,]+[:|;,\t].+$/;
+    items = text.split('\n').map(l => l.trim()).filter(l => comboRegex.test(l));
+  } else if (det.format === 'json_cookies') {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const jsonLines = lines.filter(l => l.startsWith('[') && l.endsWith(']'));
+    items = jsonLines.length > 0 ? jsonLines : [text];
+  } else if (det.format === 'netscape') {
+    const blocks = text.split(/(?=# Netscape|\n\s*\n|# =+)/g)
+      .map(b => b.trim())
+      .filter(b => b.split('\n').some(l => l.split('\t').length >= 5));
+    items = blocks.length > 0 ? blocks : [text];
+  } else {
+    items = text.split('\n').map(l => l.trim()).filter(Boolean);
+  }
+
+  if (items.length === 0) {
+    items = [text];
+  }
+
+  univBatchItems = items;
+  univBatchResults = [];
+  univBatchRunning = true;
+
+  const startBtn = document.getElementById('universal-start-btn');
+  const stopBtn = document.getElementById('universal-stop-btn');
+  const statsBar = document.getElementById('universal-stats-bar');
+  const resContainer = document.getElementById('universal-results-container');
+  const tbody = document.getElementById('univ-results-tbody');
+
+  startBtn.disabled = true;
+  document.getElementById('universal-start-text').innerText = '⏳ Sedang Memeriksa...';
+  if (stopBtn) stopBtn.style.display = 'inline-flex';
+  if (statsBar) statsBar.style.display = 'block';
+  if (resContainer) resContainer.style.display = 'block';
+  if (tbody) tbody.innerHTML = '';
+
+  let live = 0, dead = 0, completed = 0;
+  const total = items.length;
+  document.getElementById('univ-stat-total').innerText = total;
+  document.getElementById('univ-stat-live').innerText = '0';
+  document.getElementById('univ-stat-dead').innerText = '0';
+  document.getElementById('univ-stat-done').innerText = '0%';
+  document.getElementById('univ-progress-bar').style.width = '0%';
+
+  let currentIndex = 0;
+
+  async function worker() {
+    while (currentIndex < items.length && univBatchRunning) {
+      const idx = currentIndex++;
+      const item = items[idx];
+
+      try {
+        const res = await fetch('/api/universal/check', {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            service: det.service,
+            item: item,
+            use_proxy: use_proxy
+          })
+        });
+
+        const data = await res.json();
+        const status = data.status || (data.result ? data.result.status : 'ERROR');
+        const svc = data.service || det.service || 'unknown';
+        const resultObj = data.result || {};
+
+        if (status === 'LIVE' || status === 'OK') {
+          live++;
+        } else {
+          dead++;
+        }
+
+        completed++;
+        const pct = Math.round((completed / total) * 100);
+        document.getElementById('univ-stat-live').innerText = live;
+        document.getElementById('univ-stat-dead').innerText = dead;
+        document.getElementById('univ-stat-done').innerText = `${pct}%`;
+        document.getElementById('univ-progress-bar').style.width = `${pct}%`;
+        document.getElementById('univ-count-badge').innerText = `${completed} / ${total} Selesai`;
+
+        const row = document.createElement('tr');
+        row.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+        row.style.background = (status === 'LIVE' || status === 'OK') ? 'rgba(28,231,131,0.06)' : 'transparent';
+
+        const isLive = (status === 'LIVE' || status === 'OK');
+        const statusBadge = isLive
+          ? '<span class="badge" style="background:#1ce783; color:#04070b; font-weight:700;">LIVE</span>'
+          : '<span class="badge" style="background:#f43f5e; color:#fff;">DEAD</span>';
+
+        let accountDisplay = resultObj.email || (item.length > 35 ? item.substring(0, 35) + '...' : item);
+        let detailDisplay = resultObj.plan || resultObj.product || resultObj.status_text || '-';
+        if (resultObj.country) detailDisplay += ` (${resultObj.country})`;
+
+        row.innerHTML = `
+          <td style="padding:10px 8px; color:var(--text-muted);">${completed}</td>
+          <td style="padding:10px 8px; font-weight:700; color:#c084fc;">${svc.toUpperCase()}</td>
+          <td style="padding:10px 8px; font-family:'JetBrains Mono',monospace; font-size:11.5px;">${escHtml(accountDisplay)}</td>
+          <td style="padding:10px 8px;">${statusBadge}</td>
+          <td style="padding:10px 8px; color:#e2e8f0;">${escHtml(detailDisplay)}</td>
+          <td style="padding:10px 8px;">
+            <button type="button" class="btn-subtle" style="padding:2px 8px; font-size:11px;" onclick="navigator.clipboard.writeText(${JSON.stringify(item)}); showToast('Tersalin!');">Copy</button>
+          </td>
+        `;
+        tbody.prepend(row);
+
+        univBatchResults.push({
+          index: completed,
+          service: svc,
+          item: item,
+          status: status,
+          result: resultObj
+        });
+
+      } catch (err) {
+        dead++;
+        completed++;
+      }
+    }
+  }
+
+  const workers = [];
+  for (let w = 0; w < Math.min(concurrency, items.length); w++) {
+    workers.push(worker());
+  }
+
+  await Promise.all(workers);
+
+  univBatchRunning = false;
+  startBtn.disabled = false;
+  document.getElementById('universal-start-text').innerText = '🚀 Jalankan Universal Check';
+  if (stopBtn) stopBtn.style.display = 'none';
+  showToast(`Universal Check Selesai! ${live} LIVE dari ${total} akun.`);
+}
+
+function copyUniversalLiveOnly() {
+  const liveItems = univBatchResults
+    .filter(r => r.status === 'LIVE' || r.status === 'OK')
+    .map(r => r.item);
+  if (liveItems.length === 0) {
+    showToast('Tidak ada akun LIVE yang ditemukan');
+    return;
+  }
+  navigator.clipboard.writeText(liveItems.join('\n'));
+  showToast(`${liveItems.length} akun LIVE berhasil disalin ke clipboard!`);
+}
+
+function exportUniversalCSV() {
+  if (univBatchResults.length === 0) {
+    showToast('Belum ada hasil untuk diexport');
+    return;
+  }
+  let csv = 'No,Service,Status,Account,Detail\n';
+  univBatchResults.forEach((r, idx) => {
+    const acc = (r.result && r.result.email) ? r.result.email : r.item.replace(/\r?\n/g, ' ');
+    const det = (r.result && (r.result.plan || r.result.product)) ? (r.result.plan || r.result.product) : '-';
+    csv += `"${idx + 1}","${r.service}","${r.status}","${acc.replace(/"/g, '""')}","${det.replace(/"/g, '""')}"\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Universal_Check_Results_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // PWA Service Worker Registration

@@ -189,6 +189,11 @@
       <span class="item-text">Dashboard</span>
     </button>
     <div class="nav-section-label">CHECKER MODULES</div>
+    <button type="button" class="sidebar-item tab-btn" data-tab="universal" onclick="switchTab('universal')" title="Universal Auto-Check (All Services)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/></svg>
+      <span class="item-text" style="font-weight:700; color:#c084fc;">Universal Auto-Check</span>
+      <span class="service-dot purple" style="background:#a855f7; box-shadow:0 0 8px rgba(168,85,247,0.7);"></span>
+    </button>
     <button type="button" class="sidebar-item tab-btn" data-tab="single" onclick="switchTab('single')" title="Netflix Token Suite">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="15" x="2" y="4.5" rx="2"/><polyline points="8 10 12 13 16 10"/></svg>
       <span class="item-text">Netflix Token Suite</span>
@@ -372,8 +377,43 @@
       </div>
     </div>
 
-    
-    <!-- Quick Service Launchers Hub -->
+    <!-- Universal Smart Auto-Detector Quick Card -->
+    <div class="card" style="margin-bottom:24px; padding:22px; background:linear-gradient(135deg, rgba(168,85,247,0.09) 0%, rgba(13,17,23,0.95) 100%); border:1px solid rgba(168,85,247,0.3); border-radius:14px; position:relative; overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="font-size:24px; background:rgba(168,85,247,0.18); width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:10px; border:1px solid rgba(168,85,247,0.4);">✨</div>
+          <div>
+            <div style="font-size:16px; font-weight:800; color:#fff; display:flex; align-items:center; gap:8px;">
+              <span>Universal Auto-Detection Checker</span>
+              <span class="badge" style="background:#a855f7; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:6px;">8 SERVICES</span>
+            </div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Paste format apa saja (Netscape, JSON, Combo email:pass, Raw Token) — sistem mendeteksi & memverifikasi otomatis</div>
+          </div>
+        </div>
+        <div>
+          <button type="button" class="btn-subtle" onclick="switchTab('universal')" style="font-size:12px; padding:7px 14px; color:#c084fc; border-color:rgba(168,85,247,0.3); background:rgba(168,85,247,0.08);">
+            Buka Workspace Penuh →
+          </button>
+        </div>
+      </div>
+
+      <textarea id="dash-universal-input" placeholder="Paste data akun/cookie apa saja di sini... (Netscape cookie Netflix/Spotify, JSON Cookie-Editor, atau combo email:password Disney+/Crunchyroll/Outlook/ExpressVPN)" style="width:100%; height:95px; background:rgba(4,7,12,0.85); border:1px solid #30363d; border-radius:10px; color:#fff; padding:12px; font-family:'JetBrains Mono',monospace; font-size:12.5px; resize:vertical; outline:none;" oninput="detectUniversalDashboard()"></textarea>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; flex-wrap:wrap; gap:10px;">
+        <div id="dash-universal-badge" style="display:inline-flex; align-items:center; gap:8px; font-size:12px; font-weight:600; color:var(--text-muted); padding:6px 14px; background:rgba(255,255,255,0.03); border:1px solid #30363d; border-radius:8px;">
+          <span>🔍 Format: Menunggu input teks...</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <label style="font-size:12px; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+            <input type="checkbox" id="dash-universal-proxy" checked> Gunakan Proxy
+          </label>
+          <button type="button" id="dash-universal-btn" class="btn-primary" style="background:linear-gradient(135deg, #a855f7, #7c3aed); border:none; padding:8px 20px; font-size:13px; font-weight:700;" onclick="runUniversalFromDashboard()">
+            <span>⚡ Jalankan Auto-Check</span>
+          </button>
+        </div>
+      </div>
+      <div id="dash-universal-out" style="display:none; margin-top:14px;"></div>
+    </div>
     <div class="dash-section-header">
       <div>
         <h3 class="dash-section-title">Specialized Checker Engines</h3>
@@ -647,6 +687,143 @@
   <div id="panel-checkers" class="section-panel" style="display:none;"></div>
 
 <!-- 3. SPECIALIZED CHECKER MODULES & TOOLS -->
+    <!-- PANEL: UNIVERSAL SMART CHECKER (8 IN 1) -->
+    <div id="panel-universal" class="section-panel">
+    <div class="checker-top-bar">
+      <button type="button" class="checker-back-btn" onclick="switchTab('dashboard')" title="Back to Dashboard">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        <span>All Checkers</span>
+      </button>
+      <div class="checker-quick-tabs">
+        <button type="button" class="checker-pill active" onclick="switchTab('universal')">✨ Universal</button><button type="button" class="checker-pill" onclick="switchTab('single')">Netflix Token</button><button type="button" class="checker-pill" onclick="switchTab('bulk')">Netflix Bulk</button><button type="button" class="checker-pill" onclick="switchTab('disney')">Disney+</button><button type="button" class="checker-pill" onclick="switchTab('crunchyroll')">Crunchyroll</button><button type="button" class="checker-pill" onclick="switchTab('expressvpn')">ExpressVPN</button><button type="button" class="checker-pill" onclick="switchTab('spotify')">Spotify</button><button type="button" class="checker-pill" onclick="switchTab('outlook')">Outlook</button><button type="button" class="checker-pill" onclick="switchTab('openai')">OpenAI</button><button type="button" class="checker-pill" onclick="switchTab('primevideo')">PrimeVideo</button>
+      </div>
+    </div>
+
+    <!-- Header Banner -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="font-size:26px; background:rgba(168,85,247,0.15); width:48px; height:48px; display:flex; align-items:center; justify-content:center; border-radius:12px; border:1px solid rgba(168,85,247,0.35);">🔮</div>
+        <div>
+          <div style="font-weight:800; font-size:18px; color:#fff; display:flex; align-items:center; gap:10px;">
+            <span>Universal Auto-Detection Engine</span>
+            <span class="badge" style="background:#a855f7; color:#fff; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:6px;">8 SERVICES UNIFIED</span>
+          </div>
+          <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Mendukung Netscape, JSON Cookie, Combo email:password & Raw Auth Tokens sekaligus</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <span class="badge" style="background:rgba(255,255,255,0.05); color:#c084fc; border:1px solid rgba(168,85,247,0.3); font-size:11px; padding:4px 10px;">Auto Format & Routing</span>
+      </div>
+    </div>
+
+    <!-- Smart Input Area -->
+    <div class="card" style="padding:18px; margin-bottom:16px;">
+      <textarea id="universal-input" placeholder="Paste data akun atau cookie apa saja di sini...
+Format yang didukung otomatis:
+• Netscape format (Netflix, Spotify, OpenAI, Crunchyroll, Prime Video)
+• JSON Cookie-Editor array
+• Combo email:password (Disney+, Crunchyroll, Outlook, ExpressVPN)
+• Raw Session Token (sp_dc, JWT, etc.)" style="width:100%; height:180px; background:#04070b; border:1px solid #30363d; border-radius:10px; color:#fff; padding:12px; font-family:'JetBrains Mono',monospace; font-size:12.5px; resize:vertical; outline:none;" oninput="detectUniversalFull()"></textarea>
+
+      <!-- Live Detection Bar -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; flex-wrap:wrap; gap:10px; background:rgba(0,0,0,0.3); padding:10px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.06);">
+        <div id="universal-format-badge" style="display:inline-flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600; color:var(--text-muted);">
+          <span>🔍 Format: Menunggu input teks...</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div class="shortcut-hint" style="margin:0;">Shortcut: <kbd>Ctrl</kbd> + <kbd>Enter</kbd></div>
+          <button type="button" class="btn-subtle" onclick="clearUniversalInput()" style="padding:4px 10px; font-size:11px;">Bersihkan</button>
+        </div>
+      </div>
+
+      <!-- Execution Controls -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; flex-wrap:wrap; gap:12px;">
+        <div style="display:flex; align-items:center; gap:16px;">
+          <label style="font-size:12.5px; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+            <input type="checkbox" id="universal-proxy" checked> Gunakan Proxy Pool
+          </label>
+          <div style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted);">
+            <span>Concurrency:</span>
+            <select id="universal-threads" style="background:#090d16; border:1px solid #30363d; color:#fff; border-radius:6px; padding:3px 8px; font-size:12px;">
+              <option value="1">1 Worker (Sequential)</option>
+              <option value="3" selected>3 Workers (Rekomendasi)</option>
+              <option value="5">5 Workers (Cepat)</option>
+              <option value="8">8 Workers (Turbo)</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button id="universal-stop-btn" class="btn-subtle" style="display:none; color:#f85149; border-color:rgba(248,81,73,0.3);" onclick="stopUniversalBatch()">
+            ⏹️ Hentikan
+          </button>
+          <button id="universal-start-btn" class="btn-primary" style="background:linear-gradient(135deg, #a855f7, #7c3aed); border:none; padding:9px 24px; font-weight:700; font-size:13.5px;" onclick="startUniversalBatch()">
+            <span id="universal-start-text">🚀 Jalankan Universal Check</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Real-time Stats & Progress -->
+    <div id="universal-stats-bar" style="display:none; margin-bottom:16px;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px; margin-bottom:10px;">
+        <div class="stat-card" style="padding:12px;">
+          <div class="stat-card-label">Total Akun</div>
+          <div class="stat-card-val text-white" id="univ-stat-total">0</div>
+        </div>
+        <div class="stat-card" style="padding:12px;">
+          <div class="stat-card-label">Live / Premium</div>
+          <div class="stat-card-val text-emerald" id="univ-stat-live">0</div>
+        </div>
+        <div class="stat-card" style="padding:12px;">
+          <div class="stat-card-label">Dead / Error</div>
+          <div class="stat-card-val text-rose" id="univ-stat-dead">0</div>
+        </div>
+        <div class="stat-card" style="padding:12px;">
+          <div class="stat-card-label">Selesai</div>
+          <div class="stat-card-val text-cyan" id="univ-stat-done">0%</div>
+        </div>
+      </div>
+      <div style="background:rgba(255,255,255,0.06); height:6px; border-radius:3px; overflow:hidden;">
+        <div id="univ-progress-bar" style="background:linear-gradient(90deg, #a855f7, #1ce783); width:0%; height:100%; transition:width 0.2s;"></div>
+      </div>
+    </div>
+
+    <!-- Results Table Container -->
+    <div id="universal-results-container" class="card" style="display:none; padding:18px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+        <div style="font-weight:700; font-size:14px; color:#fff; display:flex; align-items:center; gap:8px;">
+          <span>Hasil Pengecekan Universal</span>
+          <span class="badge" id="univ-count-badge" style="background:rgba(168,85,247,0.15); color:#c084fc; font-size:11px;">0 Selesai</span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn-subtle" onclick="copyUniversalLiveOnly()" style="font-size:11.5px; padding:5px 12px; color:#1ce783; border-color:rgba(28,231,131,0.3);">
+            📋 Salin Akun LIVE Saja
+          </button>
+          <button type="button" class="btn-subtle" onclick="exportUniversalCSV()" style="font-size:11.5px; padding:5px 12px;">
+            📥 Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div style="overflow-x:auto;">
+        <table class="data-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+          <thead>
+            <tr style="border-bottom:1px solid #30363d; text-align:left; color:var(--text-muted);">
+              <th style="padding:8px;">#</th>
+              <th style="padding:8px;">Layanan</th>
+              <th style="padding:8px;">Akun / Identifier</th>
+              <th style="padding:8px;">Status</th>
+              <th style="padding:8px;">Paket / Detail</th>
+              <th style="padding:8px;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="univ-results-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
     <div id="panel-single" class="section-panel">
     <div class="checker-top-bar">
       <button type="button" class="checker-back-btn" onclick="switchTab('dashboard')" title="Back to Dashboard">

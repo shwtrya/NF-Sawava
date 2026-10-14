@@ -1221,6 +1221,7 @@ async function doLogin() {
       return;
     }
     sessionStorage.setItem(API_PIN_KEY, apiKey);
+    document.cookie = 'nf_api_key=' + encodeURIComponent(apiKey) + '; path=/; max-age=2592000; SameSite=Strict';
     showApp();
     initAfterLogin();
     loadOverview();
@@ -1240,6 +1241,7 @@ function showLoginError(msg) {
 
 function doLogout() {
   sessionStorage.removeItem(API_PIN_KEY);
+  document.cookie = 'nf_api_key=; path=/; max-age=0; SameSite=Strict';
   if (proxyTestPollTimer) { clearInterval(proxyTestPollTimer); proxyTestPollTimer = null; }
   if (_activityTimer) { clearInterval(_activityTimer); _activityTimer = null; }
   if (_overviewRefreshTimer) { clearInterval(_overviewRefreshTimer); _overviewRefreshTimer = null; }

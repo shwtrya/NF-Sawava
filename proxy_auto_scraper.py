@@ -62,10 +62,10 @@ scraper_state = {
 }
 scraper_lock = threading.Lock()
 
-REFRESH_INTERVAL = 6 * 3600  # 6 hours
-TEST_CONCURRENCY = 250
-TEST_TIMEOUT = 6
-TEST_URL = "https://www.netflix.com"
+REFRESH_INTERVAL = 12 * 3600  # 12 hours
+TEST_CONCURRENCY = 35
+TEST_TIMEOUT = 4
+TEST_URL = "https://api.ipify.org?format=json"
 
 
 def scrape_proxies_from_sources():
@@ -125,7 +125,7 @@ def test_proxies_batch(proxies, concurrency=TEST_CONCURRENCY, timeout=TEST_TIMEO
                 headers={"User-Agent": "Mozilla/5.0"}
             )
             latency = int((time.time() - t0) * 1000)
-            if r.status_code in (200, 301, 302, 303, 307, 403):
+            if r.status_code == 200 and latency < 3500:
                 with alive_lock:
                     alive.append((proxy_str, latency))
                     with scraper_lock:
