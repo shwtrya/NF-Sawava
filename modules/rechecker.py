@@ -1,13 +1,5 @@
 import logging
 from datetime import datetime
-from checkers.netflix import check_netflix_membership
-from checkers.disney import check_disney_account, check_disney_cookie
-from checkers.crunchyroll import check_crunchyroll_account, check_crunchyroll_cookie
-from checkers.spotify import check_spotify_cookie
-from checkers.openai import check_openai_cookie
-from checkers.outlook import check_outlook_account
-from checkers.expressvpn import check_expressvpn_account
-from checkers.primevideo import check_primevideo_cookie
 from modules.config import _recheck_mode
 from modules.db import get_db, queue_db_write, decrypt_credential, save_history
 from modules.proxy_manager import get_random_proxy, mark_proxy_cooldown
@@ -15,6 +7,14 @@ from modules.tls_engine import create_tls_session
 
 def recheck_history_item(record_id, use_proxy=True):
     """Re-check a history record's cookie/credential to update its status (LIVE/DEAD/HOLD)."""
+    from checkers.netflix import check_netflix_membership
+    from checkers.disney import check_disney_account, check_disney_cookie
+    from checkers.crunchyroll import check_crunchyroll_account, check_crunchyroll_cookie
+    from checkers.spotify import check_spotify_cookie
+    from checkers.openai import check_openai_cookie
+    from checkers.outlook import check_outlook_account
+    from checkers.expressvpn import check_expressvpn_account
+    from checkers.primevideo import check_primevideo_cookie
     conn = get_db()
     c = conn.cursor()
     c.execute('SELECT id, type, status, raw_cookie, email FROM history WHERE id = ?', (record_id,))

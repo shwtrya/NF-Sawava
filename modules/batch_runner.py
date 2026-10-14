@@ -4,14 +4,6 @@ import threading
 import time
 from datetime import datetime
 
-from checkers.crunchyroll import check_crunchyroll_account, check_crunchyroll_cookie
-from checkers.disney import check_disney_account, check_disney_cookie
-from checkers.expressvpn import check_expressvpn_account
-from checkers.netflix import check_netflix_membership
-from checkers.openai import check_openai_cookie
-from checkers.outlook import check_outlook_account
-from checkers.primevideo import check_primevideo_cookie
-from checkers.spotify import check_spotify_cookie
 from modules.db import save_history
 from modules.notifications import dispatch_bulk_notification, dispatch_live_notification
 from modules.proxy_manager import get_random_proxy, mark_proxy_cooldown
@@ -23,6 +15,15 @@ _jobs = {}  # job_id -> dict state
 
 
 def _check_item_dispatch(service, item, use_proxy=True):
+    from checkers.crunchyroll import check_crunchyroll_account, check_crunchyroll_cookie
+    from checkers.disney import check_disney_account, check_disney_cookie
+    from checkers.expressvpn import check_expressvpn_account
+    from checkers.netflix import check_netflix_membership
+    from checkers.openai import check_openai_cookie
+    from checkers.outlook import check_outlook_account
+    from checkers.primevideo import check_primevideo_cookie
+    from checkers.spotify import check_spotify_cookie
+
     svc = (service or "netflix").lower().strip()
     raw = item.strip() if isinstance(item, str) else str(item)
 
