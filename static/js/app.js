@@ -278,7 +278,7 @@ function switchTab(tab) {
   if (window.innerWidth <= 992) {
     toggleMobileSidebar(false);
   }
-  const tabs = ['dashboard', 'checkers', 'universal', 'single', 'disney', 'crunchyroll', 'expressvpn', 'spotify', 'outlook', 'openai', 'primevideo', 'bulk', 'history', 'analytics', 'proxymanager', 'settings'];
+  const tabs = ['dashboard', 'checkers', 'single', 'disney', 'crunchyroll', 'expressvpn', 'spotify', 'outlook', 'openai', 'primevideo', 'bulk', 'history', 'analytics', 'proxymanager', 'settings'];
 
   // Toggle active on all matching buttons
   document.querySelectorAll('.tab-btn').forEach((btn) => {
@@ -293,7 +293,6 @@ function switchTab(tab) {
 
   // Toggle checker top bar pills — dynamic single source of truth
   const CHECKER_PILLS = [
-    { key: 'universal',   label: '✨ Universal' },
     { key: 'single',      label: 'Netflix Token' },
     { key: 'bulk',        label: 'Netflix Bulk' },
     { key: 'disney',      label: 'Disney+' },
@@ -714,7 +713,7 @@ function updateBulkCount() {
     countBadge.textContent = '0 akun';
     countBadge.style.color = 'var(--text-muted)';
     const bar = textarea.nextElementSibling;
-    if (bar && bar.classList.contains('universal-detector-bar')) bar.style.display = 'none';
+  if (bar && bar.classList.contains('universal-detector-bar')) bar.remove();
     return;
   }
   const lines = parseCookieInputs(raw);
@@ -1231,48 +1230,10 @@ window.UniversalDetector = {
   updateBar(textarea, expectedService = 'netflix') {
     if (!textarea) return;
     let bar = textarea.nextElementSibling;
-    if (!bar || !bar.classList.contains('universal-detector-bar')) {
-      bar = document.createElement('div');
-      bar.className = 'universal-detector-bar';
-      bar.style.cssText = 'display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:6px; margin-bottom:8px; font-size:11.5px; padding:6px 12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; min-height:32px; transition:all .2s;';
-      textarea.parentNode.insertBefore(bar, textarea.nextSibling);
+    if (bar && bar.classList.contains('universal-detector-bar')) {
+      bar.remove();
     }
-
-    const val = textarea.value.trim();
-    if (!val) {
-      bar.style.display = 'none';
-      return;
-    }
-
-    bar.style.display = 'flex';
-    const det = this.detect(val);
-    const isMismatch = (det.service !== 'unknown' && det.service !== 'none' && det.service !== expectedService && !(expectedService === 'combo' && det.format === 'combo') && !(expectedService === 'crunchyroll' && det.service === 'crunchyroll') && !(expectedService === 'disney' && det.service === 'disney') && !(expectedService === 'expressvpn' && det.service === 'expressvpn') && !(expectedService === 'outlook' && det.service === 'outlook'));
-
-    let html = `
-      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <span style="background:${det.color}22; color:${det.color}; border:1px solid ${det.color}44; padding:2px 8px; border-radius:4px; font-weight:700; font-size:10.5px; letter-spacing:0.5px;">${det.badge}</span>
-        <span style="font-weight:700; color:#f1f5f9;">${det.label}</span>
-        <span style="color:var(--text-muted); font-size:11px;">• Target: <strong style="color:${isMismatch ? '#f43f5e' : '#38bdf8'}">${det.service.toUpperCase()}</strong></span>
-      </div>
-      <div style="display:flex; align-items:center; gap:6px;">
-    `;
-
-    if (isMismatch) {
-      html += `
-        <button type="button" class="btn-primary" style="padding:3px 10px; font-size:11px; font-weight:700; background:#f43f5e; border-color:#f43f5e; color:#fff; border-radius:5px;" onclick="window.UniversalDetector.routeToService('${det.service}', document.getElementById('${textarea.id}').value)">
-          ⚡ Pindah ke ${det.service.toUpperCase()}
-        </button>
-      `;
-    }
-
-    html += `
-        <button type="button" class="btn-secondary" style="padding:3px 8px; font-size:11px; border-radius:5px;" onclick="document.getElementById('${textarea.id}').value = window.UniversalDetector.cleanText(document.getElementById('${textarea.id}').value); document.getElementById('${textarea.id}').dispatchEvent(new Event('input')); if(typeof showToast==='function')showToast('Input dirapikan!');" title="Bersihkan baris sampah dan rapikan">
-          🧹 Rapikan
-        </button>
-      </div>
-    `;
-
-    bar.innerHTML = html;
+    return;
   }
 };
 
@@ -1288,7 +1249,7 @@ function detectSingleCookieFormat() {
     badge.innerHTML = '<span>Format: Belum ada input</span>';
     badge.style.color = 'var(--text-muted)';
     const bar = textarea.nextElementSibling;
-    if (bar && bar.classList.contains('universal-detector-bar')) bar.style.display = 'none';
+  if (bar && bar.classList.contains('universal-detector-bar')) bar.remove();
     return;
   }
 
@@ -6231,38 +6192,7 @@ function launchGrabModalService() {
 
 // ── Initialize Universal Auto-Detectors on all textareas ──────
 function initUniversalDetectors() {
-  const targets = [
-    { id: 'single-cookie', svc: 'netflix' },
-    { id: 'bulk-input', svc: 'netflix' },
-    { id: 'disney-cookie-input', svc: 'disney' },
-    { id: 'disney-bulk-input', svc: 'disney' },
-    { id: 'disney-bulk-cookie-input', svc: 'disney' },
-    { id: 'cr-cookie-input', svc: 'crunchyroll' },
-    { id: 'cr-bulk-input', svc: 'crunchyroll' },
-    { id: 'cr-bulk-cookie-input', svc: 'crunchyroll' },
-    { id: 'evpn-bulk-input', svc: 'expressvpn' },
-    { id: 'spotify-cookie', svc: 'spotify' },
-    { id: 'spotify-bulk-input', svc: 'spotify' },
-    { id: 'outlook-bulk-input', svc: 'outlook' },
-    { id: 'openai-cookie-input', svc: 'openai' },
-    { id: 'openai-bulk-input', svc: 'openai' },
-    { id: 'pv-cookie-input', svc: 'primevideo' },
-    { id: 'pv-bulk-input', svc: 'primevideo' }
-  ];
-
-  targets.forEach(({ id, svc }) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('input', () => {
-      if (window.UniversalDetector && typeof window.UniversalDetector.updateBar === 'function') {
-        window.UniversalDetector.updateBar(el, svc);
-      }
-    });
-    // Check initial state if text already present
-    if (el.value && el.value.trim()) {
-      window.UniversalDetector.updateBar(el, svc);
-    }
-  });
+  // Disabled per user request (clean, non-intrusive UI)
 }
 
 if (document.readyState === 'loading') {
