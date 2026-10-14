@@ -143,14 +143,14 @@ def detect_universal_format(text):
     combo_lines = [l for l in lines if re.match(r'^[^\s:;|,]+@[^\s:;|,]+\.[^\s:;|,]+[:|;,\t].+$', l)]
     if combo_lines and len(combo_lines) >= len(lines) * 0.4:
         svc = "combo"
-        if any(re.search(r'@(?:outlook|hotmail|live|msn)\.', l, re.I) for l in combo_lines):
-            svc = "outlook"
-        elif "expressvpn" in t.lower():
-            svc = "expressvpn"
+        if "crunchyroll" in t.lower():
+            svc = "crunchyroll"
         elif "disney" in t.lower():
             svc = "disney"
-        elif "crunchyroll" in t.lower():
-            svc = "crunchyroll"
+        elif "expressvpn" in t.lower():
+            svc = "expressvpn"
+        elif any(re.search(r'@(?:outlook|hotmail|live|msn)\.', l, re.I) for l in combo_lines):
+            svc = "outlook"
         return {
             "service": svc,
             "format": "combo",

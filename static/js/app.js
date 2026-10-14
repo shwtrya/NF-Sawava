@@ -1099,10 +1099,29 @@ window.UniversalDetector = {
     const comboLines = lines.filter(l => comboRegex.test(l));
     if (comboLines.length > 0 && comboLines.length >= lines.length * 0.4) {
       let svc = 'combo';
-      if (comboLines.some(l => /@(outlook|hotmail|live|msn)\./i.test(l))) svc = 'outlook';
-      else if (/expressvpn/i.test(t)) svc = 'expressvpn';
-      else if (/disney/i.test(t)) svc = 'disney';
-      else if (/crunchyroll/i.test(t)) svc = 'crunchyroll';
+      // Prioritize contextual tab/service if user is on a combo-supported service tab
+      let activeTabSvc = null;
+      try {
+        const activePanel = document.querySelector('.section-panel.active');
+        if (activePanel) {
+          const panelId = activePanel.id.replace('panel-', '');
+          if (['crunchyroll', 'disney', 'expressvpn', 'outlook'].includes(panelId)) {
+            activeTabSvc = panelId;
+          }
+        }
+      } catch (e) {}
+
+      if (activeTabSvc) {
+        svc = activeTabSvc;
+      } else if (comboLines.some(l => /@(outlook|hotmail|live|msn)\./i.test(l))) {
+        svc = 'outlook';
+      } else if (/expressvpn/i.test(t)) {
+        svc = 'expressvpn';
+      } else if (/disney/i.test(t)) {
+        svc = 'disney';
+      } else if (/crunchyroll/i.test(t)) {
+        svc = 'crunchyroll';
+      }
 
       return {
         service: svc,
@@ -1227,7 +1246,7 @@ window.UniversalDetector = {
 
     bar.style.display = 'flex';
     const det = this.detect(val);
-    const isMismatch = (det.service !== 'unknown' && det.service !== 'none' && det.service !== expectedService && !(expectedService === 'combo' && det.format === 'combo'));
+    const isMismatch = (det.service !== 'unknown' && det.service !== 'none' && det.service !== expectedService && !(expectedService === 'combo' && det.format === 'combo') && !(expectedService === 'crunchyroll' && det.service === 'crunchyroll') && !(expectedService === 'disney' && det.service === 'disney') && !(expectedService === 'expressvpn' && det.service === 'expressvpn') && !(expectedService === 'outlook' && det.service === 'outlook'));
 
     let html = `
       <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
@@ -6216,15 +6235,15 @@ function initUniversalDetectors() {
     { id: 'single-cookie', svc: 'netflix' },
     { id: 'bulk-input', svc: 'netflix' },
     { id: 'disney-cookie-input', svc: 'disney' },
-    { id: 'disney-bulk-input', svc: 'combo' },
+    { id: 'disney-bulk-input', svc: 'disney' },
     { id: 'disney-bulk-cookie-input', svc: 'disney' },
     { id: 'cr-cookie-input', svc: 'crunchyroll' },
-    { id: 'cr-bulk-input', svc: 'combo' },
+    { id: 'cr-bulk-input', svc: 'crunchyroll' },
     { id: 'cr-bulk-cookie-input', svc: 'crunchyroll' },
-    { id: 'evpn-bulk-input', svc: 'combo' },
+    { id: 'evpn-bulk-input', svc: 'expressvpn' },
     { id: 'spotify-cookie', svc: 'spotify' },
     { id: 'spotify-bulk-input', svc: 'spotify' },
-    { id: 'outlook-bulk-input', svc: 'combo' },
+    { id: 'outlook-bulk-input', svc: 'outlook' },
     { id: 'openai-cookie-input', svc: 'openai' },
     { id: 'openai-bulk-input', svc: 'openai' },
     { id: 'pv-cookie-input', svc: 'primevideo' },
