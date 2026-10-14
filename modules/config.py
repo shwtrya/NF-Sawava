@@ -4,11 +4,17 @@ import threading
 import time
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+WEB_DIR = os.path.join(BASE_DIR, "web")
+DEPLOY_DIR = os.path.join(BASE_DIR, "deploy")
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(WEB_DIR, exist_ok=True)
+
 PORT = int(os.environ.get("PORT", 8080))
-PROXIES_FILE = os.path.join(BASE_DIR, "netflix_proxies.txt")
-DB_FILE = os.path.join(BASE_DIR, "netflix_suite.db")
+PROXIES_FILE = os.path.join(DATA_DIR, "netflix_proxies.txt") if os.path.exists(os.path.join(DATA_DIR, "netflix_proxies.txt")) else os.path.join(BASE_DIR, "netflix_proxies.txt")
+DB_FILE = os.path.join(DATA_DIR, "netflix_suite.db") if os.path.exists(os.path.join(DATA_DIR, "netflix_suite.db")) else os.path.join(BASE_DIR, "netflix_suite.db")
 CONFIG_FILE = os.path.join(BASE_DIR, "suite_config.json")
-LOG_FILE = os.path.join(BASE_DIR, "suite.log")
+LOG_FILE = os.path.join(DATA_DIR, "suite.log") if os.path.exists(DATA_DIR) else os.path.join(BASE_DIR, "suite.log")
 API_URL = "https://ios.prod.ftl.netflix.com/iosui/user/15.48"
 
 _recheck_mode = threading.local()

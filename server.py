@@ -55,8 +55,9 @@ from modules.auth import (
     check_dashboard_token_authorized, touch_api_key,
     check_api_key_authorized, check_authorized_client
 )
+from modules import proxy_manager
 from modules.proxy_manager import (
-    healthy_proxies, all_tested_proxies, proxy_lock,
+    proxy_lock,
     proxy_test_state, proxy_test_lock, proxy_cooldown, proxy_cooldown_lock,
     get_cached_proxy_states, update_cached_proxy_state,
     batch_update_cached_proxy_states, delete_from_proxy_cache,
@@ -154,14 +155,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_GET(self):
-        global all_tested_proxies, healthy_proxies
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         qs = urllib.parse.parse_qs(parsed.query)
         client_ip = self.client_address[0]
 
         if path in ("/", "/index.html"):
-            html_file = os.path.join(os.path.dirname(__file__), "index.html")
+            html_file = os.path.join(os.path.dirname(__file__), "web", "index.html")
+            if not os.path.exists(html_file):
+                html_file = os.path.join(os.path.dirname(__file__), "index.html")
             if os.path.exists(html_file):
                 with open(html_file, "r", encoding="utf-8") as f:
                     content = f.read().encode("utf-8")
@@ -184,7 +186,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 req_headers["X-API-Key"] = token_q
 
             if check_authorized_client(req_headers):
-                html_file = os.path.join(os.path.dirname(__file__), "admin.html")
+                html_file = os.path.join(os.path.dirname(__file__), "web", "admin.html")
+                if not os.path.exists(html_file):
+                    html_file = os.path.join(os.path.dirname(__file__), "admin.html")
                 if os.path.exists(html_file):
                     with open(html_file, "r", encoding="utf-8") as f:
                         content = f.read().encode("utf-8")
@@ -315,7 +319,9 @@ async function handleLogin(e) {
                 return
 
         elif path == "/manifest.json":
-            m_path = os.path.join(BASE_DIR, "manifest.json")
+            m_path = os.path.join(BASE_DIR, "web", "manifest.json")
+            if not os.path.isfile(m_path):
+                m_path = os.path.join(BASE_DIR, "manifest.json")
             if os.path.isfile(m_path):
                 with open(m_path, "rb") as f:
                     m_data = f.read()
@@ -332,7 +338,9 @@ async function handleLogin(e) {
                 return
 
         elif path == "/sw.js":
-            sw_path = os.path.join(BASE_DIR, "sw.js")
+            sw_path = os.path.join(BASE_DIR, "web", "sw.js")
+            if not os.path.isfile(sw_path):
+                sw_path = os.path.join(BASE_DIR, "sw.js")
             if os.path.isfile(sw_path):
                 with open(sw_path, "rb") as f:
                     sw_data = f.read()
@@ -390,7 +398,7 @@ async function handleLogin(e) {
         elif path == "/api/health":
             uptime = int(time.time() - server_start_time)
             with proxy_lock:
-                h_proxies = len(healthy_proxies)
+                h_proxies = len(proxy_manager.healthy_proxies)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_cors_headers()
@@ -455,9 +463,9 @@ async function handleLogin(e) {
             # (load_proxies acquires cached_proxies_lock -> proxy_lock)
             load_proxies()
             with proxy_lock:
-                total_n = len(all_tested_proxies)
-                h_count = len(healthy_proxies)
-                d_count = len([p for p in all_tested_proxies if p.get("status") == "FAIL"])
+                total_n = len(proxy_manager.all_tested_proxies)
+                h_count = len(proxy_manager.healthy_proxies)
+                d_count = len([p for p in proxy_manager.all_tested_proxies if p.get("status") == "FAIL"])
                 u_count = max(0, total_n - (h_count + d_count))
                 active_count = h_count if h_count > 0 else (total_n - d_count)
             self.send_response(200)
@@ -565,8 +573,8 @@ async function handleLogin(e) {
             # Public summary stats for main dashboard (no sensitive data)
             an = get_analytics()
             with proxy_lock:
-                p_total = len(all_tested_proxies) if all_tested_proxies else 0
-                p_healthy = len(healthy_proxies)
+                p_total = len(proxy_manager.all_tested_proxies) if proxy_manager.all_tested_proxies else 0
+                p_healthy = len(proxy_manager.healthy_proxies)
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_cors_headers()
@@ -646,13 +654,13 @@ async function handleLogin(e) {
                 load_proxies()  # Pre-load outside lock to avoid deadlock
                 now = time.time()
                 with proxy_lock:
-                    total_all = len(all_tested_proxies)
-                    healthy_all = len(healthy_proxies)
-                    dead_items = [p for p in all_tested_proxies if p.get("status") in ("FAIL", "DEAD")]
+                    total_all = len(proxy_manager.all_tested_proxies)
+                    healthy_all = len(proxy_manager.healthy_proxies)
+                    dead_items = [p for p in proxy_manager.all_tested_proxies if p.get("status") in ("FAIL", "DEAD")]
                     dead_all = len(dead_items)
                     with proxy_cooldown_lock:
                         cooldown_items = [
-                            p for p in all_tested_proxies
+                            p for p in proxy_manager.all_tested_proxies
                             if p.get("status") == "COOLDOWN"
                             or proxy_cooldown.get(p.get("proxy", ""), 0) > now
                             or p.get("cooldown_until", 0) > now
@@ -662,15 +670,15 @@ async function handleLogin(e) {
                     active_all = healthy_all if healthy_all > 0 else (total_all - dead_all)
 
                     if status_filter in ("OK", "LIVE"):
-                        source_list = healthy_proxies
+                        source_list = proxy_manager.healthy_proxies
                     elif status_filter in ("FAIL", "DEAD"):
                         source_list = dead_items
                     elif status_filter in ("COOLDOWN", "HOLD"):
                         source_list = cooldown_items
                     elif status_filter in ("UNVERIFIED", "UNTESTED", "READY"):
-                        source_list = [p for p in all_tested_proxies if p.get("status") in ("UNVERIFIED", "UNTESTED", "READY") and p not in cooldown_items]
+                        source_list = [p for p in proxy_manager.all_tested_proxies if p.get("status") in ("UNVERIFIED", "UNTESTED", "READY") and p not in cooldown_items]
                     else:
-                        source_list = all_tested_proxies
+                        source_list = proxy_manager.all_tested_proxies
 
                     if search_q:
                         filtered = [
@@ -704,8 +712,8 @@ async function handleLogin(e) {
                     t_info = dict(proxy_test_state)
 
                 avg_latency = 0
-                if healthy_proxies:
-                    lats = [p.get("latency", 0) for p in healthy_proxies if p.get("latency", 0) > 0]
+                if proxy_manager.healthy_proxies:
+                    lats = [p.get("latency", 0) for p in proxy_manager.healthy_proxies if p.get("latency", 0) > 0]
                     if lats:
                         avg_latency = int(sum(lats) / len(lats))
 
@@ -769,7 +777,7 @@ async function handleLogin(e) {
                 mode = qs.get("mode", ["healthy"])[0].lower()
                 load_proxies()  # Pre-load outside lock to avoid deadlock
                 with proxy_lock:
-                    p_list = list(all_tested_proxies)
+                    p_list = list(proxy_manager.all_tested_proxies)
                 if mode == "healthy":
                     lines = [p.get("line") or p.get("proxy") for p in p_list if p.get("status") == "OK"]
                     fname = f"healthy_proxies_{int(time.time())}.txt"
@@ -785,7 +793,9 @@ async function handleLogin(e) {
                 self.wfile.write(out_txt.encode("utf-8"))
 
         elif path in ('/admin', '/admin/'):
-            admin_file = os.path.join(os.path.dirname(__file__), 'admin.html')
+            admin_file = os.path.join(os.path.dirname(__file__), 'web', 'admin.html')
+            if not os.path.exists(admin_file):
+                admin_file = os.path.join(os.path.dirname(__file__), 'admin.html')
             if os.path.exists(admin_file):
                 with open(admin_file, 'r', encoding='utf-8') as f:
                     content = f.read().encode('utf-8')
@@ -804,6 +814,10 @@ async function handleLogin(e) {
             safe_root = os.path.realpath(os.path.dirname(__file__))
             clean_path = urllib.parse.unquote(path).lstrip("/")
             req_file = os.path.realpath(os.path.join(safe_root, clean_path))
+            if not os.path.isfile(req_file):
+                req_file_web = os.path.realpath(os.path.join(safe_root, "web", clean_path))
+                if os.path.isfile(req_file_web):
+                    req_file = req_file_web
             allowed_public_files = {"index.html", "favicon.ico", "admin.html", "manifest.json", "sw.js"}
             inside_root = os.path.commonpath((safe_root, req_file)) == safe_root
             public_path = os.path.relpath(req_file, safe_root).replace("\\", "/")
@@ -1004,7 +1018,7 @@ async function handleLogin(e) {
                     hist_count = c.fetchone()[0]
                     conn.close()
                     with proxy_lock:
-                        proxy_count = len(all_tested_proxies)
+                        proxy_count = len(proxy_manager.all_tested_proxies)
                     result = {
                         "version": "8.0.0",
                         "uptime": int(time.time() - server_start_time),
@@ -1468,8 +1482,8 @@ async function handleLogin(e) {
                     with open(PROXIES_FILE, "w", encoding="utf-8") as f:
                         f.write(text.strip() + "\n")
                     with proxy_lock:
-                        healthy_proxies.clear()
-                        all_tested_proxies.clear()
+                        proxy_manager.healthy_proxies.clear()
+                        proxy_manager.all_tested_proxies.clear()
                     all_p = load_proxies(force_reload=True)
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
@@ -1564,8 +1578,8 @@ async function handleLogin(e) {
                     with open(PROXIES_FILE, "w", encoding="utf-8") as f:
                         f.write("\n".join(sorted(existing)) + "\n")
                     with proxy_lock:
-                        healthy_proxies.clear()
-                        all_tested_proxies.clear()
+                        proxy_manager.healthy_proxies.clear()
+                        proxy_manager.all_tested_proxies.clear()
                     load_proxies(force_reload=True)
                     res = json.dumps({"ok": True, "added": added, "total": len(existing)}).encode("utf-8")
                     self.send_response(200)
@@ -1587,8 +1601,8 @@ async function handleLogin(e) {
                         with open(PROXIES_FILE, "w", encoding="utf-8") as f:
                             f.write("")
                         with proxy_lock:
-                            healthy_proxies.clear()
-                            all_tested_proxies.clear()
+                            proxy_manager.healthy_proxies.clear()
+                            proxy_manager.all_tested_proxies.clear()
                         load_proxies(force_reload=True)
                         res = json.dumps({"ok": True, "removed": "all", "total": 0}).encode("utf-8")
                     else:
