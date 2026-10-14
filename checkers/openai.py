@@ -191,18 +191,6 @@ def check_openai_cookie(cookie_text, use_proxy=True):
                     timeout=30
                 )
 
-                try:
-                    with open("openai_debug.log", "a", encoding="utf-8") as dbg:
-                        dbg.write(f"\n{'='*80}\n")
-                        dbg.write(f"[{datetime.datetime.now().isoformat()}] email={email}\n")
-                        dbg.write(f"auth/session status={resp_auth.status_code}\n")
-                        dbg.write(f"auth/session body={resp_auth.text[:1000]}\n")
-                        dbg.write(f"accounts/check status={resp_check.status_code}\n")
-                        dbg.write(f"accounts/check body={resp_check.text[:3000]}\n")
-                        dbg.write(f"{'='*80}\n")
-                except Exception:
-                    pass
-
                 if resp_check.status_code in (403, 429):
                     if proxy_raw_url:
                         mark_proxy_cooldown(proxy_raw_url, 600)

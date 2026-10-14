@@ -804,7 +804,7 @@ async function handleLogin(e) {
             safe_root = os.path.realpath(os.path.dirname(__file__))
             clean_path = urllib.parse.unquote(path).lstrip("/")
             req_file = os.path.realpath(os.path.join(safe_root, clean_path))
-            allowed_public_files = {"index.html", "styles_redesign.css", "favicon.ico", "admin.html"}
+            allowed_public_files = {"index.html", "favicon.ico", "admin.html", "manifest.json", "sw.js"}
             inside_root = os.path.commonpath((safe_root, req_file)) == safe_root
             public_path = os.path.relpath(req_file, safe_root).replace("\\", "/")
             if (inside_root and os.path.isfile(req_file)
