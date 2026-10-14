@@ -10,6 +10,12 @@ def extract_cookie_values(text):
         return cookie_dict
 
     text = str(text).strip()
+    if text.startswith("enc:"):
+        try:
+            from modules.db import decrypt_credential
+            text = decrypt_credential(text).strip()
+        except Exception:
+            pass
 
     json_match = re.search(r'\[\s*\{[\s\S]*?\}\s*\]', text)
     if json_match:

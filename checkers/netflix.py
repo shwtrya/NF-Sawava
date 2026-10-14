@@ -18,6 +18,12 @@ def normalize_country(code):
     return c
 
 def generate_nftoken(cookie_text, use_proxy=True):
+    if str(cookie_text).strip().startswith("enc:"):
+        try:
+            from modules.db import decrypt_credential
+            cookie_text = decrypt_credential(cookie_text).strip()
+        except Exception:
+            pass
     cookies = extract_cookie_values(cookie_text)
     nid = cookies.get("NetflixId")
     if not nid:
@@ -73,6 +79,12 @@ def generate_nftoken(cookie_text, use_proxy=True):
     raise last_err
 
 def check_netflix_membership(cookie_text, use_proxy=True):
+    if str(cookie_text).strip().startswith("enc:"):
+        try:
+            from modules.db import decrypt_credential
+            cookie_text = decrypt_credential(cookie_text).strip()
+        except Exception:
+            pass
     cookies = extract_cookie_values(cookie_text)
     if "NetflixId" not in cookies:
         save_history("netflix", "DEAD", raw_cookie=cookie_text)

@@ -206,6 +206,19 @@ def _disney_get_renewal_date(subscriptions_raw):
     return "N/A"
 
 def check_disney_account(email, password, use_proxy=True):
+    if str(email).startswith("enc:") or str(password).startswith("enc:"):
+        try:
+            from modules.db import decrypt_credential
+            if str(email).startswith("enc:"):
+                dec = decrypt_credential(email)
+                if ":" in dec:
+                    email, password = dec.split(":", 1)
+                else:
+                    email = dec
+            if str(password).startswith("enc:"):
+                password = decrypt_credential(password)
+        except Exception:
+            pass
     """Check a Disney+ account. Returns dict with status/details."""
     proxy_url = None
     proxy_label = "Direct"
@@ -365,8 +378,14 @@ DISNEY_REFRESH_COOKIE_NAMES = ("refresh_token", "_disney_s2", "BAMSDK_refresh_to
 
 def extract_disney_refresh_token(cookie_text):
     if not cookie_text:
-        return None
+        return ""
     text = str(cookie_text).strip()
+    if text.startswith("enc:"):
+        try:
+            from modules.db import decrypt_credential
+            text = decrypt_credential(text).strip()
+        except Exception:
+            pass
 
     json_match = re.search(r'\[\s*\{[\s\S]*?\}\s*\]', text)
     if json_match:

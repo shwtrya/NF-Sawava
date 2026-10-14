@@ -284,6 +284,19 @@ def check_expressvpn_account(
     get_proxy_fn=None,
     save_history_fn=None,
 ) -> dict:
+    if str(email).startswith("enc:") or str(password).startswith("enc:"):
+        try:
+            from modules.db import decrypt_credential
+            if str(email).startswith("enc:"):
+                dec = decrypt_credential(email)
+                if ":" in dec:
+                    email, password = dec.split(":", 1)
+                else:
+                    email = dec
+            if str(password).startswith("enc:"):
+                password = decrypt_credential(password)
+        except Exception:
+            pass
     """
     Check an ExpressVPN account and return its status and details.
 

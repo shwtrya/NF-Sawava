@@ -21,6 +21,12 @@ def extract_openai_session_token(cookie_text):
     if not cookie_text or not isinstance(cookie_text, str):
         return None, {}
     cookie_text = cookie_text.strip()
+    if cookie_text.startswith("enc:"):
+        try:
+            from modules.db import decrypt_credential
+            cookie_text = decrypt_credential(cookie_text).strip()
+        except Exception:
+            pass
     other_cookies = {}
     session_token = None
 

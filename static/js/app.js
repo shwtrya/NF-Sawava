@@ -6114,7 +6114,7 @@ async function copyGrabModalContent(btn) {
 function launchGrabModalService() {
   if (!currentGrabbedData) return;
   const svc = (currentGrabbedData.requestedService || currentGrabbedData.service || '').toLowerCase();
-  const content = currentGrabbedData.content || '';
+  let content = currentGrabbedData.content || '';
   closeGrabModal();
 
   if (svc === 'netflix' || svc === 'checker') {

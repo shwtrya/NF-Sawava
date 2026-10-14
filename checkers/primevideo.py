@@ -62,6 +62,12 @@ def parse_primevideo_cookies(raw_text):
     Also handles '$'-delimited multi-account format (returns cookies for first/current block only).
     Supports regional cookie suffixes like -av, -acbid, etc.
     """
+    if str(raw_text).strip().startswith("enc:"):
+        try:
+            from modules.db import decrypt_credential
+            raw_text = decrypt_credential(raw_text).strip()
+        except Exception:
+            pass
     cookies = {}
     text = raw_text.strip()
 

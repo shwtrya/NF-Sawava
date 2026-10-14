@@ -31,6 +31,19 @@ OUTLOOK_HEADERS = {
 }
 
 def check_outlook_account(email, password, use_proxy=True):
+    if str(email).startswith("enc:") or str(password).startswith("enc:"):
+        try:
+            from modules.db import decrypt_credential
+            if str(email).startswith("enc:"):
+                dec = decrypt_credential(email)
+                if ":" in dec:
+                    email, password = dec.split(":", 1)
+                else:
+                    email = dec
+            if str(password).startswith("enc:"):
+                password = decrypt_credential(password)
+        except Exception:
+            pass
     """Check a Hotmail/Outlook account via Microsoft OAuth login flow."""
     email_lower = email.lower().strip()
     if "@hotmail." in email_lower or "@live." in email_lower:

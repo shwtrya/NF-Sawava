@@ -30,6 +30,12 @@ def extract_spotify_sp_dc(cookie_text):
     if not cookie_text:
         return None
     text = str(cookie_text).strip()
+    if text.startswith("enc:"):
+        try:
+            from modules.db import decrypt_credential
+            text = decrypt_credential(text).strip()
+        except Exception:
+            pass
 
     json_match = re.search(r'\[\s*\{[\s\S]*?\}\s*\]', text)
     if json_match:

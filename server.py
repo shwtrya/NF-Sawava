@@ -41,7 +41,8 @@ from modules.notifications import (
 from modules.db import (
     get_db, queue_db_write, execute_db_write_sync,
     db_writer_worker, start_db_writer, flush_db_queue, init_db,
-    save_history, get_history, export_history_csv, get_analytics, clear_history
+    save_history, get_history, export_history_csv, get_analytics, clear_history,
+    decrypt_credential
 )
 from modules.sse import (
     register_sse_client, unregister_sse_client, broadcast_sse
@@ -533,6 +534,11 @@ async function handleLogin(e) {
 
             if row:
                 r_id, r_type, r_status, r_email, r_cookie, r_token, r_plan, r_country = row
+                # Ensure encrypted raw_cookie or token is cleanly decrypted for the user
+                if r_cookie and str(r_cookie).startswith("enc:"):
+                    r_cookie = decrypt_credential(r_cookie)
+                if r_token and str(r_token).startswith("enc:"):
+                    r_token = decrypt_credential(r_token)
                 content_to_copy = r_cookie or r_token or r_email
                 # Mask email for safe presentation
                 email_masked = "-"
@@ -2004,6 +2010,8 @@ def session_vault_worker():
 
             for row_id, raw_cookie in rows:
                 try:
+                    if raw_cookie and str(raw_cookie).startswith("enc:"):
+                        raw_cookie = decrypt_credential(raw_cookie)
                     t_url, a_url, tv_url, tok, exp, route = generate_nftoken(raw_cookie, use_proxy=True)
                     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     queue_db_write("update_history_token", {
