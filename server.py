@@ -93,7 +93,7 @@ from checkers.primevideo import (
 from checkers.expressvpn import (
     check_expressvpn_account
 )
-from proxy_auto_scraper import (
+from modules.proxy_auto_scraper import (
     run_auto_scrape, get_scraper_status, start_auto_scraper_thread
 )
 

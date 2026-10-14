@@ -39,3 +39,9 @@ from modules.proxy_manager import (
     sync_provider_proxies
 )
 from modules.rechecker import recheck_history_item
+from modules.batch_runner import (
+    start_batch_job, get_job_state, stop_batch_job, list_recent_jobs
+)
+from modules.proxy_auto_scraper import (
+    run_auto_scrape, get_scraper_status, start_auto_scraper_thread
+)

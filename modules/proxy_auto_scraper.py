@@ -17,8 +17,7 @@ import requests
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROXIES_FILE = os.path.join(BASE_DIR, "netflix_proxies.txt")
+from modules.config import BASE_DIR, PROXIES_FILE
 
 # ── Proxy Sources ────────────────────────────────────────────────────────────
 PROXY_SOURCES = [
