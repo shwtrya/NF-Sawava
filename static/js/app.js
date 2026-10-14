@@ -168,13 +168,25 @@ async function checkDashboardPinLock() {
     const res = await fetch('/api/dashboard-pin/status');
     const data = await res.json();
     if (data.enabled) {
-      // Check if already unlocked this session
-      if (sessionStorage.getItem('dashboard_unlocked') === '1') return;
+      // Check if already unlocked this session and token exists
+      const isUnlocked = sessionStorage.getItem('dashboard_unlocked') === '1';
+      const hasToken = !!sessionStorage.getItem('dashboard_token');
+      if (isUnlocked && hasToken) return;
+
       // Show lock screen
       const lockScreen = document.getElementById('dashboard-lock-screen');
-      lockScreen.style.display = 'flex';
-      document.body.style.overflow = 'hidden';
-      setTimeout(() => document.getElementById('dashboard-pin-unlock').focus(), 200);
+      if (lockScreen) {
+        lockScreen.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        setTimeout(() => {
+          const inp = document.getElementById('dashboard-pin-unlock');
+          if (inp) inp.focus();
+        }, 200);
+      }
+    } else {
+      const lockScreen = document.getElementById('dashboard-lock-screen');
+      if (lockScreen) lockScreen.style.display = 'none';
+      document.body.style.overflow = '';
     }
   } catch(e) {
     // If API fails, don't lock
@@ -196,6 +208,7 @@ async function unlockDashboard() {
       sessionStorage.setItem('dashboard_unlocked', '1');
       if (data.token) {
         sessionStorage.setItem('dashboard_token', data.token);
+        document.cookie = `nf_dashboard_token=${encodeURIComponent(data.token)}; path=/; max-age=604800; SameSite=Lax`;
       }
       document.getElementById('dashboard-lock-screen').style.display = 'none';
       document.body.style.overflow = '';
@@ -6030,6 +6043,12 @@ async function grabRandomLiveAccount(service, btn) {
           btn.innerHTML = originalHtml;
         }
       }, 2500);
+    } else if (res.status === 401) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+      promptUnlockForGrab(service, btn);
     } else {
       showToast(d.error || `Belum ada akun/cookie LIVE untuk ${service} di database`, 'warn');
       if (btn) {
@@ -6045,6 +6064,63 @@ async function grabRandomLiveAccount(service, btn) {
       btn.innerHTML = originalHtml;
     }
   }
+}
+
+async function promptUnlockForGrab(service, btn) {
+  sessionStorage.removeItem('dashboard_token');
+  sessionStorage.removeItem('dashboard_unlocked');
+  const lockScreen = document.getElementById('dashboard-lock-screen');
+  if (lockScreen) {
+    lockScreen.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    const errEl = document.getElementById('dashboard-pin-error');
+    if (errEl) {
+      errEl.style.display = 'block';
+      errEl.innerText = 'Sesi diperlukan untuk mengambil akun live:';
+    }
+    const input = document.getElementById('dashboard-pin-unlock');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+    return;
+  }
+  const inputVal = prompt('Masukkan Dashboard PIN atau API Key untuk mengambil akun live:');
+  if (!inputVal) return;
+  // Try dashboard PIN verify
+  try {
+    const resPin = await fetch('/api/dashboard-pin/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: inputVal.trim() })
+    });
+    const dPin = await resPin.json();
+    if (dPin.valid && dPin.token) {
+      sessionStorage.setItem('dashboard_unlocked', '1');
+      sessionStorage.setItem('dashboard_token', dPin.token);
+      document.cookie = `nf_dashboard_token=${encodeURIComponent(dPin.token)}; path=/; max-age=604800; SameSite=Lax`;
+      showToast('✓ Sesi dashboard aktif!', 'success');
+      grabRandomLiveAccount(service, btn);
+      return;
+    }
+  } catch(e) {}
+
+  // Fallback try API Key
+  try {
+    const resKey = await fetch('/api/auth/status', {
+      headers: { 'X-API-Key': inputVal.trim() }
+    });
+    const dKey = await resKey.json();
+    if (dKey.authenticated) {
+      sessionStorage.setItem('suite_api_key', inputVal.trim());
+      document.cookie = `nf_api_key=${encodeURIComponent(inputVal.trim())}; path=/; max-age=2592000; SameSite=Strict`;
+      showToast('✓ API Key terverifikasi!', 'success');
+      grabRandomLiveAccount(service, btn);
+      return;
+    }
+  } catch(e) {}
+
+  showToast('✕ PIN atau API Key tidak valid.', 'error');
 }
 
 function openGrabModal(data, service, copySuccess) {

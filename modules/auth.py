@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 import logging
 import secrets
@@ -34,14 +35,28 @@ def is_rate_limited(ip, max_requests=40, window_seconds=10, bucket="default"):
         ip_request_history[key] = timestamps
         return False
 
-def create_dashboard_session_token(ttl_seconds=86400):
-    token = secrets.token_hex(24)
+def _get_token_secret():
+    try:
+        cfg = get_config()
+        secret = cfg.get("db_encryption_key") or cfg.get("api_key") or "nf_sawava_session_secret"
+        return secret.encode("utf-8") if isinstance(secret, str) else secret
+    except Exception:
+        return b"nf_sawava_session_secret_default"
+
+def create_dashboard_session_token(ttl_seconds=604800):
+    """Generates a secure, cryptographically signed token valid for ttl_seconds (default 7 days)."""
+    exp = int(time.time() + ttl_seconds)
+    nonce = secrets.token_hex(16)
+    secret = _get_token_secret()
+    payload = f"{exp}:{nonce}".encode("utf-8")
+    sig = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+    token = f"{exp}_{nonce}_{sig}"
     with dashboard_token_lock:
         now = time.time()
-        expired = [t for t, exp in active_dashboard_tokens.items() if exp < now]
+        expired = [t for t, e in active_dashboard_tokens.items() if e < now]
         for t in expired:
             active_dashboard_tokens.pop(t, None)
-        active_dashboard_tokens[token] = now + ttl_seconds
+        active_dashboard_tokens[token] = exp
     return token
 
 def _extract_cookie_val(headers, name):
@@ -64,12 +79,35 @@ def check_dashboard_token_authorized(headers):
         token = _extract_cookie_val(headers, 'nf_dashboard_token')
     if not token:
         return False
+
+    now = time.time()
+    # 1. Quick in-memory cache check
     with dashboard_token_lock:
         exp = active_dashboard_tokens.get(token)
-        if exp and exp > time.time():
-            return True
-        elif exp:
-            active_dashboard_tokens.pop(token, None)
+        if exp:
+            if exp > now:
+                return True
+            else:
+                active_dashboard_tokens.pop(token, None)
+                return False
+
+    # 2. Cryptographic signature check (survives process restart)
+    try:
+        parts = token.split('_')
+        if len(parts) == 3:
+            exp_str, nonce, sig = parts
+            exp = int(exp_str)
+            if exp > now:
+                secret = _get_token_secret()
+                payload = f"{exp}:{nonce}".encode("utf-8")
+                expected_sig = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+                if hmac.compare_digest(sig, expected_sig):
+                    with dashboard_token_lock:
+                        active_dashboard_tokens[token] = exp
+                    return True
+    except Exception:
+        pass
+
     return False
 
 def touch_api_key(key_id):
@@ -121,4 +159,23 @@ def check_authorized_client(headers):
         return True
     if check_dashboard_token_authorized(headers):
         return True
+    return False
+
+def check_dashboard_authorized(headers):
+    """
+    Returns True if:
+    1. Request provides valid API key, OR
+    2. Request provides valid Dashboard PIN session token, OR
+    3. No dashboard_pin is set in config (public/open dashboard mode)
+    """
+    if check_api_key_authorized(headers):
+        return True
+    if check_dashboard_token_authorized(headers):
+        return True
+    try:
+        cfg = get_config()
+        if not cfg.get("dashboard_pin"):
+            return True
+    except Exception:
+        pass
     return False

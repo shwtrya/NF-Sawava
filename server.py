@@ -54,7 +54,8 @@ from modules.batch_runner import (
 from modules.auth import (
     is_rate_limited, create_dashboard_session_token,
     check_dashboard_token_authorized, touch_api_key,
-    check_api_key_authorized, check_authorized_client
+    check_api_key_authorized, check_authorized_client,
+    check_dashboard_authorized
 )
 from modules import proxy_manager
 from modules.proxy_manager import (
@@ -495,8 +496,8 @@ async function handleLogin(e) {
                 }).encode("utf-8"))
                 return
 
-            # Security Authorization Check: Valid API Key OR Dashboard Session Token required
-            if not check_authorized_client(self.headers):
+            # Security Authorization Check: Valid API Key OR Dashboard Session Token required (if PIN enabled)
+            if not check_dashboard_authorized(self.headers):
                 self.send_response(401)
                 self.send_header("Content-Type", "application/json")
                 self.send_cors_headers()
@@ -1832,6 +1833,7 @@ async function handleLogin(e) {
                     session_token = create_dashboard_session_token()
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
+                    self.send_header("Set-Cookie", f"nf_dashboard_token={session_token}; Path=/; Max-Age=604800; SameSite=Lax")
                     self.send_cors_headers()
                     self.end_headers()
                     self.wfile.write(json.dumps({"status": "ok", "valid": True, "token": session_token}).encode("utf-8"))
@@ -1842,6 +1844,8 @@ async function handleLogin(e) {
                     session_token = create_dashboard_session_token() if valid else ""
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
+                    if valid and session_token:
+                        self.send_header("Set-Cookie", f"nf_dashboard_token={session_token}; Path=/; Max-Age=604800; SameSite=Lax")
                     self.send_cors_headers()
                     self.end_headers()
                     self.wfile.write(json.dumps({"status": "ok", "valid": valid, "token": session_token}).encode("utf-8"))

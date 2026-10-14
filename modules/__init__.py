@@ -26,7 +26,8 @@ from modules.sse import (
 from modules.auth import (
     is_rate_limited, create_dashboard_session_token,
     check_dashboard_token_authorized, touch_api_key,
-    check_api_key_authorized, check_authorized_client
+    check_api_key_authorized, check_authorized_client,
+    check_dashboard_authorized
 )
 from modules.proxy_manager import (
     get_cached_proxy_states, update_cached_proxy_state,
