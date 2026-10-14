@@ -1000,6 +1000,9 @@ async function runBulk() {
   const workers = Array.from({ length: Math.min(concurrency, lines.length) }, () => worker());
   await Promise.all(workers);
 
+  flushBulkRowBuffer();
+  renderBulkFilteredRows();
+
   bulkRunning = false;
   document.getElementById('bulk-btn').disabled = false;
   notifyBrowser('Bulk Check Selesai', `Total: ${lines.length} | Live: ${live} | Hold: ${hold} | 4K: ${fourk}`);
@@ -1024,6 +1027,8 @@ async function runBulk() {
 function stopBulk() {
   if (bulkRunning) {
     bulkRunning = false;
+    flushBulkRowBuffer();
+    renderBulkFilteredRows();
     showToast('Proses bulk dihentikan');
   }
 }
@@ -1067,9 +1072,15 @@ function detectSingleCookieFormat() {
   badge.style.color = '#f59e0b';
 }
 
-// Bulk check row filter
+// Bulk check virtual windowing & throttled rendering state
+let bulkWindowLimit = 100;
+let bulkPendingQueue = [];
+let bulkRenderTimer = null;
+let bulkEventSource = null;
+
 function setBulkFilter(filter) {
   bulkFilter = filter;
+  bulkWindowLimit = 100; // Reset window limit when changing filter
   ['all', 'live', 'hold', '4k', 'dead'].forEach(f => {
     const el = document.getElementById(`btn-filter-${f}`);
     if (el) el.style.background = (filter.toLowerCase() === f) ? 'var(--bg-subtle)' : 'transparent';
@@ -1077,10 +1088,8 @@ function setBulkFilter(filter) {
   renderBulkFilteredRows();
 }
 
-function renderBulkFilteredRows() {
-  const tbody = document.getElementById('bulk-tbody');
-  tbody.innerHTML = '';
-  const filtered = bulkResults.filter(item => {
+function getFilteredBulkResults() {
+  return bulkResults.filter(item => {
     const isHold = (item.status === 'HOLD' || item.is_hold);
     const isLive = (item.status === 'LIVE' || (item.live && !isHold));
     if (bulkFilter === 'ALL') return true;
@@ -1090,10 +1099,131 @@ function renderBulkFilteredRows() {
     if (bulkFilter === '4K') return isLive && (item.plan && (item.plan.includes('4K') || item.plan.includes('ULTRA')));
     return true;
   });
-  filtered.forEach(item => {
+}
+
+function renderBulkFilteredRows() {
+  const tbody = document.getElementById('bulk-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  const filtered = getFilteredBulkResults();
+  const total = filtered.length;
+
+  const slice = filtered.slice(0, bulkWindowLimit);
+  const frag = document.createDocumentFragment();
+  slice.forEach(item => {
     const tr = createBulkRowElement(item);
-    tbody.prepend(tr);
+    frag.appendChild(tr);
   });
+  tbody.appendChild(frag);
+
+  if (total > bulkWindowLimit) {
+    const moreTr = document.createElement('tr');
+    moreTr.id = 'bulk-load-more-row';
+    moreTr.innerHTML = `
+      <td colspan="7" style="text-align:center; padding:12px; background:rgba(255,255,255,0.03);">
+        <span style="font-size:12px; color:var(--text-muted); margin-right:8px;">Menampilkan ${bulkWindowLimit} dari ${total} hasil</span>
+        <button class="btn-secondary" style="padding:4px 12px; font-size:11px; border-radius:6px;" onclick="loadMoreBulkRows()">Tampilkan 100 Lagi</button>
+        <button class="btn-secondary" style="padding:4px 12px; font-size:11px; border-radius:6px; margin-left:4px;" onclick="loadAllBulkRows()">Tampilkan Semua (${total})</button>
+      </td>
+    `;
+    tbody.appendChild(moreTr);
+  }
+}
+
+function loadMoreBulkRows() {
+  bulkWindowLimit += 100;
+  renderBulkFilteredRows();
+}
+
+function loadAllBulkRows() {
+  bulkWindowLimit = bulkResults.length + 10;
+  renderBulkFilteredRows();
+}
+
+function appendBulkRow(item) {
+  bulkPendingQueue.push(item);
+  if (!bulkRenderTimer) {
+    bulkRenderTimer = requestAnimationFrame(() => {
+      flushBulkRowBuffer();
+      bulkRenderTimer = null;
+    });
+  }
+}
+
+function flushBulkRowBuffer() {
+  if (bulkPendingQueue.length === 0) return;
+  const items = bulkPendingQueue.splice(0, bulkPendingQueue.length);
+  const tbody = document.getElementById('bulk-tbody');
+  if (!tbody) return;
+
+  const frag = document.createDocumentFragment();
+  items.forEach(item => {
+    const isHold = (item.status === 'HOLD' || item.is_hold);
+    const isLive = (item.status === 'LIVE' || (item.live && !isHold));
+    let visible = true;
+    if (bulkFilter === 'LIVE') visible = isLive;
+    else if (bulkFilter === 'HOLD') visible = isHold;
+    else if (bulkFilter === 'DEAD') visible = (!isLive && !isHold);
+    else if (bulkFilter === '4K') visible = isLive && (item.plan && (item.plan.includes('4K') || item.plan.includes('ULTRA')));
+
+    if (visible) {
+      const tr = createBulkRowElement(item);
+      frag.insertBefore(tr, frag.firstChild);
+    }
+  });
+
+  if (frag.childNodes.length > 0) {
+    tbody.insertBefore(frag, tbody.firstChild);
+
+    // Keep DOM bounded to bulkWindowLimit to maintain 60 FPS
+    const currentRows = tbody.querySelectorAll('tr:not(#bulk-load-more-row)');
+    if (currentRows.length > bulkWindowLimit) {
+      for (let i = bulkWindowLimit; i < currentRows.length; i++) {
+        currentRows[i].remove();
+      }
+      if (!document.getElementById('bulk-load-more-row')) {
+        const total = getFilteredBulkResults().length;
+        const moreTr = document.createElement('tr');
+        moreTr.id = 'bulk-load-more-row';
+        moreTr.innerHTML = `
+          <td colspan="7" style="text-align:center; padding:12px; background:rgba(255,255,255,0.03);">
+            <span style="font-size:12px; color:var(--text-muted); margin-right:8px;">Menampilkan ${bulkWindowLimit} dari ${total} hasil</span>
+            <button class="btn-secondary" style="padding:4px 12px; font-size:11px; border-radius:6px;" onclick="loadMoreBulkRows()">Tampilkan 100 Lagi</button>
+            <button class="btn-secondary" style="padding:4px 12px; font-size:11px; border-radius:6px; margin-left:4px;" onclick="loadAllBulkRows()">Tampilkan Semua (${total})</button>
+          </td>
+        `;
+        tbody.appendChild(moreTr);
+      }
+    }
+  }
+}
+
+function connectBulkSSE(sessionId) {
+  if (!window.EventSource) return;
+  if (bulkEventSource) {
+    try { bulkEventSource.close(); } catch(e) {}
+  }
+  try {
+    bulkEventSource = new EventSource('/api/stream/bulk?session_id=' + encodeURIComponent(sessionId));
+    bulkEventSource.addEventListener('proxy_progress', e => {
+      try {
+        const state = JSON.parse(e.data);
+        if (typeof updateProxyTestUI === 'function') updateProxyTestUI(state);
+      } catch(err) {}
+    });
+    bulkEventSource.onerror = () => {
+      // Reconnect handled automatically by browser EventSource
+    };
+  } catch(e) {
+    console.debug('SSE connection info:', e);
+  }
+}
+
+function disconnectBulkSSE() {
+  if (bulkEventSource) {
+    try { bulkEventSource.close(); } catch(e) {}
+    bulkEventSource = null;
+  }
 }
 
 function createBulkRowElement(item) {
@@ -1130,22 +1260,6 @@ function createBulkRowElement(item) {
     <td style="color:var(--text-muted)">${item.route || 'Direct'}</td>
   `;
   return tr;
-}
-
-function appendBulkRow(item) {
-  const isHold = (item.status === 'HOLD' || item.is_hold);
-  const isLive = (item.status === 'LIVE' || (item.live && !isHold));
-  let visible = true;
-  if (bulkFilter === 'LIVE') visible = isLive;
-  else if (bulkFilter === 'HOLD') visible = isHold;
-  else if (bulkFilter === 'DEAD') visible = (!isLive && !isHold);
-  else if (bulkFilter === '4K') visible = isLive && (item.plan && (item.plan.includes('4K') || item.plan.includes('ULTRA')));
-  
-  if (visible) {
-    const tbody = document.getElementById('bulk-tbody');
-    const tr = createBulkRowElement(item);
-    tbody.prepend(tr);
-  }
 }
 
 
