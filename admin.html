@@ -820,13 +820,13 @@ tr:hover td{background:rgba(255,255,255,0.03)}
         <select id="hist-type" onchange="loadHistory()">
           <option value="">All Types</option>
           <option value="netflix">Netflix</option>
-          <option value="checker">Checker</option>
           <option value="disney">Disney+</option>
           <option value="crunchyroll">Crunchyroll</option>
           <option value="expressvpn">ExpressVPN</option>
           <option value="spotify">Spotify</option>
           <option value="outlook">Outlook</option>
           <option value="hotmail">Hotmail</option>
+          <option value="openai">OpenAI</option>
         </select>
         <div class="filter-actions">
           <button class="btn btn-primary btn-sm" onclick="loadHistory()">Search</button>
@@ -891,6 +891,7 @@ tr:hover td{background:rgba(255,255,255,0.03)}
       <div class="cards-grid" id="proxy-cards">
         <div class="stat-card"><div class="label">Total</div><div class="value" id="px-total">—</div></div>
         <div class="stat-card"><div class="label">Healthy</div><div class="value" id="px-healthy" style="color:var(--live)">—</div></div>
+        <div class="stat-card"><div class="label">Cooldown</div><div class="value" id="px-cooldown" style="color:var(--hold,#f59e0b)">—</div></div>
         <div class="stat-card"><div class="label">Dead</div><div class="value" id="px-dead" style="color:var(--dead)">—</div></div>
         <div class="stat-card"><div class="label">Unverified</div><div class="value" id="px-unverified" style="color:var(--text-muted)">—</div></div>
         <div class="stat-card"><div class="label">Avg Latency</div><div class="value" id="px-latency">—</div><div class="sub">ms</div></div>
@@ -912,6 +913,10 @@ tr:hover td{background:rgba(255,255,255,0.03)}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
           Stop Test
         </button>
+        <button class="btn btn-primary btn-sm" onclick="syncProxyProvider()" title="Sync from Residential/Rotating Proxy Provider">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          Sync Provider
+        </button>
         <button class="btn btn-success btn-sm" onclick="showAddProxyModal()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Add Proxies
@@ -927,6 +932,7 @@ tr:hover td{background:rgba(255,255,255,0.03)}
         <select id="px-status" onchange="loadProxies()">
           <option value="ALL">All Status</option>
           <option value="OK">Healthy</option>
+          <option value="COOLDOWN">Cooldown</option>
           <option value="FAIL">Dead</option>
           <option value="UNVERIFIED">Unverified</option>
         </select>
@@ -989,6 +995,130 @@ tr:hover td{background:rgba(255,255,255,0.03)}
           <div class="settings-row"><span class="s-label">Dead Accounts</span><span class="s-value" id="an-dead" style="color:var(--dead)">—</span></div>
           <div class="settings-row"><span class="s-label">Hold / Other</span><span class="s-value" id="an-hold" style="color:var(--hold)">—</span></div>
           <div class="settings-row"><span class="s-label">Hit Rate</span><span class="s-value" id="an-rate">—</span></div>
+        </div>
+      </div>
+
+      <!-- ═══ RESIDENTIAL PROXY PROVIDER SETTINGS ═══ -->
+      <div class="settings-section">
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          Residential / Rotating Proxy API Provider
+        </h3>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:14px">Sinkronisasi otomatis proxy residential/rotating dari provider berbayar (Webshare, IPRoyal, BrightData, Proxy-Cheap, atau Custom API URL).</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin-bottom:14px">
+          <div>
+            <label style="font-size:.75rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px">Provider</label>
+            <select id="prov-name" style="width:100%;padding:10px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);font-size:.85rem">
+              <option value="custom">Custom / Direct URL</option>
+              <option value="webshare">Webshare</option>
+              <option value="iproyal">IPRoyal</option>
+              <option value="brightdata">BrightData</option>
+              <option value="proxycheap">Proxy-Cheap</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:.75rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px">Auto-Sync</label>
+            <select id="prov-enabled" style="width:100%;padding:10px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);font-size:.85rem">
+              <option value="false">Disabled</option>
+              <option value="true">Enabled (Background)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:.75rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px">Interval (Menit)</label>
+            <input type="number" id="prov-interval" value="60" min="5" max="1440" style="width:100%;padding:10px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);font-size:.85rem">
+          </div>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="font-size:.75rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px">API Endpoint / Proxy Download URL</label>
+          <input type="text" id="prov-url" placeholder="https://proxy.webshare.io/api/v2/proxy/list/download/... atau URL teks" style="width:100%;padding:10px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);font-size:.85rem">
+        </div>
+        <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:14px">
+          Status Sinkronisasi Terakhir: <span id="prov-last-sync" style="color:var(--text);font-weight:600">—</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="saveProviderConfig()">Simpan Provider</button>
+          <button class="btn btn-success btn-sm" onclick="syncProxyProvider()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Sync Proxies Sekarang
+          </button>
+        </div>
+      </div>
+
+      <!-- ═══ WEBHOOK NOTIFICATIONS (TELEGRAM & DISCORD) ═══ -->
+      <div class="settings-section">
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          Webhook Notifikasi (Telegram & Discord)
+        </h3>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:14px">Kirim notifikasi otomatis secara real-time saat akun LIVE/4K ditemukan dan saat proses Bulk Check selesai.</p>
+
+        <!-- Telegram Card -->
+        <div style="background:var(--surface2);padding:14px;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <h4 style="font-size:.85rem;margin:0;display:flex;align-items:center;gap:6px">
+              ✈️ Telegram Bot Alert
+            </h4>
+            <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;cursor:pointer">
+              <input type="checkbox" id="notif-tg-enabled"> Aktifkan Telegram
+            </label>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:10px;margin-bottom:10px">
+            <div>
+              <label style="font-size:.72rem;color:var(--text-muted);display:block;margin-bottom:4px">Bot Token</label>
+              <input type="password" id="notif-tg-token" placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ" style="width:100%;padding:8px 12px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);font-size:.82rem">
+            </div>
+            <div>
+              <label style="font-size:.72rem;color:var(--text-muted);display:block;margin-bottom:4px">Chat ID / Channel ID</label>
+              <input type="text" id="notif-tg-chat" placeholder="12345678 atau -10012345678" style="width:100%;padding:8px 12px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);font-size:.82rem">
+            </div>
+          </div>
+          <div style="display:flex;gap:16px;font-size:.78rem;color:var(--text-muted)">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="notif-tg-live" checked> Alert saat Akun Live</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="notif-tg-bulk" checked> Alert saat Bulk Selesai</label>
+          </div>
+        </div>
+
+        <!-- Discord Card -->
+        <div style="background:var(--surface2);padding:14px;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <h4 style="font-size:.85rem;margin:0;display:flex;align-items:center;gap:6px">
+              🎮 Discord Webhook Alert
+            </h4>
+            <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;cursor:pointer">
+              <input type="checkbox" id="notif-dc-enabled"> Aktifkan Discord
+            </label>
+          </div>
+          <div style="margin-bottom:10px">
+            <label style="font-size:.72rem;color:var(--text-muted);display:block;margin-bottom:4px">Discord Webhook URL</label>
+            <input type="password" id="notif-dc-url" placeholder="https://discord.com/api/webhooks/..." style="width:100%;padding:8px 12px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);font-size:.82rem">
+          </div>
+          <div style="display:flex;gap:16px;font-size:.78rem;color:var(--text-muted)">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="notif-dc-live" checked> Alert saat Akun Live</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="notif-dc-bulk" checked> Alert saat Bulk Selesai</label>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="saveNotificationConfig()">Simpan Notifikasi</button>
+          <button class="btn btn-secondary btn-sm" onclick="testNotification('telegram')">Uji Telegram</button>
+          <button class="btn btn-secondary btn-sm" onclick="testNotification('discord')">Uji Discord</button>
+        </div>
+      </div>
+
+      <div class="settings-section danger-zone">
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Dashboard PIN Lock
+        </h3>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:14px">Kunci main dashboard (halaman utama) dengan PIN. User harus masukkan PIN sebelum bisa akses checker.</p>
+        <div id="pin-lock-status" style="margin-bottom:14px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <div style="flex:1;min-width:160px">
+            <label style="font-size:.75rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px">PIN (min 4 digit/karakter)</label>
+            <input type="password" id="dashboard-pin-input" placeholder="Masukkan PIN baru" style="width:100%;padding:10px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);font-size:.9rem" maxlength="32">
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="setDashboardPin()" style="height:40px">Set PIN</button>
+          <button class="btn btn-danger btn-sm" onclick="removeDashboardPin()" style="height:40px">Hapus PIN</button>
         </div>
       </div>
 
@@ -1129,7 +1259,7 @@ function switchTab(tab) {
   else if (tab === 'analytics') loadAnalytics();
   else if (tab === 'proxies') loadProxies();
   else if (tab === 'apikeys') loadApiKeys();
-  else if (tab === 'settings') loadSettings();
+  else if (tab === 'settings') { loadSettings(); loadPinLockStatus(); loadProviderConfig(); loadNotificationConfig(); }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1180,6 +1310,8 @@ function confirmAction(msg, fn) {
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+const escapeHtml = escHtml;
+window.escapeHtml = escHtml;
 
 function fmtDate(s) {
   if (!s) return '—';
@@ -1216,7 +1348,7 @@ function fmtBytes(bytes) {
 function statusBadge(status) {
   if (!status) return '<span class="badge badge-unverified">—</span>';
   const s = status.toUpperCase();
-  const cls = { LIVE: 'live', OK: 'ok', PREMIUM: 'premium', DEAD: 'dead', FAIL: 'fail', ERROR: 'error', HOLD: 'hold', FREE: 'live', UNVERIFIED: 'unverified', UNTESTED: 'untested', READY: 'ready' };
+  const cls = { LIVE: 'live', OK: 'ok', PREMIUM: 'premium', DEAD: 'dead', FAIL: 'fail', ERROR: 'error', HOLD: 'hold', COOLDOWN: 'hold', FREE: 'live', UNVERIFIED: 'unverified', UNTESTED: 'untested', READY: 'ready' };
   return '<span class="badge badge-' + (cls[s] || 'unverified') + '">' + escHtml(status) + '</span>';
 }
 
@@ -1332,6 +1464,7 @@ async function loadHistory() {
           ${r.raw_cookie ? `<button class="btn-icon" title="Copy Cookie" onclick="copyToClipboard(decodeURIComponent('${encodeURIComponent(r.raw_cookie)}'))"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>` : ''}
           ${r.token_url ? `<button class="btn-icon" title="Copy Token URL" onclick="copyToClipboard(decodeURIComponent('${encodeURIComponent(r.token_url)}'))"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>` : ''}
           <button class="btn-icon" title="View Details" onclick="showHistoryDetail(${r.id})"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          <button class="btn-icon" title="Hapus" onclick="deleteHistoryItem(${r.id})" style="color:#ef4444"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
         </td>
       </tr>
     `).join('');
@@ -1424,6 +1557,26 @@ async function clearHistory(onlyDead) {
   }
 }
 
+async function deleteHistoryItem(id) {
+  if (!confirm('Hapus record #' + id + ' dari history?')) return;
+  try {
+    const res = await apiFetch('/api/history/delete', {
+      method: 'POST',
+      body: JSON.stringify({ id: id })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      toast('Record #' + id + ' berhasil dihapus', 'success');
+      loadHistory();
+      loadOverview();
+    } else {
+      toast('Gagal menghapus: ' + (data.reason || 'Unknown'), 'error');
+    }
+  } catch (e) {
+    if (e.message !== 'Unauthorized') toast('Error: ' + e.message, 'error');
+  }
+}
+
 function exportHistoryCSV() {
   const search = document.getElementById('hist-search').value;
   const status = document.getElementById('hist-status').value;
@@ -1495,6 +1648,8 @@ async function loadProxies() {
     // Update stats cards
     document.getElementById('px-total').textContent = fmtNumber(data.stats?.total ?? data.total ?? 0);
     document.getElementById('px-healthy').textContent = fmtNumber(data.stats?.healthy ?? data.healthy ?? 0);
+    const cdEl = document.getElementById('px-cooldown');
+    if (cdEl) cdEl.textContent = fmtNumber(data.stats?.cooldown ?? data.cooldown ?? 0);
     document.getElementById('px-dead').textContent = fmtNumber(data.stats?.dead ?? data.dead ?? 0);
     document.getElementById('px-unverified').textContent = fmtNumber(data.stats?.unverified ?? data.unverified ?? 0);
     document.getElementById('px-latency').textContent = data.stats?.avg_latency != null ? Math.round(data.stats.avg_latency) : (data.avg_latency != null ? Math.round(data.avg_latency) : '—');
@@ -1520,15 +1675,19 @@ async function loadProxies() {
     tbody.innerHTML = items.map(p => {
       const raw = p.raw || p.proxy || p.line || '—';
       const st = p.status || 'UNVERIFIED';
-      const lat = p.latency != null ? Math.round(p.latency) + ' ms' : '—';
+      const lat = p.latency != null && p.latency > 0 ? Math.round(p.latency) + ' ms' : '—';
       const tested = p.last_tested ? fmtDate(p.last_tested) : (p.tested_at ? fmtDate(p.tested_at) : '—');
+      const line = p.line || p.proxy || raw;
+      const cdBadge = (st === 'COOLDOWN' && p.cooldown_remaining > 0)
+        ? `<span class="badge badge-hold" title="Cooldown sisa ${p.cooldown_remaining}s">COOLDOWN (${p.cooldown_remaining}s)</span>`
+        : statusBadge(st);
       return `<tr>
         <td style="font-family:'JetBrains Mono',monospace;font-size:.75rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(raw)}">${escHtml(raw)}</td>
-        <td>${statusBadge(st)}</td>
+        <td>${cdBadge}</td>
         <td style="font-family:'JetBrains Mono',monospace;font-size:.78rem">${lat}</td>
         <td style="font-size:.78rem">${tested}</td>
         <td>
-          <button class="btn-icon" title="Test Single" onclick="proxyTestSingle('${escHtml(raw)}')">
+          <button class="btn-icon" title="Test Single" onclick="proxyTestSingle('${escHtml(line)}')">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21"/></svg>
           </button>
           <button class="btn-icon" title="Copy" onclick="copyToClipboard('${escHtml(raw)}')">
@@ -1751,10 +1910,11 @@ async function loadSettings() {
     document.getElementById('si-services').textContent = (ver.services || []).join(', ');
 
     // Analytics
-    const totalChecks = hist.total || 0;
-    const liveCount = an.live || an.total_live || 0;
-    const deadCount = an.dead || an.total_dead || 0;
-    const holdCount = an.hold || an.total_hold || an.other || 0;
+    const sc = an.status_counts || {};
+    const totalChecks = hist.total || Object.values(sc).reduce((a, b) => a + b, 0) || 0;
+    const liveCount = (sc.LIVE || 0) + (sc.FREE || 0) + (sc.PREMIUM || 0);
+    const deadCount = (sc.DEAD || 0) + (sc.ERROR || 0) + (sc.BAD || 0);
+    const holdCount = sc.HOLD || 0;
     const hitRate = totalChecks > 0 ? ((liveCount / totalChecks) * 100).toFixed(1) + '%' : '—';
 
     document.getElementById('an-total').textContent = fmtNumber(totalChecks);
@@ -1855,6 +2015,221 @@ async function deleteApiKey(id) {
     loadApiKeys();
   } catch (e) {
     if (e.message !== 'Unauthorized') toast('Error deleting key: ' + e.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DASHBOARD PIN LOCK
+// ═══════════════════════════════════════════════════════════════════
+async function loadPinLockStatus() {
+  const el = document.getElementById('pin-lock-status');
+  try {
+    const res = await fetch('/api/dashboard-pin/status');
+    const data = await res.json();
+    if (data.enabled) {
+      el.innerHTML = '<span style="color:var(--live);font-weight:700;font-size:.85rem">🔒 PIN Aktif — Dashboard terkunci</span>';
+    } else {
+      el.innerHTML = '<span style="color:var(--text-muted);font-size:.85rem">🔓 PIN tidak aktif — Dashboard terbuka</span>';
+    }
+  } catch(e) {
+    el.innerHTML = '<span style="color:var(--dead);font-size:.85rem">Error cek status PIN</span>';
+  }
+}
+
+async function setDashboardPin() {
+  const pin = document.getElementById('dashboard-pin-input').value.trim();
+  if (!pin || pin.length < 4) {
+    toast('PIN minimal 4 karakter', 'error');
+    return;
+  }
+  try {
+    const res = await apiFetch('/api/dashboard-pin/set', {
+      method: 'POST',
+      body: JSON.stringify({ pin: pin })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      toast('Dashboard PIN berhasil diset! 🔒', 'success');
+      document.getElementById('dashboard-pin-input').value = '';
+      loadPinLockStatus();
+    } else {
+      toast('Gagal: ' + (data.reason || 'Unknown'), 'error');
+    }
+  } catch(e) {
+    if (e.message !== 'Unauthorized') toast('Error: ' + e.message, 'error');
+  }
+}
+
+async function removeDashboardPin() {
+  if (!confirm('Hapus PIN? Dashboard akan terbuka tanpa kunci.')) return;
+  try {
+    const res = await apiFetch('/api/dashboard-pin/remove', {
+      method: 'POST',
+      body: '{}'
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      toast('Dashboard PIN dihapus! 🔓', 'success');
+      loadPinLockStatus();
+    } else {
+      toast('Gagal: ' + (data.reason || 'Unknown'), 'error');
+    }
+  } catch(e) {
+    if (e.message !== 'Unauthorized') toast('Error: ' + e.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RESIDENTIAL PROXY PROVIDER
+// ═══════════════════════════════════════════════════════════════════
+async function loadProviderConfig() {
+  try {
+    const res = await apiFetch('/api/proxies/provider-config');
+    const data = await res.json();
+    if (data.ok && data.provider) {
+      const p = data.provider;
+      if (document.getElementById('prov-name')) document.getElementById('prov-name').value = p.provider_name || 'custom';
+      if (document.getElementById('prov-enabled')) document.getElementById('prov-enabled').value = String(!!p.enabled);
+      if (document.getElementById('prov-interval')) document.getElementById('prov-interval').value = p.auto_sync_interval_minutes || 60;
+      if (document.getElementById('prov-url')) document.getElementById('prov-url').value = p.api_url || '';
+      if (document.getElementById('prov-last-sync')) document.getElementById('prov-last-sync').textContent = p.last_sync || 'Belum pernah sinkron';
+    }
+  } catch(e) {
+    console.debug('Error loading provider config:', e);
+  }
+}
+
+async function saveProviderConfig() {
+  const payload = {
+    provider_name: document.getElementById('prov-name').value,
+    enabled: document.getElementById('prov-enabled').value === 'true',
+    auto_sync_interval_minutes: parseInt(document.getElementById('prov-interval').value) || 60,
+    api_url: document.getElementById('prov-url').value.trim()
+  };
+  try {
+    const res = await apiFetch('/api/proxies/provider-config', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast('Konfigurasi Proxy Provider tersimpan! 🌐', 'success');
+    } else {
+      toast('Gagal simpan: ' + (data.error || 'Unknown'), 'error');
+    }
+  } catch(e) {
+    toast('Error simpan provider: ' + e.message, 'error');
+  }
+}
+
+async function syncProxyProvider() {
+  toast('Sinkronisasi proxy dari provider...', 'info');
+  try {
+    const res = await apiFetch('/api/proxies/sync-provider', {
+      method: 'POST',
+      body: '{}'
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast(`Sinkronisasi berhasil! Ditambahkan: ${data.added} proxy baru (Total: ${data.total}) 🚀`, 'success');
+      if (document.getElementById('prov-last-sync')) document.getElementById('prov-last-sync').textContent = data.last_sync || 'Baru saja';
+      loadProxies();
+    } else {
+      toast('Sinkronisasi gagal: ' + (data.error || 'Unknown'), 'error');
+    }
+  } catch(e) {
+    toast('Gagal menghubungi endpoint provider: ' + e.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WEBHOOK NOTIFICATIONS (TELEGRAM & DISCORD)
+// ═══════════════════════════════════════════════════════════════════
+async function loadNotificationConfig() {
+  try {
+    const res = await apiFetch('/api/notifications/config');
+    const data = await res.json();
+    if (data.ok && data.notifications) {
+      const n = data.notifications;
+      const tg = n.telegram || {};
+      const dc = n.discord || {};
+
+      if (document.getElementById('notif-tg-enabled')) document.getElementById('notif-tg-enabled').checked = !!tg.enabled;
+      if (document.getElementById('notif-tg-token')) document.getElementById('notif-tg-token').value = tg.bot_token_masked || '';
+      if (document.getElementById('notif-tg-chat')) document.getElementById('notif-tg-chat').value = tg.chat_id || '';
+      if (document.getElementById('notif-tg-live')) document.getElementById('notif-tg-live').checked = tg.notify_on_live !== false;
+      if (document.getElementById('notif-tg-bulk')) document.getElementById('notif-tg-bulk').checked = tg.notify_on_bulk_finish !== false;
+
+      if (document.getElementById('notif-dc-enabled')) document.getElementById('notif-dc-enabled').checked = !!dc.enabled;
+      if (document.getElementById('notif-dc-url')) document.getElementById('notif-dc-url').value = dc.webhook_url_masked || '';
+      if (document.getElementById('notif-dc-live')) document.getElementById('notif-dc-live').checked = dc.notify_on_live !== false;
+      if (document.getElementById('notif-dc-bulk')) document.getElementById('notif-dc-bulk').checked = dc.notify_on_bulk_finish !== false;
+    }
+  } catch(e) {
+    console.debug('Error loading notification config:', e);
+  }
+}
+
+async function saveNotificationConfig() {
+  const tgToken = document.getElementById('notif-tg-token').value.trim();
+  const dcUrl = document.getElementById('notif-dc-url').value.trim();
+
+  const payload = {
+    telegram: {
+      enabled: document.getElementById('notif-tg-enabled').checked,
+      chat_id: document.getElementById('notif-tg-chat').value.trim(),
+      notify_on_live: document.getElementById('notif-tg-live').checked,
+      notify_on_bulk_finish: document.getElementById('notif-tg-bulk').checked
+    },
+    discord: {
+      enabled: document.getElementById('notif-dc-enabled').checked,
+      notify_on_live: document.getElementById('notif-dc-live').checked,
+      notify_on_bulk_finish: document.getElementById('notif-dc-bulk').checked
+    }
+  };
+  if (tgToken && !tgToken.includes('...')) {
+    payload.telegram.bot_token = tgToken;
+  }
+  if (dcUrl && !dcUrl.includes('...')) {
+    payload.discord.webhook_url = dcUrl;
+  }
+
+  try {
+    const res = await apiFetch('/api/notifications/config', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast('Pengaturan Notifikasi tersimpan! 🔔', 'success');
+    } else {
+      toast('Gagal simpan notifikasi: ' + (data.error || 'Unknown'), 'error');
+    }
+  } catch(e) {
+    toast('Error simpan notifikasi: ' + e.message, 'error');
+  }
+}
+
+async function testNotification(target) {
+  toast(`Mengirim pesan tes ke ${target.toUpperCase()}...`, 'info');
+  try {
+    const res = await apiFetch('/api/notifications/test', {
+      method: 'POST',
+      body: JSON.stringify({ target: target })
+    });
+    const data = await res.json();
+    if (data.ok && data.results) {
+      const resItem = data.results[target];
+      if (resItem && resItem.ok) {
+        toast(`Berhasil! Pesan tes terkirim ke ${target.toUpperCase()} ✅`, 'success');
+      } else {
+        toast(`Gagal kirim ${target.toUpperCase()}: ${(resItem && resItem.message) || 'Periksa token/URL'}`, 'error');
+      }
+    } else {
+      toast('Gagal uji notifikasi: ' + (data.error || 'Unknown'), 'error');
+    }
+  } catch(e) {
+    toast('Error uji notifikasi: ' + e.message, 'error');
   }
 }
 

