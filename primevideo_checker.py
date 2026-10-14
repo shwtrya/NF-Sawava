@@ -135,7 +135,7 @@ def parse_primevideo_cookies(raw_text):
     return cookies
 
 
-def check_primevideo_cookie(cookie_text, use_proxy=True, get_proxy_fn=None, cooldown_fn=None, save_fn=None):
+def check_primevideo_cookie(cookie_text, use_proxy=True, get_proxy_fn=None, cooldown_fn=None, save_fn=None, session_fn=None):
     """
     Check a Prime Video cookie.
     Returns dict with: status, plan, profile, region, customer_id, route, reason
@@ -189,7 +189,7 @@ def check_primevideo_cookie(cookie_text, use_proxy=True, get_proxy_fn=None, cool
                     proxies = None
 
             try:
-                sess = requests.Session()
+                sess = session_fn() if session_fn else requests.Session()
                 sess.headers.update(REQUEST_HEADERS)
                 sess.cookies.update(cookies)
                 if proxies:

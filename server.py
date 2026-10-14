@@ -174,6 +174,139 @@ def get_cookie_fingerprint(text):
     cleaned = re.sub(r'\s+', '', str(text).strip())
     return f"raw:{cleaned[:120]}"
 
+def detect_universal_format(text):
+    """
+    Zero-config universal detector for pasted account/cookie data.
+    Identifies target service, data format, item count, and normalized items.
+    """
+    if not text or not str(text).strip():
+        return {
+            "service": "none",
+            "format": "empty",
+            "count": 0,
+            "items": [],
+            "label": "Belum ada input",
+            "hint": "Paste cookies atau combo akun di sini"
+        }
+    t = str(text).strip()
+
+    # 1. JSON Array (Cookie-Editor / EditThisCookie)
+    if (t.startswith('[') and t.endswith(']')) or re.search(r'\[\s*\{[\s\S]*?\}\s*\]', t):
+        svc = "unknown"
+        if "NetflixId" in t or "netflix.com" in t: svc = "netflix"
+        elif "sp_dc" in t or "spotify.com" in t: svc = "spotify"
+        elif "__Secure-next-auth" in t or "chatgpt" in t or "openai" in t: svc = "openai"
+        elif "session-token" in t or "ubid-main" in t or "amazon" in t: svc = "primevideo"
+        elif "etp_rt" in t or "crunchyroll" in t: svc = "crunchyroll"
+        elif "disney" in t or "bamgrid" in t: svc = "disney"
+
+        # Check if line-delimited JSON or single JSON array
+        lines = [l.strip() for l in t.splitlines() if l.strip()]
+        json_lines = [l for l in lines if l.startswith('[') and l.endswith(']')]
+        cnt = len(json_lines) if len(json_lines) > 1 else 1
+        items = json_lines if len(json_lines) > 1 else [t]
+        return {
+            "service": svc,
+            "format": "json_cookies",
+            "count": cnt,
+            "items": items,
+            "label": f"JSON Cookie Array ({cnt} set)",
+            "hint": f"Format JSON terverifikasi untuk {svc.upper() if svc != 'unknown' else 'Cookie'}"
+        }
+
+    # 2. Netscape HTTP Cookie File (.txt)
+    lines = [l.strip() for l in t.splitlines() if l.strip()]
+    netscape_lines = [l for l in lines if l.count('\t') >= 5 and not l.startswith('#')]
+    if netscape_lines or "# Netscape HTTP Cookie File" in t:
+        svc = "unknown"
+        if ".netflix.com" in t or "NetflixId" in t: svc = "netflix"
+        elif ".spotify.com" in t or "sp_dc" in t: svc = "spotify"
+        elif "chatgpt.com" in t or "openai.com" in t: svc = "openai"
+        elif "crunchyroll.com" in t or "etp_rt" in t: svc = "crunchyroll"
+        elif "primevideo.com" in t or "amazon.com" in t: svc = "primevideo"
+        elif "disney" in t or "bamgrid" in t: svc = "disney"
+
+        blocks = re.split(r'(?=# Netscape|\n\s*\n|# =+)', t)
+        valid_blocks = [b.strip() for b in blocks if any(l.count('\t') >= 5 for l in b.splitlines())]
+        cnt = max(1, len(valid_blocks))
+        return {
+            "service": svc,
+            "format": "netscape",
+            "count": cnt,
+            "items": valid_blocks if valid_blocks else [t],
+            "label": f"Netscape Cookie File ({cnt} set/akun)",
+            "hint": f"Format Netscape terverifikasi untuk {svc.upper() if svc != 'unknown' else 'Cookie'}"
+        }
+
+    # 3. Credential Combo (email:pass)
+    combo_lines = [l for l in lines if re.match(r'^[^\s:;|,]+@[^\s:;|,]+\.[^\s:;|,]+[:|;,\t].+$', l)]
+    if combo_lines and len(combo_lines) >= len(lines) * 0.4:
+        svc = "combo"
+        if any(re.search(r'@(?:outlook|hotmail|live|msn)\.', l, re.I) for l in combo_lines):
+            svc = "outlook"
+        elif "expressvpn" in t.lower():
+            svc = "expressvpn"
+        elif "disney" in t.lower():
+            svc = "disney"
+        elif "crunchyroll" in t.lower():
+            svc = "crunchyroll"
+        return {
+            "service": svc,
+            "format": "combo",
+            "count": len(combo_lines),
+            "items": combo_lines,
+            "label": f"Combo Email:Pass ({len(combo_lines)} akun)",
+            "hint": f"Format combo terverifikasi untuk {svc.upper() if svc != 'combo' else 'Multi-Service'}"
+        }
+
+    # 4. Raw Header / Key=Value
+    if re.search(r'(?:NetflixId|sp_dc|session-token|__Secure-next-auth|etp_rt)=', t):
+        svc = "unknown"
+        if "NetflixId=" in t: svc = "netflix"
+        elif "sp_dc=" in t: svc = "spotify"
+        elif "__Secure-next-auth" in t: svc = "openai"
+        elif "session-token=" in t: svc = "primevideo"
+        elif "etp_rt=" in t: svc = "crunchyroll"
+        return {
+            "service": svc,
+            "format": "header_cookie",
+            "count": 1,
+            "items": [t],
+            "label": f"Header Cookie ({svc.upper() if svc != 'unknown' else 'Key=Value'})",
+            "hint": "Format string cookie key=value standar"
+        }
+
+    # 5. Raw Single Token
+    if len(t) > 30 and ' ' not in t and '\n' not in t:
+        if t.startswith("AQB") or len(t) in range(80, 260):
+            return {
+                "service": "spotify",
+                "format": "raw_token",
+                "count": 1,
+                "items": [t],
+                "label": "Raw Token (Spotify sp_dc)",
+                "hint": "Token sp_dc Spotify mandiri terdeteksi"
+            }
+        elif t.startswith("ey"):
+            return {
+                "service": "openai",
+                "format": "raw_token",
+                "count": 1,
+                "items": [t],
+                "label": "Raw JWT Token (OpenAI Session)",
+                "hint": "Session JWT OpenAI terdeteksi"
+            }
+
+    # 6. Fallback
+    return {
+        "service": "unknown",
+        "format": "plain_text",
+        "count": len(lines),
+        "items": lines,
+        "label": f"Teks Bebas ({len(lines)} baris)",
+        "hint": "Format tidak dikenal, akan diproses apa adanya"
+    }
+
 db_lock = threading.Lock()
 
 # ── TLS Fingerprint Spoofing (curl_cffi with requests fallback) ─────────────
@@ -182,21 +315,87 @@ try:
     if r'C:\Python314\Lib\site-packages' not in sys.path:
         sys.path.append(r'C:\Python314\Lib\site-packages')
     from curl_cffi import requests as curl_requests
+    from curl_cffi.requests import errors as curl_errors
     CURL_CFFI_AVAILABLE = True
 except Exception as e:
     curl_requests = None
+    curl_errors = None
     CURL_CFFI_AVAILABLE = False
     logging.warning(f"curl_cffi not available: {e}. Falling back to standard requests.")
 
+MODERN_TLS_PROFILES = [
+    "chrome131",
+    "chrome124",
+    "chrome120",
+    "safari18_0",
+    "safari17_0",
+    "edge101",
+]
+
+def get_recommended_impersonate(target_service=None):
+    """Select the most optimal TLS browser fingerprint profile for the target service."""
+    if target_service in ("disney", "netflix_token"):
+        return random.choice(["safari18_0", "safari17_0"])
+    elif target_service in ("openai", "chatgpt"):
+        return random.choice(["chrome131", "chrome124"])
+    elif target_service in ("primevideo", "amazon"):
+        return random.choice(["chrome131", "chrome124", "edge101"])
+    elif target_service in ("spotify", "crunchyroll"):
+        return random.choice(["chrome131", "chrome120", "safari18_0"])
+    return random.choice(MODERN_TLS_PROFILES)
+
+def _map_curl_error(ex):
+    """Translate curl_cffi errors to standard requests.exceptions so existing handlers work cleanly."""
+    if not ex:
+        return requests.exceptions.RequestException(str(ex))
+    msg = str(ex).lower()
+    if 'timeout' in msg or 'timed out' in msg:
+        return requests.exceptions.Timeout(str(ex))
+    elif 'proxy' in msg:
+        return requests.exceptions.ProxyError(str(ex))
+    elif 'connect' in msg or 'connection' in msg:
+        return requests.exceptions.ConnectionError(str(ex))
+    return requests.exceptions.RequestException(str(ex))
+
 class TLSSessionWrapper:
     """Wrapper around curl_cffi.requests.Session or requests.Session for 100% API compatibility."""
-    def __init__(self, raw_session, is_curl=True):
+    def __init__(self, raw_session, is_curl=True, impersonate="chrome131"):
         self._s = raw_session
         self.is_curl = is_curl
+        self.impersonate = impersonate
 
     def mount(self, prefix, adapter):
         if hasattr(self._s, 'mount'):
             self._s.mount(prefix, adapter)
+
+    def request(self, method, url, **kwargs):
+        if self.is_curl:
+            try:
+                fn = getattr(self._s, method.lower())
+                return fn(url, **kwargs)
+            except Exception as ex:
+                if curl_errors and isinstance(ex, (curl_errors.RequestsError, curl_errors.CurlError)):
+                    raise _map_curl_error(ex) from ex
+                raise
+        return self._s.request(method, url, **kwargs)
+
+    def get(self, url, **kwargs):
+        return self.request('GET', url, **kwargs)
+
+    def post(self, url, **kwargs):
+        return self.request('POST', url, **kwargs)
+
+    def put(self, url, **kwargs):
+        return self.request('PUT', url, **kwargs)
+
+    def delete(self, url, **kwargs):
+        return self.request('DELETE', url, **kwargs)
+
+    def head(self, url, **kwargs):
+        return self.request('HEAD', url, **kwargs)
+
+    def options(self, url, **kwargs):
+        return self.request('OPTIONS', url, **kwargs)
 
     def __getattr__(self, name):
         return getattr(self._s, name)
@@ -204,29 +403,45 @@ class TLSSessionWrapper:
 def create_tls_session(impersonate="chrome131", proxies=None, timeout=15):
     """
     Returns an HTTP Session with browser TLS/JA3/JA4 fingerprint impersonation.
-    Supports Chrome 131, Safari 18, etc.
+    Supports randomized rotation, Chrome 131/124, Safari 18, Edge 101, etc.
     """
+    if impersonate == "random" or impersonate in ("auto", None):
+        target_imp = get_recommended_impersonate()
+    elif impersonate in ("disney", "openai", "primevideo", "spotify", "crunchyroll", "netflix_token"):
+        target_imp = get_recommended_impersonate(impersonate)
+    else:
+        target_imp = impersonate
+
     if CURL_CFFI_AVAILABLE and curl_requests is not None:
         try:
-            s = curl_requests.Session(impersonate=impersonate)
+            s = curl_requests.Session(impersonate=target_imp)
             if proxies:
                 s.proxies = proxies
-            return TLSSessionWrapper(s, is_curl=True)
+            return TLSSessionWrapper(s, is_curl=True, impersonate=target_imp)
         except Exception as ex:
-            logging.debug(f"Failed to create curl_cffi session with {impersonate}: {ex}")
+            logging.debug(f"Failed to create curl_cffi session with {target_imp}: {ex}")
 
     s = requests.Session()
     if proxies:
         s.proxies = proxies
-    return TLSSessionWrapper(s, is_curl=False)
+    return TLSSessionWrapper(s, is_curl=False, impersonate="requests_fallback")
 
 def tls_request(method, url, impersonate="chrome131", **kwargs):
     """Execute an HTTP request with browser TLS fingerprinting."""
+    if impersonate == "random" or impersonate in ("auto", None):
+        target_imp = get_recommended_impersonate()
+    elif impersonate in ("disney", "openai", "primevideo", "spotify", "crunchyroll", "netflix_token"):
+        target_imp = get_recommended_impersonate(impersonate)
+    else:
+        target_imp = impersonate
+
     if CURL_CFFI_AVAILABLE and curl_requests is not None:
         try:
             func = getattr(curl_requests, method.lower(), curl_requests.get)
-            return func(url, impersonate=impersonate, **kwargs)
+            return func(url, impersonate=target_imp, **kwargs)
         except Exception as ex:
+            if curl_errors and isinstance(ex, (curl_errors.RequestsError, curl_errors.CurlError)):
+                raise _map_curl_error(ex) from ex
             logging.debug(f"curl_cffi {method} failed, falling back to requests: {ex}")
 
     kwargs.pop("impersonate", None)
@@ -4256,7 +4471,7 @@ def recheck_history_item(record_id, use_proxy=True):
             else:
                 return {"error": "Invalid credential format for expressvpn", "id": rec_id}
         elif rec_type == 'primevideo':
-            out = check_primevideo_cookie(raw_cookie, use_proxy=use_proxy, get_proxy_fn=get_random_proxy, cooldown_fn=mark_proxy_cooldown, save_fn=save_history)
+            out = check_primevideo_cookie(raw_cookie, use_proxy=use_proxy, get_proxy_fn=get_random_proxy, cooldown_fn=mark_proxy_cooldown, save_fn=save_history, session_fn=lambda: create_tls_session(impersonate="primevideo"))
             new_status = out.get('status', 'ERROR')
         else:
             return {"error": f"Unsupported service type: {rec_type}", "id": rec_id}
@@ -4515,7 +4730,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "status": "healthy",
                 "uptime_seconds": uptime,
                 "timestamp": datetime.now().isoformat(),
-                "healthy_proxies": h_proxies
+                "healthy_proxies": h_proxies,
+                "tls_engine": {
+                    "available": CURL_CFFI_AVAILABLE,
+                    "impersonation_profiles": MODERN_TLS_PROFILES,
+                    "default_mode": "adaptive_rotation"
+                }
             }
             self.wfile.write(json.dumps(res).encode("utf-8"))
 
@@ -5133,8 +5353,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps(result).encode("utf-8"))
 
-        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/openai/check", "/api/primevideo/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check", "/api/proxies/save", "/api/proxies/test", "/api/proxies/test/stop", "/api/proxies/test_single", "/api/proxies/add", "/api/proxies/remove", "/api/proxies/auto-scrape", "/api/proxies/scraper-status", "/api/proxies/provider-config", "/api/proxies/sync-provider", "/api/notifications/config", "/api/notifications/test", "/api/notifications/bulk-summary", "/api/history/clear", "/api/history/delete", "/api/history/recheck", "/api/system/reload", "/api/dashboard-pin/set", "/api/dashboard-pin/verify", "/api/dashboard-pin/remove"):
-            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/openai/check", "/api/primevideo/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check") else 50
+        elif self.path in ("/api/token", "/api/check", "/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/openai/check", "/api/primevideo/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check", "/api/universal/detect", "/api/universal/parse", "/api/proxies/save", "/api/proxies/test", "/api/proxies/test/stop", "/api/proxies/test_single", "/api/proxies/add", "/api/proxies/remove", "/api/proxies/auto-scrape", "/api/proxies/scraper-status", "/api/proxies/provider-config", "/api/proxies/sync-provider", "/api/notifications/config", "/api/notifications/test", "/api/notifications/bulk-summary", "/api/history/clear", "/api/history/delete", "/api/history/recheck", "/api/system/reload", "/api/dashboard-pin/set", "/api/dashboard-pin/verify", "/api/dashboard-pin/remove"):
+            rate_limit = 200 if self.path in ("/api/disney/check", "/api/crunchyroll/check", "/api/expressvpn/check", "/api/spotify/check", "/api/outlook/check", "/api/openai/check", "/api/primevideo/check", "/api/crunchyroll/cookie-check", "/api/disney/cookie-check", "/api/universal/detect", "/api/universal/parse") else 50
             if is_rate_limited(client_ip, max_requests=rate_limit, window_seconds=10, bucket="api"):
                 self.send_response(429)
                 self.send_header("Content-Type", "application/json")
@@ -5160,6 +5380,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(b'{"error": "Unauthorized: API Key or Dashboard Session required"}')
                     return
+
+            if self.path in ("/api/universal/detect", "/api/universal/parse"):
+                try:
+                    p = json.loads(body.decode("utf-8")) if body else {}
+                    raw_text = p.get("text", "") or p.get("content", "") or p.get("cookie", "")
+                    out = detect_universal_format(raw_text)
+                    self.send_response(200)
+                    res = json.dumps(out).encode("utf-8")
+                except Exception as e:
+                    self.send_response(400)
+                    res = json.dumps({"error": str(e)}).encode("utf-8")
+                self.send_header("Content-Type", "application/json")
+                self.send_cors_headers()
+                self.end_headers()
+                self.wfile.write(res)
+                return
 
             if self.path == "/api/token":
                 try:
@@ -5372,7 +5608,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         use_proxy=p.get("use_proxy", True),
                         get_proxy_fn=get_random_proxy,
                         cooldown_fn=mark_proxy_cooldown,
-                        save_fn=save_history
+                        save_fn=save_history,
+                        session_fn=lambda: create_tls_session(impersonate="primevideo")
                     )
                     res = json.dumps(out).encode("utf-8")
                     self.send_response(200)

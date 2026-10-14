@@ -712,11 +712,16 @@ function updateBulkCount() {
   if (!raw) {
     countBadge.textContent = '0 akun';
     countBadge.style.color = 'var(--text-muted)';
+    const bar = textarea.nextElementSibling;
+    if (bar && bar.classList.contains('universal-detector-bar')) bar.style.display = 'none';
     return;
   }
   const lines = parseCookieInputs(raw);
   countBadge.textContent = `${lines.length} akun`;
   countBadge.style.color = lines.length > 0 ? '#4ade80' : 'var(--text-muted)';
+  if (window.UniversalDetector && typeof window.UniversalDetector.updateBar === 'function') {
+    window.UniversalDetector.updateBar(textarea, 'netflix');
+  }
 }
 
 function clearBulkInput() {
@@ -1033,43 +1038,244 @@ function stopBulk() {
   }
 }
 
-// Detect single cookie format in realtime
+// ── Universal Auto-Detector & Smart Parser Engine ─────────────
+window.UniversalDetector = {
+  detect(text) {
+    if (!text || !text.trim()) {
+      return { service: 'none', format: 'empty', count: 0, label: 'Belum ada input', color: 'var(--text-muted)', badge: 'EMPTY' };
+    }
+    const t = text.trim();
+
+    // 1. JSON Array (Cookie-Editor / EditThisCookie)
+    if ((t.startsWith('[') && t.endsWith(']')) || /\[\s*\{[\s\S]*?\}\s*\]/.test(t)) {
+      let svc = 'unknown';
+      if (/NetflixId|\.netflix\.com/i.test(t)) svc = 'netflix';
+      else if (/sp_dc|\.spotify\.com/i.test(t)) svc = 'spotify';
+      else if (/__Secure-next-auth|chatgpt|openai/i.test(t)) svc = 'openai';
+      else if (/session-token|ubid-main|amazon|\.primevideo\.com/i.test(t)) svc = 'primevideo';
+      else if (/etp_rt|\.crunchyroll\.com/i.test(t)) svc = 'crunchyroll';
+      else if (/disney|bamgrid/i.test(t)) svc = 'disney';
+
+      const lines = t.split('\n').map(l => l.trim()).filter(Boolean);
+      const jsonLines = lines.filter(l => l.startsWith('[') && l.endsWith(']'));
+      const cnt = jsonLines.length > 1 ? jsonLines.length : 1;
+      return {
+        service: svc,
+        format: 'json_cookies',
+        count: cnt,
+        label: `JSON Cookie Array (${cnt} ${cnt > 1 ? 'akun' : 'set'})`,
+        color: '#4ade80',
+        badge: 'JSON'
+      };
+    }
+
+    // 2. Netscape HTTP Cookie File (.txt)
+    const lines = t.split('\n').map(l => l.trim()).filter(Boolean);
+    const hasNetscape = lines.some(l => l.split('\t').length >= 5 && !l.startsWith('#')) || t.includes('# Netscape HTTP Cookie File');
+    if (hasNetscape) {
+      let svc = 'unknown';
+      if (/\.netflix\.com|NetflixId/i.test(t)) svc = 'netflix';
+      else if (/\.spotify\.com|sp_dc/i.test(t)) svc = 'spotify';
+      else if (/chatgpt\.com|openai\.com/i.test(t)) svc = 'openai';
+      else if (/\.crunchyroll\.com|etp_rt/i.test(t)) svc = 'crunchyroll';
+      else if (/primevideo\.com|amazon\.com|session-token/i.test(t)) svc = 'primevideo';
+      else if (/disney|bamgrid/i.test(t)) svc = 'disney';
+
+      const blocks = t.split(/(?=# Netscape|\n\s*\n|# =+)/g).filter(b => b.split('\n').some(l => l.split('\t').length >= 5));
+      const cnt = Math.max(1, blocks.length);
+      return {
+        service: svc,
+        format: 'netscape',
+        count: cnt,
+        label: `Netscape Cookie File (${cnt} ${cnt > 1 ? 'akun' : 'set'})`,
+        color: '#38bdf8',
+        badge: 'NETSCAPE'
+      };
+    }
+
+    // 3. Credential Combo (email:pass)
+    const comboRegex = /^[^\s:;|,]+@[^\s:;|,]+\.[^\s:;|,]+[:|;,\t].+$/;
+    const comboLines = lines.filter(l => comboRegex.test(l));
+    if (comboLines.length > 0 && comboLines.length >= lines.length * 0.4) {
+      let svc = 'combo';
+      if (comboLines.some(l => /@(outlook|hotmail|live|msn)\./i.test(l))) svc = 'outlook';
+      else if (/expressvpn/i.test(t)) svc = 'expressvpn';
+      else if (/disney/i.test(t)) svc = 'disney';
+      else if (/crunchyroll/i.test(t)) svc = 'crunchyroll';
+
+      return {
+        service: svc,
+        format: 'combo',
+        count: comboLines.length,
+        label: `Combo Email:Pass (${comboLines.length} akun)`,
+        color: '#a855f7',
+        badge: 'COMBO'
+      };
+    }
+
+    // 4. Raw Header / Key=Value
+    if (/(?:NetflixId|sp_dc|session-token|__Secure-next-auth|etp_rt)=/i.test(t)) {
+      let svc = 'unknown';
+      if (/NetflixId=/i.test(t)) svc = 'netflix';
+      else if (/sp_dc=/i.test(t)) svc = 'spotify';
+      else if (/__Secure-next-auth/i.test(t)) svc = 'openai';
+      else if (/session-token=/i.test(t)) svc = 'primevideo';
+      else if (/etp_rt=/i.test(t)) svc = 'crunchyroll';
+
+      return {
+        service: svc,
+        format: 'header_cookie',
+        count: 1,
+        label: `Raw Cookie Header (${svc.toUpperCase()})`,
+        color: '#34d399',
+        badge: 'HEADER'
+      };
+    }
+
+    // 5. Raw Token
+    if (t.length > 30 && !/\s/.test(t)) {
+      if (t.startsWith('AQB') || (t.length >= 80 && t.length <= 260)) {
+        return { service: 'spotify', format: 'raw_token', count: 1, label: 'Raw Token (Spotify sp_dc)', color: '#1db954', badge: 'TOKEN' };
+      }
+      if (t.startsWith('ey')) {
+        return { service: 'openai', format: 'raw_token', count: 1, label: 'Raw JWT Token (OpenAI Session)', color: '#10a37f', badge: 'JWT' };
+      }
+    }
+
+    return {
+      service: 'unknown',
+      format: 'plain_text',
+      count: lines.length,
+      label: `Teks Bebas (${lines.length} baris)`,
+      color: '#f59e0b',
+      badge: 'TEXT'
+    };
+  },
+
+  cleanText(text) {
+    if (!text) return '';
+    const det = this.detect(text);
+    if (det.format === 'combo') {
+      const comboRegex = /^[^\s:;|,]+@[^\s:;|,]+\.[^\s:;|,]+[:|;,\t].+$/;
+      return text.split('\n')
+        .map(l => l.trim())
+        .filter(l => comboRegex.test(l))
+        .join('\n');
+    } else if (det.format === 'netscape') {
+      return text.split('\n')
+        .map(l => l.trim())
+        .filter(l => l && (!l.startsWith('#') || l.includes('Netscape')))
+        .join('\n');
+    }
+    return text.split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+  },
+
+  routeToService(targetService, content) {
+    if (!targetService || targetService === 'unknown' || targetService === 'none') return;
+    const tabMap = {
+      netflix: 'single',
+      spotify: 'spotify',
+      disney: 'disney',
+      crunchyroll: 'crunchyroll',
+      openai: 'openai',
+      primevideo: 'primevideo',
+      outlook: 'outlook',
+      expressvpn: 'expressvpn'
+    };
+    const targetTab = tabMap[targetService] || targetService;
+    if (typeof switchTab === 'function') {
+      switchTab(targetTab);
+    }
+    setTimeout(() => {
+      let targetInput = null;
+      if (targetService === 'netflix') targetInput = document.getElementById('single-cookie');
+      else if (targetService === 'spotify') targetInput = document.getElementById('spotify-cookie');
+      else if (targetService === 'disney') targetInput = document.getElementById('disney-cookie-input') || document.getElementById('disney-bulk-input');
+      else if (targetService === 'crunchyroll') targetInput = document.getElementById('cr-cookie-input') || document.getElementById('cr-bulk-input');
+      else if (targetService === 'openai') targetInput = document.getElementById('openai-cookie-input');
+      else if (targetService === 'primevideo') targetInput = document.getElementById('pv-cookie-input');
+      else if (targetService === 'outlook') targetInput = document.getElementById('outlook-bulk-input');
+      else if (targetService === 'expressvpn') targetInput = document.getElementById('evpn-bulk-input');
+
+      if (targetInput) {
+        targetInput.value = content;
+        targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+        targetInput.focus();
+      }
+      if (typeof showToast === 'function') {
+        showToast(`✓ Dialihkan otomatis ke ${targetService.toUpperCase()}!`, 'success');
+      }
+    }, 120);
+  },
+
+  updateBar(textarea, expectedService = 'netflix') {
+    if (!textarea) return;
+    let bar = textarea.nextElementSibling;
+    if (!bar || !bar.classList.contains('universal-detector-bar')) {
+      bar = document.createElement('div');
+      bar.className = 'universal-detector-bar';
+      bar.style.cssText = 'display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:6px; margin-bottom:8px; font-size:11.5px; padding:6px 12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; min-height:32px; transition:all .2s;';
+      textarea.parentNode.insertBefore(bar, textarea.nextSibling);
+    }
+
+    const val = textarea.value.trim();
+    if (!val) {
+      bar.style.display = 'none';
+      return;
+    }
+
+    bar.style.display = 'flex';
+    const det = this.detect(val);
+    const isMismatch = (det.service !== 'unknown' && det.service !== 'none' && det.service !== expectedService && !(expectedService === 'combo' && det.format === 'combo'));
+
+    let html = `
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <span style="background:${det.color}22; color:${det.color}; border:1px solid ${det.color}44; padding:2px 8px; border-radius:4px; font-weight:700; font-size:10.5px; letter-spacing:0.5px;">${det.badge}</span>
+        <span style="font-weight:700; color:#f1f5f9;">${det.label}</span>
+        <span style="color:var(--text-muted); font-size:11px;">• Target: <strong style="color:${isMismatch ? '#f43f5e' : '#38bdf8'}">${det.service.toUpperCase()}</strong></span>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+    `;
+
+    if (isMismatch) {
+      html += `
+        <button type="button" class="btn-primary" style="padding:3px 10px; font-size:11px; font-weight:700; background:#f43f5e; border-color:#f43f5e; color:#fff; border-radius:5px;" onclick="window.UniversalDetector.routeToService('${det.service}', document.getElementById('${textarea.id}').value)">
+          ⚡ Pindah ke ${det.service.toUpperCase()}
+        </button>
+      `;
+    }
+
+    html += `
+        <button type="button" class="btn-secondary" style="padding:3px 8px; font-size:11px; border-radius:5px;" onclick="document.getElementById('${textarea.id}').value = window.UniversalDetector.cleanText(document.getElementById('${textarea.id}').value); document.getElementById('${textarea.id}').dispatchEvent(new Event('input')); if(typeof showToast==='function')showToast('Input dirapikan!');" title="Bersihkan baris sampah dan rapikan">
+          🧹 Rapikan
+        </button>
+      </div>
+    `;
+
+    bar.innerHTML = html;
+  }
+};
+
+// Detect single cookie format in realtime using UniversalDetector
 function detectSingleCookieFormat() {
-  const text = document.getElementById('single-cookie').value.trim();
+  const textarea = document.getElementById('single-cookie');
+  if (!textarea) return;
+  const text = textarea.value.trim();
   const badge = document.getElementById('single-format-badge');
+  if (!badge) return;
+
   if (!text) {
     badge.innerHTML = '<span>Format: Belum ada input</span>';
     badge.style.color = 'var(--text-muted)';
+    const bar = textarea.nextElementSibling;
+    if (bar && bar.classList.contains('universal-detector-bar')) bar.style.display = 'none';
     return;
   }
-  if (text.startsWith('[') && text.endsWith(']')) {
-    try {
-      const arr = JSON.parse(text);
-      if (Array.isArray(arr)) {
-        const hasNid = arr.some(c => (c.name === 'NetflixId' || c.key === 'NetflixId'));
-        badge.innerHTML = hasNid ? '<span>✓ Format: JSON Cookie-Editor (Valid NetflixId)</span>' : '<span>⚠ Format: JSON Array (NetflixId Tidak Ditemukan)</span>';
-        badge.style.color = hasNid ? '#4ade80' : '#f59e0b';
-        return;
-      }
-    } catch(e) {}
-  }
-  if (text.includes('\t.netflix.com\t') || text.includes('.netflix.com\tTRUE\t') || text.includes('# Netscape HTTP Cookie File')) {
-    badge.innerHTML = '<span>✓ Format: Netscape Cookie File</span>';
-    badge.style.color = '#38bdf8';
-    return;
-  }
-  if (text.includes('NetflixId=')) {
-    badge.innerHTML = '<span>✓ Format: Raw Cookie Header (NetflixId Ada)</span>';
-    badge.style.color = '#4ade80';
-    return;
-  }
-  if (text.includes('NETFLIX ACCOUNT DETAILS') || text.includes('███')) {
-    badge.innerHTML = '<span>✓ Format: Structured Account Combo Block</span>';
-    badge.style.color = '#a855f7';
-    return;
-  }
-  badge.innerHTML = '<span>⚠ Format: Teks Bebas (Mungkin tidak valid)</span>';
-  badge.style.color = '#f59e0b';
+
+  const det = window.UniversalDetector.detect(text);
+  badge.innerHTML = `<span>✓ Format: ${det.label} [${det.service.toUpperCase()}]</span>`;
+  badge.style.color = det.color;
+  window.UniversalDetector.updateBar(textarea, 'netflix');
 }
 
 // Bulk check virtual windowing & throttled rendering state
@@ -6002,6 +6208,48 @@ function launchGrabModalService() {
 }
 
 
+
+// ── Initialize Universal Auto-Detectors on all textareas ──────
+function initUniversalDetectors() {
+  const targets = [
+    { id: 'single-cookie', svc: 'netflix' },
+    { id: 'bulk-input', svc: 'netflix' },
+    { id: 'disney-cookie-input', svc: 'disney' },
+    { id: 'disney-bulk-input', svc: 'combo' },
+    { id: 'disney-bulk-cookie-input', svc: 'disney' },
+    { id: 'cr-cookie-input', svc: 'crunchyroll' },
+    { id: 'cr-bulk-input', svc: 'combo' },
+    { id: 'cr-bulk-cookie-input', svc: 'crunchyroll' },
+    { id: 'evpn-bulk-input', svc: 'combo' },
+    { id: 'spotify-cookie', svc: 'spotify' },
+    { id: 'spotify-bulk-input', svc: 'spotify' },
+    { id: 'outlook-bulk-input', svc: 'combo' },
+    { id: 'openai-cookie-input', svc: 'openai' },
+    { id: 'openai-bulk-input', svc: 'openai' },
+    { id: 'pv-cookie-input', svc: 'primevideo' },
+    { id: 'pv-bulk-input', svc: 'primevideo' }
+  ];
+
+  targets.forEach(({ id, svc }) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
+      if (window.UniversalDetector && typeof window.UniversalDetector.updateBar === 'function') {
+        window.UniversalDetector.updateBar(el, svc);
+      }
+    });
+    // Check initial state if text already present
+    if (el.value && el.value.trim()) {
+      window.UniversalDetector.updateBar(el, svc);
+    }
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initUniversalDetectors);
+} else {
+  initUniversalDetectors();
+}
 
 // PWA Service Worker Registration
 if ('serviceWorker' in navigator) {
